@@ -1,0 +1,1 @@
+ALTER TABLE `halo_worker_users` ADD `can_warehouse_receipt` integer DEFAULT 0 NOT NULL;

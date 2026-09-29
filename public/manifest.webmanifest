@@ -1,0 +1,52 @@
+{
+  "id": "/",
+  "name": "HALO Control",
+  "short_name": "HALO",
+  "description": "HALO ombori, savdosi, retseptlari va foydasini boshqarish ilovasi.",
+  "lang": "uz",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone"],
+  "background_color": "#0b0d0f",
+  "theme_color": "#0b0d0f",
+  "orientation": "any",
+  "categories": ["business", "food", "productivity"],
+  "shortcuts": [
+    {
+      "name": "POS savdo",
+      "short_name": "POS",
+      "description": "POS savdoni kiritish",
+      "url": "/pos-terminal",
+      "icons": [{ "src": "/icons/halo-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Naqd / hisob savdosi",
+      "short_name": "Naqd / hisob",
+      "description": "Naqd yoki hisob raqam savdosini kiritish",
+      "url": "/hisob",
+      "icons": [{ "src": "/icons/halo-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Kunlik nazorat",
+      "short_name": "Nazorat",
+      "description": "Ochilish va yopilish nazoratini ochish",
+      "url": "/nazorat",
+      "icons": [{ "src": "/icons/halo-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
+  "icons": [
+    {
+      "src": "/icons/halo-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/halo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

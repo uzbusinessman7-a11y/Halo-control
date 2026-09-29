@@ -1,0 +1,10 @@
+"use client";
+import {useEffect,useRef,useState} from 'react';
+type Item={id:string;name:string;stock:number;unit:string};
+export default function InventoryArchiveDialog({item,recipes,onClose,onConfirm}:{item:Item|null;recipes:string[];onClose:()=>void;onConfirm:(reason:string)=>Promise<void>}){
+ const dialog=useRef<HTMLDialogElement>(null),lock=useRef(false);
+ const [reason,setReason]=useState('Keraksiz mahsulot'),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ useEffect(()=>{setError('');setReason('Keraksiz mahsulot');if(item)dialog.current?.showModal();else dialog.current?.close();},[item?.id]);
+ const submit=async()=>{if(lock.current||!item)return;lock.current=true;setBusy(true);setError('');try{await onConfirm(reason);onClose();}catch(e){setError(e instanceof Error?e.message:'Saqlanmadi. Qayta urinib ko‘ring.');}finally{setBusy(false);lock.current=false;}};
+ return <dialog ref={dialog} className="warehouse-dialog" aria-labelledby="inventory-remove-title" onCancel={e=>{if(busy)e.preventDefault();else onClose();}}>{item&&<><h2 id="inventory-remove-title">Mahsulotni faol ro‘yxatdan o‘chirish</h2><h3>{item.name}</h3><p>Kirim–chiqim, savdo, qarz va hisobotlar o‘zgarishsiz qoladi. Mahsulotni keyin tiklash mumkin.</p><p>Saqlanadigan qoldiq: <b>{item.stock.toLocaleString()} {item.unit}</b>. Bu amal qoldiqni hisobdan chiqarmaydi.</p>{recipes.length>0&&<p className="form-notice">Quyidagi retseptlarda ishlatilmoqda: <b>{recipes.join(', ')}</b>. Retsept bog‘lanishi, tannarxi va sotuvdagi sarfi saqlanadi.</p>}<label>Sabab<input value={reason} maxLength={500} disabled={busy} onChange={e=>setReason(e.target.value)}/></label>{error&&<p role="alert" className="form-notice">{error}</p>}<div className="warehouse-dialog-actions"><button type="button" disabled={busy} onClick={onClose}>Ortga</button><button type="button" className="danger" disabled={busy||!reason.trim()} onClick={()=>void submit()}>{busy?'Saqlanmoqda…':'Faol ro‘yxatdan o‘chirish'}</button></div></>}</dialog>;
+}

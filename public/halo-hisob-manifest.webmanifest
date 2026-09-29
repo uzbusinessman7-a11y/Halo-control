@@ -1,0 +1,28 @@
+{
+  "id": "/hisob",
+  "name": "HALO HISOB",
+  "short_name": "HALO HISOB",
+  "description": "Naqd, hisob-raqam savdosi va oshxonada yeyilgan ovqatni tez kiritish oynasi.",
+  "lang": "uz",
+  "start_url": "/hisob",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#090b0d",
+  "theme_color": "#090b0d",
+  "orientation": "any",
+  "categories": ["business", "food", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/halo-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/halo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

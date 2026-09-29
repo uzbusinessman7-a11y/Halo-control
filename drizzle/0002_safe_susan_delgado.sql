@@ -1,0 +1,1 @@
+ALTER TABLE `integration_settings` ADD `owner_email` text DEFAULT '' NOT NULL;

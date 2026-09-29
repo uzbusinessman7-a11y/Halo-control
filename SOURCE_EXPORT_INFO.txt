@@ -1,0 +1,7 @@
+HALO Control source export
+Deployed Sites version: 222
+Source commit: c855b8b7a85c4ab2024374715971f295c04de5b9
+Source ZIP found in the owner's ChatGPT Library: HALO_Control_GitHub.zip
+Runtime business data and server secrets are not embedded in this source export.
+Generated apps-script/Code.gs uses apiKey: XXXX by design.
+Generated .vinext font cache is intentionally omitted from this handoff copy.

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="xodim" x1="88" y1="72" x2="424" y2="438" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#72E19E"/>
+      <stop offset="1" stop-color="#27A85C"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="#0B0D0F"/>
+  <circle cx="438" cy="68" r="116" fill="#F4B41B" opacity=".10"/>
+  <circle cx="75" cy="458" r="140" fill="#59D48A" opacity=".08"/>
+  <rect x="86" y="86" width="340" height="340" rx="98" fill="url(#xodim)"/>
+  <path d="M164 163h62v65h60v-65h62v186h-62v-67h-60v67h-62V163Z" fill="#0B1610"/>
+  <circle cx="376" cy="370" r="54" fill="#F4B41B"/>
+  <path d="m350 370 17 17 35-39" fill="none" stroke="#17130B" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,1 @@
+CREATE INDEX `halo_assistant_actor_created` ON `halo_assistant_jobs` (`actor`,`created_at`);

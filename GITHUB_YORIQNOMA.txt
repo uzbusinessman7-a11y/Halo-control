@@ -1,0 +1,20 @@
+HALO Control — GitHub uchun kod nusxasi
+
+Manba: saytda joylangan 222-versiya.
+Commit: c855b8b7a85c4ab2024374715971f295c04de5b9
+
+Ichida: dastur kodi, 42 ta API yo‘nalishi, baza tuzilmasi va testlar.
+Ichida YO‘Q: ishlayotgan bazadagi savdo/qarz/ombor yozuvlari, yuklangan rasmlar, serverdagi API kalitlari va Telegram tokenlari. Git tarixi kiritilmagan.
+
+GitHub Desktop orqali yuklash:
+1. ZIP faylni kompyuterda oching.
+2. GitHub Desktop orqali GitHub hisobingizga kiring.
+3. File > New repository: nomi halo-control. Yangi bo‘sh papkada yarating.
+4. ZIP ichidagi halo-control papkasining barcha ichki fayl va papkalarini yaratilgan repozitoriy papkasiga ko‘chiring. Ichma-ich ikkinchi halo-control papkasi bo‘lmasin. Nuqta bilan boshlanadigan konfiguratsiya fayllari ham ko‘chsin.
+5. GitHub Desktop: Summary yozing, Commit to main bosing.
+6. Publish repository bosing. Keep this code private belgisini yoqilgan holda qoldiring.
+7. GitHub repozitoriy havolasini ChatGPT suhbatiga yuboring.
+
+Bu kod nusxasi. GitHub’ga yuklashning o‘zi saytni ishga tushirmaydi va mavjud bazani ko‘chirmaydi. Sayt Cloudflare D1/R2 hamda ChatGPT Sites autentifikatsiyasiga bog‘langan. Boshqa hostingga o‘tish uchun server, autentifikatsiya, baza/rasmlar va maxfiy sozlamalar alohida moslashtiriladi.
+
+API kalitlari va bot tokenlarini repozitoriyga yoki suhbatga qo‘ymang.

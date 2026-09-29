@@ -1,0 +1,6 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {buildReportExport,csvCell,validateExport} from '../app/lib/report-export.ts';
+test('CSV quotes formulas, delimiters and preserves numeric values',()=>{assert.equal(csvCell('=CMD()'),'"\'=CMD()"');assert.equal(csvCell('a,"b"'),'"a,""b"""');assert.equal(csvCell(-100),'"-100"');});
+test('supplier export shows actual debt independently of period with payment history',()=>{const s={suppliers:[{id:'n',name:'Nodir',balance:948000,openingBalance:158500}],transactions:[{supplierId:'n',type:'purchase',amount:948000},{supplierId:'n',type:'payment',amount:158500}]};const r=buildReportExport(s,'suppliers','main','2020-01-01','2020-01-02');assert.equal(r.count,1);assert.match(r.content,/948000/);assert.match(r.content,/158500/);assert.ok(r.content.startsWith('\uFEFF'));});
+test('date filter includes endpoints and rejects invalid dates and inverted range',()=>{const r=buildReportExport({sales:[{date:'2026-09-01'},{date:'2026-09-30'},{date:'2026-10-01'}]},'sales','main','2026-09-01','2026-09-30');assert.equal(r.count,2);assert.throws(()=>validateExport('sales','2026-02-30'));assert.throws(()=>validateExport('sales','2026-10-01','2026-09-01'));assert.throws(()=>validateExport('__proto__'));});
