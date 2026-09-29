@@ -3,12 +3,13 @@
  * (kompyuterda chap menyu, telefonda pastki menyu). Hamma V2 sahifalari shu yerdan quriladi.
  */
 
-export type NavKey = "bosh" | "kassa" | "ombor" | "qarz" | "maosh";
+export type NavKey = "bosh" | "kassa" | "ombor" | "menyu" | "qarz" | "maosh";
 
 const NAV: Array<{ key: NavKey; label: string; icon: string }> = [
   { key: "bosh", label: "Bosh", icon: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>' },
   { key: "kassa", label: "Kassa", icon: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="12" cy="14.5" r="2"/>' },
   { key: "ombor", label: "Ombor", icon: '<path d="M3 8 12 3l9 5v11H3z"/><path d="M7 19v-7h10v7"/><path d="M7 15h10"/>' },
+  { key: "menyu", label: "Menyu", icon: '<path d="M7 3v8a2 2 0 0 0 2 2v8"/><path d="M5 3v5a2 2 0 0 0 4 0V3"/><path d="M17 21V3c-2.2 1.2-3.5 3.6-3.5 7v3H17"/>' },
   { key: "qarz", label: "Qarz", icon: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 12h7M9 16h5"/>' },
   { key: "maosh", label: "Maosh", icon: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.3-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c2 .7 3.2 2.4 3.6 5.2"/>' },
 ];
@@ -30,8 +31,8 @@ a{color:var(--accent)}
 .content{max-width:980px;margin:0 auto;padding:18px 16px calc(96px + env(safe-area-inset-bottom));display:grid;gap:16px}
 .page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
 .page-head h1{font-size:26px;line-height:1.15;margin:0;letter-spacing:-.02em}.page-head p{margin:4px 0 0;color:var(--muted);font-size:14px}
-.bottom{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
-.nav-a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;border-radius:12px;color:var(--muted);text-decoration:none;font-size:11.5px;font-weight:600}
+.bottom{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(6,1fr);padding:6px 2px calc(6px + env(safe-area-inset-bottom))}
+.nav-a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;border-radius:12px;color:var(--muted);text-decoration:none;font-size:11px;font-weight:600}
 .nav-a svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .nav-a.on{color:var(--accent)}.nav-a.on svg{stroke-width:2.2}
 @media (min-width:900px){
