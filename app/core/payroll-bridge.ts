@@ -43,7 +43,7 @@ export interface PayMonthComparison {
   month: string; oldRemaining: number; ledgerRemaining: number; difference: number;
   earned: number; bonus: number; deduction: number; advance: number; paid: number; workedDays: number; workedMinutes: number;
 }
-export interface PayEmployeeRow { employeeId: string; name: string; active: boolean; months: PayMonthComparison[] }
+export interface PayEmployeeRow { employeeId: string; oldId: string; name: string; active: boolean; months: PayMonthComparison[] }
 export interface PayrollBridgeReport {
   posted: number; alreadyPosted: number; reversed: number; corrected: number;
   invalid: string[]; employees: PayEmployeeRow[]; mismatched: number;
@@ -257,7 +257,7 @@ export async function runPayrollBridge(db: D1Like, scope: LedgerScope, state: Ro
       if (ledgerRemaining < 0) overpaid.push({ employeeId, name: member.name, month, amount: -ledgerRemaining });
       return { ...base, month, oldRemaining: old, ledgerRemaining, difference: ledgerRemaining - old };
     });
-    rowsOut.push({ employeeId, name: member.name, active: member.active, months: list });
+    rowsOut.push({ employeeId, oldId: member.id, name: member.name, active: member.active, months: list });
   }
   rowsOut.sort((left, right) => Number(right.active) - Number(left.active) || left.name.localeCompare(right.name));
   const reversed = valid.filter((move) => move.kind === "reversal").length;

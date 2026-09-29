@@ -1,5 +1,6 @@
 import { isAdminRequest } from "../../../lib/integration-store";
-import { listHaloBranches, readHaloState } from "../../../lib/halo-store";
+import { HaloStateConflictError, listHaloBranches, mutateHaloState, readHaloState } from "../../../lib/halo-store";
+import { addAdjustment, addShift, payStaff, saveStaffMember, StaffError, staffList } from "../../../core/staff";
 import { LedgerError } from "../../../core/ledger";
 import { runPayrollBridge } from "../../../core/payroll-bridge";
 import { isMonth, payslip, payslipText } from "../../../core/payroll-ledger";
@@ -38,6 +39,23 @@ export async function POST(request: Request) {
     const scope = { tenantId: TENANT_ID, branchId };
     const today = seoulToday();
     const month = isMonth(body.month) ? body.month : today.slice(0, 7);
+    const accountsOf = (st: Record<string, unknown>) => (Array.isArray(st.accounts) ? st.accounts as Array<Record<string, unknown>> : [])
+      .filter((a) => (a.type === "cash" || a.type === "bank") && a.active !== false).map((a) => ({ id: String(a.id), name: String(a.name || a.id) }));
+    const mutations: Record<string, [(st: Record<string, unknown>) => { state: Record<string, unknown>; result: unknown }, string]> = {
+      saveStaff: [(st) => saveStaffMember(st, body), "Xodim ma’lumoti saqlandi"],
+      shift: [(st) => addShift(st, body, today), "Smena qo‘lda kiritildi"],
+      adjust: [(st) => addAdjustment(st, body, today), body.type === "bonus" ? "Bonus yozildi" : "Ushlanma yozildi"],
+      pay: [(st) => payStaff(st, body, today), body.kind === "advance" ? "Avans berildi" : "Oylik to‘landi"],
+    };
+    const action = String(body.action || "");
+    if (action === "staff" || mutations[action]) {
+      let st: Record<string, unknown>;
+      if (mutations[action]) {
+        const [fn, label] = mutations[action];
+        st = (await mutateHaloState((cur) => fn(cur as Record<string, unknown>), 5, branchId, "Rahbar", label, "Maosh (yangi)")).state as Record<string, unknown>;
+      } else st = (await readHaloState(branchId)).state as Record<string, unknown>;
+      return json({ ok: true, today, staff: staffList(st), accounts: accountsOf(st) });
+    }
     const { state } = await readHaloState(branchId);
     const bridge = await runPayrollBridge(database(), scope, state as Record<string, unknown>, today);
     if (body.action === "payslip") {
@@ -46,7 +64,7 @@ export async function POST(request: Request) {
     }
     const employees = bridge.employees.map((employee) => {
       const current = employee.months.find((item) => item.month === month) || null;
-      return { employeeId: employee.employeeId, name: employee.name, active: employee.active, current };
+      return { employeeId: employee.employeeId, oldId: employee.oldId, name: employee.name, active: employee.active, current };
     }).filter((employee) => employee.active || employee.current);
     return json({
       ok: true, today, month, employees,
@@ -60,6 +78,8 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
+    if (error instanceof StaffError) return json({ error: error.message }, error.status);
+    if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     if (error instanceof LedgerError || (error instanceof Error && /filial/i.test(error.message))) return json({ error: error.message }, 400);
     return json({ error: "Xatolik yuz berdi." }, 500);
   }
@@ -72,10 +92,11 @@ function page(branches: Array<{ id: string; name: string }>): string {
     subtitle: "Har bir xodim uchun oylik hisob varaqasi",
     headerRight: '<div class="row"><input type="month" id="month"><select id="branch"></select></div>',
     body: `<section class="card noprint" id="checkCard"><h2>Nazorat</h2><div id="checks"><p class="hint">Yuklanmoqda…</p></div></section>
+<section class="card noprint"><div class="row"><button class="ghost" id="manage">👥 Xodimlar ro‘yxati va stavkalar</button></div><div id="staffBox"></div></section>
 <section class="card noprint" id="listCard"><h2>Xodimlar</h2><div id="list"></div></section>
 <section class="card" id="slipCard" hidden></section>`,
     script: `
-var BRANCHES=${boot},MONTH='';
+var BRANCHES=${boot},MONTH='',OLD={},STAFF=null,ACC=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function won(n){n=Number(n||0);return (n<0?'−':'')+Math.abs(n).toLocaleString('en-US')+' ₩'}
 function hours(m){m=Number(m||0);return Math.floor(m/60)+' soat'+(m%60?' '+(m%60)+' daq':'')}
@@ -88,7 +109,7 @@ function load(){
   api({branchId:sel.value,month:mon.value||undefined}).then(function(res){
     var list=document.getElementById('list'),checks=document.getElementById('checks');
     if(!res.ok){checks.innerHTML='<div class="msg bad">'+esc(res.error)+'</div>';list.innerHTML='';return}
-    MONTH=res.month;mon.value=res.month;var c=res.checks,out=[];
+    MONTH=res.month;mon.value=res.month;OLD={};res.employees.forEach(function(e){OLD[e.employeeId]=e.oldId});var c=res.checks,out=[];
     if(c.mismatched)out.push('<div class="msg bad">⚠ '+c.mismatched+' ta oyda eski tizim bilan farq bor</div>');
     if(c.invalid.length)out.push('<div class="msg bad">⚠ '+c.invalid.length+' ta yozuv kiritilmadi: '+c.invalid.slice(0,3).map(esc).join(' · ')+'</div>');
     if(c.unpaidPast.length)out.push('<div class="msg warn">O‘tgan oylardan to‘lanmagan: '+c.unpaidPast.map(function(u){return esc(u.name)+' ('+esc(u.month)+') '+won(u.amount)}).join(' · ')+'</div>');
@@ -118,12 +139,74 @@ function openSlip(id){
       +'<tr class="sum"><td colspan="2">'+(p.remaining>=0?'To‘lanishi kerak':'Ortiqcha to‘langan')+'</td><td class="n">'+won(Math.abs(p.remaining))+'</td></tr></table>'
       +(p.earlierMonths?'<p class="hint" style="margin-top:10px">Oldingi oylardan '+(p.earlierMonths>0?'to‘lanmagan: ':'ortiqcha to‘langan: ')+won(Math.abs(p.earlierMonths))+'</p>':'')
       +(p.corrections.length?'<details class="noprint" style="margin-top:10px"><summary>'+p.corrections.length+' ta tuzatish tarixi</summary>'+p.corrections.map(function(c){return '<div class="hint">'+esc(c.date)+' · '+won(c.amount)+' · '+esc(c.memo)+'</div>'}).join('')+'</details>':'')
+      +'<div class="row noprint" style="margin-top:14px"><button class="ghost" data-act="shift">＋ Smena</button><button class="ghost" data-act="adjust">± Bonus / ushlanma</button><button class="ghost" data-act="pay">💸 To‘lash</button></div><div id="actBox" class="noprint"></div>'
       +'<div class="row noprint" style="margin-top:12px"><button id="copy">📋 Xodimga yuborish uchun nusxa</button><button class="ghost" id="print">🖨 Chop etish / PDF</button></div><div id="cmsg" class="noprint"></div>';
     document.getElementById('print').addEventListener('click',function(){window.print()});
+    card.querySelectorAll('[data-act]').forEach(function(b){b.addEventListener('click',function(){actionForm(b.dataset.act,OLD[id],id,p.employee.name)})});
     document.getElementById('copy').addEventListener('click',function(){
       var done=function(){document.getElementById('cmsg').innerHTML='<div class="msg ok" style="margin-top:10px">✓ Nusxa olindi — Telegram yoki KakaoTalk’ga joylang</div>'};
       if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(res.text).then(done,function(){prompt('Matnni nusxalang:',res.text)})}else{prompt('Matnni nusxalang:',res.text)}
     });
+  });
+}
+
+function uuid(){return crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16)})}
+function digits(v){return Number(String(v||'').replace(/[^0-9]/g,''))||0}
+function moneyField(id){var el=document.getElementById(id);el.addEventListener('input',function(){var v=digits(el.value);el.value=v?v.toLocaleString('en-US'):''})}
+function ensureStaff(cb){if(STAFF)return cb();api({action:'staff',branchId:sel.value}).then(function(r){if(r.ok){STAFF=r.staff;ACC=r.accounts}cb()})}
+function actionForm(kind,staffId,employeeId,name){
+  var box=document.getElementById('actBox'),op=uuid(),today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'});
+  ensureStaff(function(){
+    var html='<div class="card" style="background:var(--card-2);margin-top:12px"><h2>'+esc(name)+' — '+(kind==='shift'?'smena kiritish':kind==='adjust'?'bonus yoki ushlanma':'to‘lash')+'</h2>';
+    if(kind==='shift')html+='<label class="field"><span>Sana</span><input type="date" id="aDate" value="'+today+'" max="'+today+'"></label><div class="row"><label class="field" style="flex:1"><span>Boshladi</span><input type="time" id="aFrom" value="10:00"></label><label class="field" style="flex:1"><span>Tugatdi</span><input type="time" id="aTo" value="20:00"></label><label class="field" style="flex:1"><span>Tanaffus (daq)</span><input id="aBreak" inputmode="numeric" value="0"></label></div><label class="field"><span>Izoh</span><input id="aNote" maxlength="200" placeholder="Masalan: telefon o‘chib qolgan"></label>';
+    if(kind==='adjust')html+='<div class="row" style="margin-bottom:12px"><button data-t="bonus">+ Bonus</button><button class="ghost" data-t="deduction">− Ushlanma</button></div><label class="field"><span>Summa</span><input class="money" id="aAmt" inputmode="numeric" placeholder="0"></label><label class="field"><span>Sana</span><input type="date" id="aDate" value="'+today+'" max="'+today+'"></label><label class="field"><span>Sababi (xodim varaqada ko‘radi)</span><input id="aNote" maxlength="300"></label><p class="hint">Avans bu yerda emas — “To‘lash” orqali, kassadan chiqqan pul sifatida.</p>';
+    if(kind==='pay')html+='<div class="row" style="margin-bottom:12px"><button data-k="advance">Avans</button><button class="ghost" data-k="salary">Oylik</button></div><label class="field"><span>Summa</span><input class="money" id="aAmt" inputmode="numeric" placeholder="0"></label><label class="field"><span>Qaysi hisobdan berildi</span><select id="aAcc">'+ACC.map(function(a){return '<option value="'+esc(a.id)+'">'+esc(a.name)+'</option>'}).join('')+'</select></label><label class="field"><span>Qaysi oy uchun</span><input type="month" id="aMonth" value="'+esc(MONTH)+'"></label><label class="field"><span>Berilgan sana</span><input type="date" id="aDate" value="'+today+'" max="'+today+'"></label><label class="field"><span>Izoh (ixtiyoriy)</span><input id="aNote" maxlength="200"></label>';
+    html+='<button class="block" id="aSave">Saqlash</button><div id="aMsg"></div></div>';
+    box.innerHTML=html;
+    var type='bonus',pk='advance';
+    box.querySelectorAll('[data-t]').forEach(function(b){b.addEventListener('click',function(){type=b.dataset.t;box.querySelectorAll('[data-t]').forEach(function(x){x.className=x===b?'':'ghost'})})});
+    box.querySelectorAll('[data-k]').forEach(function(b){b.addEventListener('click',function(){pk=b.dataset.k;box.querySelectorAll('[data-k]').forEach(function(x){x.className=x===b?'':'ghost'})})});
+    if(document.getElementById('aAmt'))moneyField('aAmt');
+    document.getElementById('aSave').addEventListener('click',function(){
+      var body={branchId:sel.value,operationId:op,staffId:staffId,date:document.getElementById('aDate').value,note:(document.getElementById('aNote')||{}).value||''};
+      if(kind==='shift'){body.action='shift';body.from=document.getElementById('aFrom').value;body.to=document.getElementById('aTo').value;body.breakMinutes=digits(document.getElementById('aBreak').value)}
+      if(kind==='adjust'){body.action='adjust';body.type=type;body.amount=digits(document.getElementById('aAmt').value)}
+      if(kind==='pay'){body.action='pay';body.kind=pk;body.amount=digits(document.getElementById('aAmt').value);body.accountId=document.getElementById('aAcc').value;body.month=document.getElementById('aMonth').value}
+      if(kind!=='shift'&&!body.amount){document.getElementById('aMsg').innerHTML='<div class="msg bad">Summani yozing.</div>';return}
+      if(kind==='pay'&&!confirm(name+' uchun '+won(body.amount)+' '+(pk==='advance'?'avans':'oylik')+' berilsinmi?'))return;
+      var btn=this;btn.disabled=true;
+      api(body).then(function(x){btn.disabled=false;
+        if(!x.ok){document.getElementById('aMsg').innerHTML='<div class="msg bad">'+esc(x.error)+'</div>';return}
+        STAFF=x.staff;load();setTimeout(function(){openSlip(employeeId)},700)});
+    });
+  });
+}
+document.getElementById('manage').addEventListener('click',function(){STAFF=null;ensureStaff(drawStaff)});
+function drawStaff(){
+  var box=document.getElementById('staffBox');if(!STAFF){box.innerHTML='<div class="msg bad">Ochilmadi.</div>';return}
+  box.innerHTML='<div style="margin-top:12px"><button id="sNew">+ Yangi xodim</button><div id="sForm"></div>'
+    +STAFF.map(function(m){return '<div class="item" data-s="'+esc(m.id)+'" style="cursor:pointer"><b>'+esc(m.name)+(m.active?'':'<span class="tag warn">ishdan ketgan</span>')+(m.hasAccount?'':'<span class="tag warn">akkaunt yo‘q</span>')+'</b><span class="v">'+(m.payType==='hourly'?won(m.hourlyRate)+' / soat':won(m.monthlySalary)+' / oy')+'</span><small>'+(m.payType==='monthly'?m.workDays+' kun × '+m.dailyHours+' soat · soatiga ≈ '+won(m.effectiveHourlyRate)+' · ':'')+m.overtimeAfterHours+' soatdan keyin ×'+m.overtimeMultiplier+' · Tahrirlash ›</small></div>'}).join('')+'</div>';
+  document.getElementById('sNew').addEventListener('click',function(){staffForm(null)});
+  box.querySelectorAll('[data-s]').forEach(function(el){el.addEventListener('click',function(){staffForm(STAFF.find(function(m){return m.id===el.dataset.s}))})});
+}
+function staffForm(m){
+  var box=document.getElementById('sForm'),op=uuid(),monthly=m&&m.payType==='monthly';
+  box.innerHTML='<div class="card" style="background:var(--card-2);margin:12px 0"><h2>'+(m?'Tahrirlash — '+esc(m.name):'Yangi xodim')+'</h2>'
+    +'<label class="field"><span>Ismi</span><input id="fN" maxlength="60" value="'+esc(m?m.name:'')+'"></label>'
+    +'<div class="row" style="margin-bottom:12px"><button class="'+(monthly?'ghost':'')+'" data-pt="hourly">Soatbay</button><button class="'+(monthly?'':'ghost')+'" data-pt="monthly">Oylik</button></div>'
+    +'<label class="field"><span id="fRL">'+(monthly?'Oylik maosh':'Soatlik stavka')+'</span><input class="money" id="fR" inputmode="numeric" value="'+esc(m?(monthly?m.monthlySalary:m.hourlyRate).toLocaleString('en-US'):'')+'"></label>'
+    +'<div class="row"><label class="field" style="flex:1"><span>Oyda ish kuni</span><input id="fD" inputmode="numeric" value="'+esc(m?m.workDays:26)+'"></label><label class="field" style="flex:1"><span>Kunlik soat</span><input id="fH" inputmode="decimal" value="'+esc(m?m.dailyHours:8)+'"></label></div>'
+    +'<div class="row"><label class="field" style="flex:1"><span>Necha soatdan keyin ortiqcha</span><input id="fO" inputmode="decimal" value="'+esc(m?m.overtimeAfterHours:8)+'"></label><label class="field" style="flex:1"><span>Ortiqcha soat koeffitsienti</span><input id="fM" inputmode="decimal" value="'+esc(m?m.overtimeMultiplier:1)+'"></label></div>'
+    +(m?'<label class="row" style="gap:8px;margin-bottom:12px"><input type="checkbox" id="fA" style="width:18px;height:18px;min-height:auto"'+(m.active?' checked':'')+'> Ishlayapti (belgini olib tashlasangiz — ishdan ketgan)</label>':'')
+    +'<div class="row"><button id="fS">Saqlash</button><button class="ghost" id="fC">Bekor</button></div><div id="fMsg"></div></div>';
+  var pt=monthly?'monthly':'hourly';moneyField('fR');
+  box.querySelectorAll('[data-pt]').forEach(function(b){b.addEventListener('click',function(){pt=b.dataset.pt;box.querySelectorAll('[data-pt]').forEach(function(x){x.className=x===b?'':'ghost'});document.getElementById('fRL').textContent=pt==='monthly'?'Oylik maosh':'Soatlik stavka'})});
+  document.getElementById('fC').addEventListener('click',function(){box.innerHTML=''});
+  document.getElementById('fS').addEventListener('click',function(){
+    var r=digits(document.getElementById('fR').value),n=function(i){return Number(String(document.getElementById(i).value).replace(',','.'))};
+    var body={action:'saveStaff',branchId:sel.value,id:m?m.id:'',operationId:op,name:document.getElementById('fN').value,payType:pt,hourlyRate:pt==='hourly'?r:0,monthlySalary:pt==='monthly'?r:0,workDays:n('fD'),dailyHours:n('fH'),overtimeAfterHours:n('fO'),overtimeMultiplier:n('fM'),active:m?document.getElementById('fA').checked:true};
+    var btn=this;btn.disabled=true;
+    api(body).then(function(x){btn.disabled=false;if(!x.ok){document.getElementById('fMsg').innerHTML='<div class="msg bad">'+esc(x.error)+'</div>';return}STAFF=x.staff;drawStaff();load()});
   });
 }
 sel.addEventListener('change',load);mon.addEventListener('change',load);load();

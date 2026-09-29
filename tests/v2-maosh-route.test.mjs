@@ -40,3 +40,31 @@ test('faqat rahbar; xodimlar ro‘yxati, nazorat va hisob varaqasi', async () =>
   assert.equal(slip.payslip.remaining, 60000);
   assert.match(slip.text, /To'lanishi kerak: 60,000 ₩/);
 });
+
+test('xodim qo‘shish, qo‘lda smena, bonus va avans (kassadan) — hisob varaqasiga tushadi', async () => {
+  const call = async (body) => { const r = await POST(new Request(url, { method: 'POST', headers: owner, body: JSON.stringify({ branchId: 'main', ...body }) })); return { status: r.status, body: await r.json() }; };
+  const payload = JSON.parse(sqlite.prepare("SELECT payload FROM app_state WHERE id = 'main'").get().payload);
+  payload.accounts = [{ id: 'cash', name: 'Naqd', type: 'cash', openingBalance: 0 }];
+  sqlite.prepare("UPDATE app_state SET payload = ? WHERE id = 'main'").run(JSON.stringify(payload));
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+  const month = today.slice(0, 7);
+  const created = await call({ action: 'saveStaff', operationId: crypto.randomUUID(), name: 'Lola', payType: 'hourly', hourlyRate: 11000, workDays: 26, dailyHours: 8, overtimeAfterHours: 8, overtimeMultiplier: 1 });
+  assert.equal(created.status, 200, JSON.stringify(created.body));
+  const lola = created.body.staff.find((m) => m.name === 'Lola');
+  assert.equal((await call({ action: 'saveStaff', operationId: crypto.randomUUID(), name: 'lola', payType: 'hourly', hourlyRate: 1 })).status, 409, 'bir xil ism');
+  const shift = await call({ action: 'shift', operationId: crypto.randomUUID(), staffId: lola.id, date: today, from: '10:00', to: '18:00' });
+  assert.equal(shift.status, 200, JSON.stringify(shift.body));
+  assert.equal((await call({ action: 'shift', operationId: crypto.randomUUID(), staffId: lola.id, date: today, from: '12:00', to: '14:00' })).status, 409, 'ustma-ust smena');
+  assert.equal((await call({ action: 'adjust', operationId: crypto.randomUUID(), staffId: lola.id, type: 'advance', amount: 1000, date: today, note: 'avans' })).status, 400, 'pulsiz avans yo‘q');
+  assert.equal((await call({ action: 'adjust', operationId: crypto.randomUUID(), staffId: lola.id, type: 'bonus', amount: 12000, date: today, note: 'Yaxshi ish' })).status, 200);
+  assert.equal((await call({ action: 'pay', operationId: crypto.randomUUID(), staffId: lola.id, kind: 'advance', amount: 50000, accountId: 'cash', month, date: today })).status, 200);
+  const list = await call({ month });
+  const emp = list.body.employees.find((e) => e.name === 'Lola');
+  assert.equal(emp.current.earned, 88000, '8 soat × 11 000');
+  assert.equal(emp.current.bonus, 12000);
+  assert.equal(emp.current.paid, 50000);
+  assert.equal(emp.current.ledgerRemaining, 88000 + 12000 - 50000);
+  assert.equal(emp.current.difference, 0, 'eski hisob bilan mos');
+  const st = JSON.parse(sqlite.prepare("SELECT payload FROM app_state WHERE id = 'main'").get().payload);
+  assert.ok(st.financialEntries.some((f) => f.category === 'Maosh to‘lovi' && f.amount === 50000 && f.accountId === 'cash'), 'avans kassadan chiqim bo‘lib yozildi');
+});
