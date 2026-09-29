@@ -40,3 +40,25 @@ test('faqat rahbar; sahifa skripti to‘g‘ri; AvT va hujjatsiz farq qaytadi', 
   assert.equal(res.bridge.mismatched, 1, '800 bo‘lishi kerak, 700 saqlangan — 100 g hujjatsiz');
   assert.equal(res.bridge.items[0].difference, 100);
 });
+
+test('ombor: mahsulot yaratish/tahrirlash va sanoq', async () => {
+  const req = (body) => POST(new Request('https://halo.example.workers.dev/api/v2/ombor', { method: 'POST', headers: { 'oai-authenticated-user-email': 'owner@example.com', 'content-type': 'application/json' }, body: JSON.stringify({ branchId: 'main', ...body }) }));
+  const op = crypto.randomUUID();
+  const created = await (await req({ action: 'saveProduct', operationId: op, name: 'Pishloq', unit: 'g', minStock: 500, packageName: 'blok', unitsPerPackage: 2000 })).json();
+  assert.equal(created.ok, true, JSON.stringify(created));
+  assert.equal(created.created, true);
+  const again = await (await req({ action: 'saveProduct', operationId: op, name: 'Pishloq', unit: 'g', minStock: 500 })).json();
+  assert.equal(again.created, false, 'takror so‘rov ikkinchi mahsulot yaratmaydi');
+  const dup = await req({ action: 'saveProduct', operationId: crypto.randomUUID(), name: 'pishloq', unit: 'g' });
+  assert.equal(dup.status, 409, 'bir xil nom');
+  const id = created.product.id;
+  const edited = await (await req({ action: 'saveProduct', id, name: 'Pishloq (motsarella)', unit: 'kg', minStock: 1 })).json();
+  assert.equal(edited.product.unit, 'kg', 'harakatsiz mahsulot birligi o‘zgaradi');
+  const p = edited.products.find((x) => x.id === id);
+  assert.equal(p.low, true, '0 ≤ minimum — kam qoldi');
+  const counted = await (await req({ action: 'count', operationId: 'cnt-' + crypto.randomUUID(), counts: [{ inventoryId: id, actualStock: 3 }] })).json();
+  assert.equal(counted.ok, true, JSON.stringify(counted));
+  assert.equal(counted.products.find((x) => x.id === id).stock, 3);
+  const locked = await req({ action: 'saveProduct', id, name: 'Pishloq (motsarella)', unit: 'g', minStock: 1 });
+  assert.equal(locked.status, 409, 'harakati bor — birlik o‘zgarmaydi');
+});
