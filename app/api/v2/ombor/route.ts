@@ -4,6 +4,7 @@ import { LedgerError } from "../../../core/ledger";
 import { runStockBridge } from "../../../core/stock-bridge";
 import { avtReport } from "../../../core/stock";
 import type { D1Like } from "../../../lib/full-migration";
+import { shell } from "../../../core/ui-shell";
 
 declare global {
   var __HALO_CONTROL_DB__: D1Database | undefined;
@@ -51,43 +52,23 @@ export async function POST(request: Request) {
 
 function page(branches: Array<{ id: string; name: string }>): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
-  return `<!doctype html><html lang="uz"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex">
-<title>HALO Ombor</title>
-<style>
-:root{color-scheme:light dark;--bg:#f3f4f6;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--ok:#047857;--ok-soft:#d1fae5;--bad:#b91c1c;--bad-soft:#fee2e2;--warn:#b45309;--warn-soft:#fef3c7}
-@media (prefers-color-scheme:dark){:root{--bg:#0b0d10;--card:#16191e;--text:#f3f4f6;--muted:#9ca3af;--line:#262a31;--accent:#2dd4bf;--ok:#34d399;--ok-soft:#064e3b;--bad:#f87171;--bad-soft:#450a0a;--warn:#fbbf24;--warn-soft:#451a03}}
-*{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px 16px calc(24px + env(safe-area-inset-bottom))}
-main{max-width:720px;margin:0 auto;display:grid;gap:14px}
-header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}header h1{font-size:20px;margin:0}header small{color:var(--muted)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
-.card h2{font-size:15px;margin:0 0 6px;color:var(--muted);font-weight:600;letter-spacing:.02em;text-transform:uppercase}
-.hint{font-size:14px;color:var(--muted);margin:0 0 12px}
-select,input{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:transparent;color:inherit}
-button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:10px 14px;background:var(--accent);color:#fff;cursor:pointer}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.total{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}.total.bad{color:var(--bad)}.total.ok{color:var(--ok)}
-.item{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:12px 0;border-top:1px solid var(--line)}.item:first-of-type{border-top:0}
-.item b{font-size:16px}.item .v{text-align:right;font-weight:800;font-variant-numeric:tabular-nums}.item small{grid-column:1/-1;color:var(--muted);font-size:13px}
-.v.bad{color:var(--bad)}.v.warn{color:var(--warn)}.v.ok{color:var(--ok)}
-.bar{grid-column:1/-1;height:6px;border-radius:3px;background:var(--line);overflow:hidden}.bar i{display:block;height:100%;background:var(--bad)}
-.msg{padding:12px;border-radius:12px}.msg.bad{background:var(--bad-soft);color:var(--bad)}.msg.ok{background:var(--ok-soft);color:var(--ok)}
-</style></head><body><main>
-<header><div><a href="/api/v2/bosh" style="color:var(--muted);font-size:14px;text-decoration:none">← Bosh sahifa</a><br><h1>Ombor nazorati</h1><small>Yangi jurnal · sinov</small></div><select id="branch"></select></header>
-<section class="card"><h2>Nazariy va haqiqiy sarf</h2>
+  return shell({
+    title: "Ombor", active: "ombor", heading: "Ombor nazorati",
+    subtitle: "Retsept bo‘yicha sarf, chiqit va sanoq kamomadi",
+    headerRight: '<select id="branch"></select>',
+    body: `<section class="card"><h2>Nazariy va haqiqiy sarf</h2>
 <p class="hint">Retsept bo'yicha qancha ketishi kerak edi va sanoqda qancha kam chiqdi. Eng katta yo'qotish — birinchi.</p>
 <div class="row"><input type="date" id="from"> — <input type="date" id="to"><button id="go">Ko'rsatish</button></div>
 <div id="avt" style="margin-top:12px"></div></section>
 <section class="card"><h2>Hujjatsiz qoldiq o'zgarishlari</h2>
 <p class="hint">Eski tizimdagi qoldiq harakatlar yig'indisiga teng emas — ya'ni qoldiq harakat yozilmasdan o'zgartirilgan.</p>
-<div id="drift"></div></section>
-</main>
-<script>
+<div id="drift"></div></section>`,
+    script: `
 var BRANCHES=${boot};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function won(n){n=Number(n||0);return (n<0?'−':'')+Math.abs(n).toLocaleString('en-US')+' ₩'}
 function qty(n,u){n=Number(n||0);return (n<0?'−':'')+Math.abs(n).toLocaleString('en-US',{maximumFractionDigits:3})+' '+esc(u)}
-var sel=document.getElementById('branch');sel.innerHTML=BRANCHES.map(function(b){return '<option value="'+esc(b.id)+'">'+esc(b.name)+'</option>'}).join('');
+var sel=document.getElementById('branch');sel.innerHTML=BRANCHES.map(function(b){return '<option value="'+esc(b.id)+'">'+esc(b.name)+'</option>'}).join('');haloBranch(sel);
 function load(){
   document.getElementById('avt').innerHTML='<p class="hint">Yuklanmoqda…</p>';
   fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({branchId:sel.value,from:document.getElementById('from').value||undefined,to:document.getElementById('to').value||undefined})})
@@ -108,5 +89,6 @@ function load(){
   });
 }
 document.getElementById('go').addEventListener('click',load);sel.addEventListener('change',load);load();
-</script></body></html>`;
+`,
+  });
 }

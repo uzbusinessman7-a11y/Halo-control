@@ -23,7 +23,7 @@ const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / who
 export interface HomeAlert { level: "bad" | "warn"; text: string; page: "kassa" | "ombor" | "qarz" | "maosh" }
 export interface HomeReport {
   today: string; yesterday: string; monthStart: string;
-  sales: { today: number; yesterday: number; weekAgo: number; monthToDate: number; lastMonthSamePeriod: number };
+  sales: { today: number; yesterday: number; weekAgo: number; monthToDate: number; lastMonthSamePeriod: number; days: Array<{ date: string; amount: number }> };
   expenses: { monthToDate: number };
   prime: {
     theoreticalFood: number; waste: number; countLoss: number; food: number; labor: number; total: number;
@@ -97,7 +97,7 @@ export async function homeReport(db: D1Like, scope: LedgerScope, state: Row, tod
   const lastMonthSameDay = `${lastMonthStart.slice(0, 8)}${today.slice(8, 10)}`;
   const lastMonthTo = lastMonthSameDay > lastMonthEnd ? lastMonthEnd : lastMonthSameDay;
 
-  const daily = await salesByDay(db, scope, shift(today, -8), today);
+  const daily = await salesByDay(db, scope, shift(today, -13), today);
   const salesMtd = -(await accountSum(db, scope, ["savdo"], monthStart, today));
   const salesLast = -(await accountSum(db, scope, ["savdo"], lastMonthStart, lastMonthTo));
   const expensesMtd = await accountSum(db, scope, ["xarajat", "komissiya", "kassa-farqi"], monthStart, today);
@@ -139,6 +139,7 @@ export async function homeReport(db: D1Like, scope: LedgerScope, state: Row, tod
     sales: {
       today: daily.get(today) || 0, yesterday: daily.get(yesterday) || 0, weekAgo: daily.get(shift(yesterday, -7)) || 0,
       monthToDate: salesMtd, lastMonthSamePeriod: salesLast,
+      days: Array.from({ length: 14 }, (_, index) => { const date = shift(today, index - 13); return { date, amount: daily.get(date) || 0 }; }),
     },
     expenses: { monthToDate: expensesMtd },
     prime: {

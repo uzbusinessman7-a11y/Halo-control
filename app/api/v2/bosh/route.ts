@@ -4,6 +4,7 @@ import { readSettings, telegramCall } from "../../../lib/telegram-service";
 import { LedgerError } from "../../../core/ledger";
 import { flashText, homeReport } from "../../../core/home";
 import type { D1Like } from "../../../lib/full-migration";
+import { shell } from "../../../core/ui-shell";
 
 declare global {
   var __HALO_CONTROL_DB__: D1Database | undefined;
@@ -36,6 +37,18 @@ export async function POST(request: Request) {
     const branchId = String(body.branchId || "main");
     const branch = (await listHaloBranches()).find((item) => item.id === branchId);
     if (!branch) return json({ error: "Filial topilmadi." }, 400);
+    if (body.action === "compare") {
+      const rows = [];
+      for (const item of await listHaloBranches()) {
+        const { state: branchState } = await readHaloState(item.id);
+        const r = await homeReport(database(), { tenantId: TENANT_ID, branchId: item.id }, branchState as Record<string, unknown>, seoulToday());
+        rows.push({
+          id: item.id, name: item.name, yesterday: r.sales.yesterday, monthToDate: r.sales.monthToDate, primePercent: r.prime.primePercent,
+          cash: r.money.cash, bad: r.alerts.filter((alert) => alert.level === "bad").length, warn: r.alerts.filter((alert) => alert.level === "warn").length,
+        });
+      }
+      return json({ ok: true, branches: rows });
+    }
     const { state } = await readHaloState(branchId);
     const report = await homeReport(database(), { tenantId: TENANT_ID, branchId }, state as Record<string, unknown>, seoulToday());
     const text = flashText(report, `HALO ${branch.name}`);
@@ -58,73 +71,56 @@ export async function POST(request: Request) {
 
 function page(branches: Array<{ id: string; name: string }>): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
-  return `<!doctype html><html lang="uz"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex">
-<title>HALO Bosh sahifa</title>
-<style>
-:root{color-scheme:light dark;--bg:#f3f4f6;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--ok:#047857;--ok-soft:#d1fae5;--bad:#b91c1c;--bad-soft:#fee2e2;--warn:#b45309;--warn-soft:#fef3c7}
-@media (prefers-color-scheme:dark){:root{--bg:#0b0d10;--card:#16191e;--text:#f3f4f6;--muted:#9ca3af;--line:#262a31;--accent:#2dd4bf;--ok:#34d399;--ok-soft:#064e3b;--bad:#f87171;--bad-soft:#450a0a;--warn:#fbbf24;--warn-soft:#451a03}}
-*{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px 16px calc(24px + env(safe-area-inset-bottom))}
-main{max-width:760px;margin:0 auto;display:grid;gap:14px}
-header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}header h1{font-size:20px;margin:0}header small{color:var(--muted)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
-.card h2{font-size:15px;margin:0 0 8px;color:var(--muted);font-weight:600;letter-spacing:.02em;text-transform:uppercase}
-.hint{font-size:13px;color:var(--muted);margin:2px 0 0}
-select{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:transparent;color:inherit}
-button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:10px 14px;background:var(--accent);color:#fff;cursor:pointer}
-button.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-.kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
-.kpi small{display:block;color:var(--muted);font-size:13px}.kpi b{display:block;font-size:22px;font-variant-numeric:tabular-nums;margin-top:2px}
-.up{color:var(--ok)}.down{color:var(--bad)}
-.gauge{height:10px;border-radius:5px;background:var(--line);overflow:hidden;margin:8px 0 4px;position:relative}.gauge i{display:block;height:100%}
-.gauge::after{content:"";position:absolute;left:62%;top:0;bottom:0;width:2px;background:var(--text);opacity:.5}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.alert{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;margin-top:8px;text-decoration:none}
-.alert.bad{background:var(--bad-soft);color:var(--bad)}.alert.warn{background:var(--warn-soft);color:var(--warn)}.alert span:last-child{white-space:nowrap;font-weight:700}
-.msg{padding:12px;border-radius:12px}.msg.ok{background:var(--ok-soft);color:var(--ok)}.msg.bad{background:var(--bad-soft);color:var(--bad)}
-nav{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}nav a{display:block;text-align:center;padding:12px 6px;border-radius:12px;background:var(--card);border:1px solid var(--line);color:inherit;text-decoration:none;font-weight:700}
-pre{white-space:pre-wrap;font:14px/1.5 ui-monospace,Menlo,monospace;background:var(--bg);border-radius:10px;padding:12px;margin:0 0 10px}
-</style></head><body><main>
-<header><div><h1>HALO — bosh sahifa</h1><small id="sub">Yangi tizim · sinov</small></div><select id="branch"></select></header>
-<nav><a href="/api/v2/kassa">💵 Kassa</a><a href="/api/v2/ombor">📦 Ombor</a><a href="/api/v2/qarz">🧾 Qarz</a><a href="/api/v2/maosh">👥 Maosh</a></nav>
-<div id="body"><p class="hint">Yuklanmoqda… (hamma bo'limlar eski tizim bilan yangilanmoqda)</p></div>
-</main>
-<script>
+  return shell({
+    title: "Bosh sahifa", active: "bosh", heading: "Bugun HALO'da", subtitle: '<span id="sub">Yuklanmoqda…</span>',
+    headerRight: '<select id="branch"></select>',
+    body: `<div id="body" style="display:grid;gap:16px"><section class="card"><div class="skeleton" style="width:60%"></div><div class="skeleton" style="margin-top:12px;width:85%"></div><div class="skeleton" style="margin-top:12px;width:40%"></div></section></div>`,
+    script: `
 var BRANCHES=${boot};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function won(n){n=Number(n||0);return (n<0?'−':'')+Math.abs(n).toLocaleString('en-US')+' ₩'}
+function short(n){n=Number(n||0);var a=Math.abs(n);return (n<0?'−':'')+(a>=1e6?(a/1e6).toFixed(a>=1e7?0:1)+'M':a>=1e3?Math.round(a/1e3)+'k':String(a))}
 function chg(a,b){if(!(b>0))return '';var p=Math.round((a-b)/b*100);return ' <span class="'+(p>=0?'up':'down')+'">'+(p>=0?'▲':'▼')+Math.abs(p)+'%</span>'}
 function api(b){return fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json()}).catch(function(){return {ok:false,error:'Internet aloqasini tekshiring.'}})}
-var sel=document.getElementById('branch');sel.innerHTML=BRANCHES.map(function(b){return '<option value="'+esc(b.id)+'">'+esc(b.name)+'</option>'}).join('');
+var sel=document.getElementById('branch');sel.innerHTML=BRANCHES.map(function(b){return '<option value="'+esc(b.id)+'">'+esc(b.name)+'</option>'}).join('');haloBranch(sel);
+if(BRANCHES.length<2)sel.hidden=true;
 function kpi(label,value,hint){return '<div class="kpi"><small>'+label+'</small><b>'+value+'</b>'+(hint?'<div class="hint">'+hint+'</div>':'')+'</div>'}
+function chart(days){
+  var max=Math.max.apply(null,days.map(function(d){return d.amount}).concat([1]));
+  return '<div class="bars" role="img" aria-label="So‘nggi 14 kun savdosi"><span class="max">'+short(max)+'</span>'
+    +days.map(function(d,i){return '<div class="b'+(i===days.length-1?' last':'')+'" style="height:'+Math.max(2,Math.round(d.amount/max*100))+'%" title="'+esc(d.date)+': '+won(d.amount)+'"></div>'}).join('')
+    +'</div><div class="bar-labels">'+days.map(function(d,i){return '<span>'+(i%2===1||i===days.length-1?d.date.slice(8,10):'')+'</span>'}).join('')+'</div>';
+}
 function load(){
-  var body=document.getElementById('body');body.innerHTML='<p class="hint">Yuklanmoqda…</p>';
+  var body=document.getElementById('body');
   api({branchId:sel.value}).then(function(res){
     if(!res.ok){body.innerHTML='<div class="msg bad">'+esc(res.error)+'</div>';return}
-    var r=res.report,p=r.prime,s=r.sales;
-    var pp=p.primePercent,color=pp==null?'var(--line)':pp<=62?'var(--ok)':pp<=68?'var(--warn)':'var(--bad)';
+    var r=res.report,p=r.prime,s=r.sales,pp=p.primePercent,color=pp==null?'var(--line)':pp<=62?'var(--ok)':pp<=68?'var(--warn)':'var(--bad)';
+    var bad=r.alerts.filter(function(a){return a.level==='bad'}).length;
+    document.getElementById('sub').textContent=r.today+' · '+(r.alerts.length?(bad?bad+' ta jiddiy, ':'')+r.alerts.length+' ta diqqat talab qiladi':'hammasi joyida ✓');
     body.innerHTML=
-      '<section class="card"><h2>Diqqat talab qiladi</h2>'+(r.alerts.length?r.alerts.map(function(a){return '<a class="alert '+a.level+'" href="/api/v2/'+a.page+'"><span>'+(a.level==='bad'?'🔴 ':'🟡 ')+esc(a.text)+'</span><span>Ochish ›</span></a>'}).join(''):'<div class="msg ok">✓ Hammasi joyida — muammo topilmadi</div>')+'</section>'
+      '<section class="card"><h2>Diqqat talab qiladi</h2>'+(r.alerts.length?r.alerts.map(function(a){return '<a class="alert '+a.level+'" href="/api/v2/'+a.page+'"><span>'+esc(a.text)+'</span><span class="go">Ochish ›</span></a>'}).join(''):'<div class="msg ok">✓ Hammasi joyida — muammo topilmadi</div>')+'</section>'
       +'<section class="card"><h2>Savdo</h2><div class="grid">'
-      +kpi('Bugun',won(s.today))
+      +kpi('Bugun',won(s.today),'kun hali tugamagan')
       +kpi('Kecha',won(s.yesterday)+chg(s.yesterday,s.weekAgo),'o‘tgan hafta shu kun: '+won(s.weekAgo))
       +kpi('Oy boshidan',won(s.monthToDate)+chg(s.monthToDate,s.lastMonthSamePeriod),'o‘tgan oy shu davr: '+won(s.lastMonthSamePeriod))
-      +'</div></section>'
-      +'<section class="card"><h2>Prime cost (oy boshidan)</h2><div class="row" style="justify-content:space-between"><b style="font-size:30px">'+(pp==null?'—':pp+'%')+'</b><span class="hint">Maqsad: 60–62% dan past</span></div>'
+      +'</div><div style="margin-top:14px">'+chart(s.days)+'</div></section>'
+      +'<section class="card"><h2>Prime cost · oy boshidan</h2><div class="row" style="justify-content:space-between;align-items:baseline"><span class="big" style="color:'+(pp==null?'inherit':color)+'">'+(pp==null?'—':pp+'%')+'</span><span class="hint" style="margin:0">Maqsad: 62% dan past</span></div>'
       +'<div class="gauge"><i style="width:'+Math.min(100,pp||0)+'%;background:'+color+'"></i></div>'
-      +'<div class="grid" style="margin-top:10px">'
-      +kpi('Oziq-ovqat',won(p.food)+(p.foodPercent!=null?' · '+p.foodPercent+'%':''),'retsept '+won(p.theoreticalFood)+' + chiqit '+won(p.waste)+' + kamomad '+won(p.countLoss))
-      +kpi('Ish haqi',won(p.labor)+(p.laborPercent!=null?' · '+p.laborPercent+'%':''),'hisoblangan maosh, bonus bilan')
+      +'<p class="hint">Oziq-ovqat tannarxi + ish haqi, savdoga nisbatan. Restoranning eng muhim ko‘rsatkichi.</p>'
+      +'<div class="grid">'
+      +kpi('Oziq-ovqat'+(p.foodPercent!=null?' · '+p.foodPercent+'%':''),won(p.food),'retsept '+won(p.theoreticalFood)+' · chiqit '+won(p.waste)+' · kamomad '+won(p.countLoss))
+      +kpi('Ish haqi'+(p.laborPercent!=null?' · '+p.laborPercent+'%':''),won(p.labor),'hisoblangan maosh, bonus bilan')
       +kpi('Boshqa xarajatlar',won(r.expenses.monthToDate),'xarajat, komissiya, kassa farqi')
       +'</div></section>'
       +'<section class="card"><h2>Pul va majburiyatlar</h2><div class="grid">'
       +kpi('Kassa (naqd)',won(r.money.cash))+kpi('Bank',won(r.money.bank))
-      +kpi('Kutilayotgan karta/delivery',won(r.money.receivable),r.money.oldestReceivableDays!=null?'eng eskisi '+r.money.oldestReceivableDays+' kun':'')
+      +kpi('Karta/delivery kutilmoqda',won(r.money.receivable),r.money.oldestReceivableDays!=null?'eng eskisi '+r.money.oldestReceivableDays+' kun':'hammasi tushgan')
       +kpi('Yetkazuvchilarga qarz',won(r.debts.total),r.debts.overdueCount?'30+ kun: '+won(r.debts.overdue):'muddati o‘tgani yo‘q')
-      +kpi('Maosh (shu oy qoldi)',won(r.payroll.thisMonthToPay),r.payroll.unpaidPast?'o‘tgan oylardan: '+won(r.payroll.unpaidPast):'')
+      +kpi('Maosh · shu oy qoldi',won(r.payroll.thisMonthToPay),r.payroll.unpaidPast?'o‘tgan oylardan: '+won(r.payroll.unpaidPast):'o‘tgan oylar to‘langan')
       +'</div></section>'
-      +'<section class="card"><h2>Kunlik Telegram hisobot</h2><pre id="flash">'+esc(res.text)+'</pre><div class="row"><button id="tg">✈️ Telegramga yuborish</button><button class="ghost" id="copy">📋 Nusxa</button></div><div id="tmsg" style="margin-top:8px"></div></section>';
+      +(BRANCHES.length>1?'<section class="card"><h2>Filiallar solishtiruvi</h2><div id="cmp"><button class="ghost" id="cmpGo">Ikkala filialni solishtirish</button></div></section>':'')
+      +'<section class="card"><h2>Kunlik Telegram hisobot</h2><pre id="flash">'+esc(res.text)+'</pre><div class="row"><button id="tg">✈️ Telegramga yuborish</button><button class="ghost" id="copy">📋 Nusxa</button></div><div id="tmsg"></div></section>';
     document.getElementById('copy').addEventListener('click',function(){
       var done=function(){document.getElementById('tmsg').innerHTML='<div class="msg ok">✓ Nusxa olindi</div>'};
       if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(res.text).then(done,function(){prompt('Matnni nusxalang:',res.text)})}else{prompt('Matnni nusxalang:',res.text)}
@@ -134,8 +130,18 @@ function load(){
       api({branchId:sel.value,action:'telegram'}).then(function(x){btn.disabled=false;
         document.getElementById('tmsg').innerHTML=x.ok?'<div class="msg ok">✓ Telegramga yuborildi</div>':'<div class="msg bad">'+esc(x.error)+'</div>'});
     });
+    var cg=document.getElementById('cmpGo');if(cg)cg.addEventListener('click',compare);
+  });
+}
+function compare(){
+  var box=document.getElementById('cmp');box.innerHTML=haloLoading(2);
+  api({action:'compare'}).then(function(res){
+    if(!res.ok){box.innerHTML='<div class="msg bad">'+esc(res.error)+'</div>';return}
+    box.innerHTML='<table><tr><th>Filial</th><th class="n">Kecha</th><th class="n">Oy boshidan</th><th class="n">Prime cost</th><th class="n">Diqqat</th></tr>'
+      +res.branches.map(function(b){return '<tr><td><b>'+esc(b.name)+'</b></td><td class="n">'+won(b.yesterday)+'</td><td class="n">'+won(b.monthToDate)+'</td><td class="n">'+(b.primePercent==null?'—':b.primePercent+'%')+'</td><td class="n">'+(b.bad?'<span class="badge bad">'+b.bad+'</span> ':'')+(b.warn?'<span class="badge warn">'+b.warn+'</span>':'')+(!b.bad&&!b.warn?'<span class="badge ok">✓</span>':'')+'</td></tr>'}).join('')+'</table>';
   });
 }
 sel.addEventListener('change',load);load();
-</script></body></html>`;
+`,
+  });
 }

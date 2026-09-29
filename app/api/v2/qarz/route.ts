@@ -4,6 +4,7 @@ import { LedgerError } from "../../../core/ledger";
 import { runDebtBridge } from "../../../core/debt-bridge";
 import { statement, statementText } from "../../../core/debts";
 import type { D1Like } from "../../../lib/full-migration";
+import { shell } from "../../../core/ui-shell";
 
 declare global {
   var __HALO_CONTROL_DB__: D1Database | undefined;
@@ -51,40 +52,18 @@ export async function POST(request: Request) {
 
 function page(branches: Array<{ id: string; name: string }>): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
-  return `<!doctype html><html lang="uz"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex">
-<title>HALO Qarzlar</title>
-<style>
-:root{color-scheme:light dark;--bg:#f3f4f6;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--ok:#047857;--ok-soft:#d1fae5;--bad:#b91c1c;--bad-soft:#fee2e2;--warn:#b45309;--warn-soft:#fef3c7}
-@media (prefers-color-scheme:dark){:root{--bg:#0b0d10;--card:#16191e;--text:#f3f4f6;--muted:#9ca3af;--line:#262a31;--accent:#2dd4bf;--ok:#34d399;--ok-soft:#064e3b;--bad:#f87171;--bad-soft:#450a0a;--warn:#fbbf24;--warn-soft:#451a03}}
-*{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px 16px calc(24px + env(safe-area-inset-bottom))}
-main{max-width:720px;margin:0 auto;display:grid;gap:14px}
-header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}header h1{font-size:20px;margin:0}header small{color:var(--muted)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
-.card h2{font-size:15px;margin:0 0 6px;color:var(--muted);font-weight:600;letter-spacing:.02em;text-transform:uppercase}
-.hint{font-size:14px;color:var(--muted);margin:0 0 12px}
-select,input{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:transparent;color:inherit}
-button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:10px 14px;background:var(--accent);color:#fff;cursor:pointer}
-button.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.total{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
-.party{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:12px 0;border-top:1px solid var(--line);cursor:pointer}.party:first-of-type{border-top:0}
-.party b{font-size:16px}.party .v{text-align:right;font-weight:800;font-variant-numeric:tabular-nums}.party small{grid-column:1/-1;color:var(--muted);font-size:13px}
-.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;margin-left:6px}.tag.bad{background:var(--bad-soft);color:var(--bad)}.tag.warn{background:var(--warn-soft);color:var(--warn)}
-table{width:100%;border-collapse:collapse;font-size:15px}th,td{padding:8px 4px;border-bottom:1px solid var(--line);text-align:left}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
-.msg{padding:12px;border-radius:12px}.msg.bad{background:var(--bad-soft);color:var(--bad)}.msg.ok{background:var(--ok-soft);color:var(--ok)}
-@media print{body{background:#fff;color:#000;padding:0}header,#listCard,.noprint{display:none!important}.card{border:0;padding:0}}
-</style></head><body><main>
-<header><div><a href="/api/v2/bosh" style="color:var(--muted);font-size:14px;text-decoration:none">← Bosh sahifa</a><br><h1>Qarzlar</h1><small>Yangi daftar · sinov</small></div><select id="branch"></select></header>
-<section class="card" id="listCard"><h2>Yetkazib beruvchilarga qarz</h2><div id="list"><p class="hint">Yuklanmoqda…</p></div></section>
-<section class="card" id="stCard" hidden></section>
-</main>
-<script>
+  return shell({
+    title: "Qarzlar", active: "qarz", heading: "Qarzlar",
+    subtitle: "Yetkazib beruvchilar bilan hisob-kitob va solishtirish akti",
+    headerRight: '<select id="branch"></select>',
+    body: `<section class="card noprint" id="listCard"><h2>Yetkazib beruvchilarga qarz</h2><div id="list"><p class="hint">Yuklanmoqda…</p></div></section>
+<section class="card" id="stCard" hidden></section>`,
+    script: `
 var BRANCHES=${boot},TODAY='';
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function won(n){n=Number(n||0);return (n<0?'−':'')+Math.abs(n).toLocaleString('en-US')+' ₩'}
 function api(b){return fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json()}).catch(function(){return {ok:false,error:'Internet aloqasini tekshiring.'}})}
-var sel=document.getElementById('branch');sel.innerHTML=BRANCHES.map(function(b){return '<option value="'+esc(b.id)+'">'+esc(b.name)+'</option>'}).join('');
+var sel=document.getElementById('branch');sel.innerHTML=BRANCHES.map(function(b){return '<option value="'+esc(b.id)+'">'+esc(b.name)+'</option>'}).join('');haloBranch(sel);
 var KIND={opening:'Boshlang‘ich qarz',purchase:'Xarid',payment:'To‘lov',adjustment:'Tuzatish',reversal:'Bekor qilindi'};
 function load(){
   document.getElementById('stCard').hidden=true;
@@ -124,5 +103,6 @@ function openStatement(partyId,from,to){
   });
 }
 sel.addEventListener('change',load);load();
-</script></body></html>`;
+`,
+  });
 }
