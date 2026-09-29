@@ -229,3 +229,44 @@ export function varianceEntry(
     lines,
   };
 }
+
+// --------------------------------------------------------------------------
+// Karta / delivery pulining bankka tushishi (olinadigan pul → bank)
+// --------------------------------------------------------------------------
+
+export interface SettlementInput {
+  operationId: string;
+  date: string;
+  actor: string;
+  /** Olinadigan pul hisobi (karta kompaniyasi yoki delivery platforma). */
+  fromAccountId: string;
+  /** Pul tushgan hisob (bank). */
+  toAccountId: string;
+  /** Bankka haqiqatda tushgan summa. */
+  received: number;
+  /** Ushlab qolingan komissiya (0 bo'lishi mumkin). */
+  fee: number;
+  feeAccountId: string;
+  memo?: string;
+}
+
+/**
+ * Bank +tushgan · Komissiya +ushlangan · Olinadigan pul −(tushgan + ushlangan).
+ * Shunday qilib karta/delivery puli bankka qancha yetib kelgani va komissiya won'igacha ko'rinadi.
+ */
+export function settlementEntry(input: SettlementInput, accounts: ReadonlyMap<string, LedgerAccount>): EntryInput {
+  const from = accounts.get(input.fromAccountId);
+  const to = accounts.get(input.toAccountId);
+  if (!from || !to) throw new LedgerError("Olinadigan pul yoki bank hisobi topilmadi.");
+  if (from.id === to.id) throw new LedgerError("Pul o'sha hisobning o'ziga tushmaydi.");
+  if (from.kind !== "asset" || to.kind !== "asset") throw new LedgerError("Ikkala hisob ham pul (aktiv) hisobi bo'lishi kerak.");
+  if (!isWholeWon(input.received) || input.received < 0) throw new LedgerError("Tushgan summani butun wonda kiriting.");
+  if (!isWholeWon(input.fee) || input.fee < 0) throw new LedgerError("Komissiyani butun wonda kiriting (bo'lmasa 0).");
+  const total = input.received + input.fee;
+  if (total <= 0) throw new LedgerError("Tushgan summa yoki komissiya 0 dan katta bo'lishi kerak.");
+  const lines: LineInput[] = [{ accountId: from.id, amount: -total }];
+  if (input.received) lines.push({ accountId: to.id, amount: input.received });
+  if (input.fee) lines.push({ accountId: input.feeAccountId, amount: input.fee });
+  const memo = `${from.name} → ${to.name}: ${input.received.toLocaleString("en-US")} ₩ tushdi${input.fee ? `, komissiya ${input.fee.toLocaleString("en-US")} ₩` : ""}${input.memo ? ` · ${String(input.memo).trim()}` : ""}`;
+  return { operationId: input.operationId, date: input.date, kind: "transfer", memo: memo.slice(0, 300), actor: input.actor, lines };
+}

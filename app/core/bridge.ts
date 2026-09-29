@@ -29,6 +29,7 @@ export const BRIDGE_ACCOUNTS: AccountInput[] = [
   { code: "hisob-yopilishi", name: "Xarid va qarz to'lovlari (foydaga ta'sirsiz)", kind: "liability" },
   { code: "kapital-qarz", name: "Qarz yoki egasi pulini kiritish (foydaga ta'sirsiz)", kind: "equity" },
   { code: "kassa-farqi", name: "Kassa farqi (kamomad / ortiqcha)", kind: "expense" },
+  { code: "komissiya", name: "Karta va delivery komissiyasi", kind: "expense" },
   { code: "ochilish", name: "Ochilish qoldig'i", kind: "equity" },
 ];
 

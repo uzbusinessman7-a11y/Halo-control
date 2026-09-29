@@ -10,7 +10,8 @@
  * - Har bir jadvalda tenant_id: bir bazada ko'p biznes, bir-birini ko'rmaydi.
  */
 import {
-  assertScope, isIsoDate, LedgerError, reversalOf, reviewClose, sumByAccount, validateCashCount, validateEntry, varianceEntry,
+  assertScope, isIsoDate, LedgerError, reversalOf, reviewClose, settlementEntry, sumByAccount, validateCashCount, validateEntry, varianceEntry,
+  type SettlementInput,
   ACCOUNT_KINDS, type AccountKind, type CashCountInput, type CashCountReceipt, type CloseReview, type EntryInput,
   type LedgerAccount, type LedgerEntry, type LedgerScope, type LineInput,
 } from "./ledger";
@@ -139,6 +140,7 @@ export const STANDARD_ACCOUNTS: AccountInput[] = [
   { code: "savdo", name: "Savdo tushumi", kind: "income" },
   { code: "xarajat", name: "Boshqa xarajatlar", kind: "expense" },
   { code: "kassa-farqi", name: "Kassa farqi (kamomad / ortiqcha)", kind: "expense" },
+  { code: "komissiya", name: "Karta va delivery komissiyasi", kind: "expense" },
   { code: "ochilish", name: "Ochilish qoldig'i (egasi kapitali)", kind: "equity" },
 ];
 
@@ -333,4 +335,57 @@ export async function verifyLedger(db: D1Like, scope: LedgerScope) {
   const grand = await db.prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM v2_ledger_lines WHERE tenant_id = ? AND branch_id = ?")
     .bind(scope.tenantId, scope.branchId).first<{ total: number }>();
   return { ok: unbalanced.results.length === 0 && Number(grand?.total || 0) === 0, unbalancedEntries: unbalanced.results.map((row) => row.id), grandTotal: Number(grand?.total || 0) };
+}
+
+// --------------------------------------------------------------------------
+// Karta / delivery: bankka tushgan pulni kiritish va kutilayotgan pul hisoboti
+// --------------------------------------------------------------------------
+
+export async function recordSettlement(db: D1Like, scope: LedgerScope, input: Omit<SettlementInput, "feeAccountId">, now = new Date()) {
+  const accounts = await listAccounts(db, scope);
+  const entry = settlementEntry({ ...input, feeAccountId: accountByCode(accounts, "komissiya").id }, accounts);
+  return postEntry(db, scope, entry, now);
+}
+
+export interface ReceivableRow { accountId: string; name: string; outstanding: number; oldestUnsettledDate: string | null; ageDays: number | null }
+
+/**
+ * Har bir olinadigan pul hisobi bo'yicha: hali bankka tushmagan summa va eng eski tushmagan
+ * savdo sanasi (FIFO: tushgan pul avval eng eski savdolarni yopadi).
+ */
+export async function receivablesReport(db: D1Like, scope: LedgerScope, accountIds: string[], today: string): Promise<ReceivableRow[]> {
+  assertScope(scope);
+  if (!isIsoDate(today)) throw new LedgerError("Sana noto'g'ri.");
+  const accounts = await listAccounts(db, scope);
+  const dayMs = 86_400_000;
+  const report: ReceivableRow[] = [];
+  for (const accountId of accountIds) {
+    const account = accounts.get(accountId);
+    if (!account) continue;
+    const result = await db.prepare(
+      `SELECT e.date AS date, l.amount AS amount FROM v2_ledger_lines l JOIN v2_ledger_entries e ON e.id = l.entry_id
+       WHERE l.tenant_id = ? AND l.branch_id = ? AND l.account_id = ? ORDER BY e.date, e.created_at, l.id`,
+    ).bind(scope.tenantId, scope.branchId, accountId).all<{ date: string; amount: number }>();
+    const debits: Array<{ date: string; left: number }> = [];
+    let credits = 0;
+    for (const row of result.results) {
+      const amount = Number(row.amount);
+      if (amount > 0) debits.push({ date: row.date, left: amount });
+      else credits += -amount;
+    }
+    for (const debit of debits) {
+      const used = Math.min(debit.left, credits);
+      debit.left -= used;
+      credits -= used;
+    }
+    const open = debits.filter((debit) => debit.left > 0);
+    const outstanding = open.reduce((sum, debit) => sum + debit.left, 0) - credits;
+    const oldest = open[0]?.date ?? null;
+    report.push({
+      accountId, name: account.name, outstanding,
+      oldestUnsettledDate: oldest,
+      ageDays: oldest ? Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${oldest}T00:00:00Z`)) / dayMs) : null,
+    });
+  }
+  return report;
 }
