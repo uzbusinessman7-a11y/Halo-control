@@ -67,7 +67,7 @@ function page(branches: Array<{ id: string; name: string }>): string {
     title: "Sozlamalar", active: "bosh", heading: "Sozlamalar",
     subtitle: "Xodim akkauntlari, Telegram bot va filiallar",
     headerRight: '<select id="branch"></select>',
-    body: `<section class="card"><h2>Xodim akkauntlari</h2><p class="hint">Xodim telefonidan /xodim sahifasiga login va PIN bilan kiradi: ish boshlash/tugatish, kassa sanog‘i, kirim. Har bir akkauntni xodimga bog‘lang — smena maoshga shu orqali tushadi.</p><div id="acc"></div>
+    body: `<section class="card"><h2>Xodim akkauntlari</h2><p class="hint">Xodim telefonidan <b>/api/v2/xodim</b> sahifasiga login va PIN bilan kiradi: ish boshlash/tugatish, kassa sanog‘i, kirim. Har bir akkauntni xodimga bog‘lang — smena maoshga shu orqali tushadi.</p><div id="acc"></div>
 <div class="row" style="margin-top:12px"><button id="accNew">+ Yangi akkaunt</button></div><div id="accForm"></div></section>
 <section class="card"><h2>Telegram bot</h2><div id="tg"></div></section>
 <section class="card"><h2>Filiallar</h2><div id="br"></div><div class="row" style="margin-top:12px"><button class="ghost" id="brNew">+ Yangi filial</button></div><div id="brForm"></div></section>`,
