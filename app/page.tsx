@@ -3,6 +3,7 @@ import RecordRemovalHistory from "./record-removal-history";
 import RecordRemovalDialog from "./record-removal-dialog";
 import type { RemovalTarget } from "./lib/record-removals";
 import { calculateAccountBalances } from "./lib/account-balances";
+import { sumWholeWon, wholeWon } from "./lib/sale-cost";
 import { receiptDisplay, receiptTotalRows } from "./lib/receipt-display";
 import { supplierSourceDocument } from "./lib/supplier-source";
 import VegetableExpensesPanel from "./vegetable-expenses-panel";
@@ -2972,7 +2973,7 @@ export default function Home() {
   const todayPosSales = useMemo(() => posTaxableSales.filter((sale) => sale.date === today), [posTaxableSales, today]);
   const todayFinancialSales = todayPosSales;
   const todayPosRevenue = todayPosSales.reduce((sum, sale) => sum + sale.totalRevenue, 0);
-  const todayPosCost = todayPosSales.reduce((sum, sale) => sum + sale.totalCost, 0);
+  const todayPosCost = sumWholeWon(todayPosSales, (sale) => sale.totalCost);
   const todayPosItems = todayPosSales.reduce((sum, sale) => sum + sale.quantity, 0);
   const todayReport = useMemo(() => calculateDailyReport(data, today), [data, today]);
   const todayRevenue = todayReport.revenue;
@@ -3030,7 +3031,7 @@ export default function Home() {
     (sale) => sale.date,
   ), [cashBankSales, sectionDateRanges.cashbank]);
   const cashBankRangeRevenue = cashBankRangeSales.reduce((sum, sale) => sum + sale.totalRevenue, 0);
-  const cashBankRangeCost = cashBankRangeSales.reduce((sum, sale) => sum + sale.totalCost, 0);
+  const cashBankRangeCost = sumWholeWon(cashBankRangeSales, (sale) => sale.totalCost);
   const cashBankRangeQuantity = cashBankRangeSales.reduce((sum, sale) => sum + sale.quantity, 0);
   const cashBankRangeCash = cashBankRangeSales.reduce((sum, sale) => (
     data.accounts.find((account) => account.id === sale.accountId)?.type === "cash"
@@ -3055,7 +3056,7 @@ export default function Home() {
     ["inventory_only", "meal", "product", "waste"].includes(String(entry.kind || ""))
     && dateIsInRange(String(entry.date || ""), sectionDateRanges.cashsales)
   )) as unknown as InventoryOnlyEntry[], [data.workerConsumptions, sectionDateRanges.cashsales]);
-  const cashSaleRangeCost = cashSaleRangeSales.reduce((sum, entry) => sum + safeOutflowNumber(entry.totalCost), 0);
+  const cashSaleRangeCost = sumWholeWon(cashSaleRangeSales, (entry) => safeOutflowNumber(entry.totalCost));
   const accountingToday = localDate();
   const activeFinancialEntries = useMemo(
     () => selectActiveFinancialEntries(data.financialEntries),
@@ -3095,7 +3096,7 @@ export default function Home() {
   });
   const summarizeSales = (sales: Sale[]) => {
     const revenue = sales.reduce((sum, sale) => sum + sale.totalRevenue, 0);
-    const cost = sales.reduce((sum, sale) => sum + sale.totalCost, 0);
+    const cost = sumWholeWon(sales, (sale) => sale.totalCost);
     return { revenue, cost, profit: revenue - cost, items: sales.reduce((sum, sale) => sum + sale.quantity, 0) };
   };
   const currentWeek = summarizeSales(currentWeekSales);
@@ -7613,7 +7614,7 @@ export default function Home() {
           </section>
           <section className="panel table-panel"><div className="panel-head"><div><span>POS SAVDO TARIXI</span><h3>Excel, surat va qo‘lda kiritilgan soliq hisoblanadigan yozuvlar</h3></div></div>
             {userMode === "owner" ? <div className="data-table"><div className="table-row sales head"><span>Sana</span><span>Taom</span><span>Manba</span><span>Soni</span><span>Savdo</span><span>Tannarx</span><span>Foyda</span><span>Marja</span><span /></div>
-              {posRangeSales.length ? posRangeSales.slice(0, salesHistoryLimit).map((sale) => { const profit = sale.totalRevenue - sale.totalCost; const margin = sale.totalRevenue ? (profit / sale.totalRevenue) * 100 : 0; return <div className="table-row sales" key={sale.id}><span>{displayDate(sale.date)}</span><strong>{recipeName(sale.recipeId)}</strong><b className={`source-${sale.source}`}>{saleSourceLabel(sale.source)}</b><span>{sale.quantity} ta</span><strong>{won(sale.totalRevenue)}</strong><span>{won(sale.totalCost)}</span><strong className="positive">{won(profit)}</strong><b className={margin >= 30 ? "margin-good" : "margin-low"}>{`${margin.toFixed(1)}%`}</b><button className="row-action" onClick={() => setRemovalTarget({kind:"sale",id:sale.id,label:`${recipeName(sale.recipeId)} · ${won(sale.totalRevenue)}`})}>Olib tashlash</button></div>; }) : <div className="table-empty">Tanlangan sanada POS savdo yo‘q.</div>}
+              {posRangeSales.length ? posRangeSales.slice(0, salesHistoryLimit).map((sale) => { const saleCost = wholeWon(sale.totalCost); const profit = sale.totalRevenue - saleCost; const margin = sale.totalRevenue ? (profit / sale.totalRevenue) * 100 : 0; return <div className="table-row sales" key={sale.id}><span>{displayDate(sale.date)}</span><strong>{recipeName(sale.recipeId)}</strong><b className={`source-${sale.source}`}>{saleSourceLabel(sale.source)}</b><span>{sale.quantity} ta</span><strong>{won(sale.totalRevenue)}</strong><span>{won(saleCost)}</span><strong className="positive">{won(profit)}</strong><b className={margin >= 30 ? "margin-good" : "margin-low"}>{`${margin.toFixed(1)}%`}</b><button className="row-action" onClick={() => setRemovalTarget({kind:"sale",id:sale.id,label:`${recipeName(sale.recipeId)} · ${won(sale.totalRevenue)}`})}>Olib tashlash</button></div>; }) : <div className="table-empty">Tanlangan sanada POS savdo yo‘q.</div>}
             </div> : <div className="employee-sales-list">{posRangeSales.length ? posRangeSales.slice(0, 30).map((sale) => <article key={sale.id}><span><strong>{recipeName(sale.recipeId)}</strong><small>{displayDate(sale.date)} · {saleSourceLabel(sale.source)}</small></span><b>{sale.quantity} ta</b></article>) : <p className="table-empty">Tanlangan sanada POS savdo yo‘q.</p>}</div>}
             {userMode === "owner" && posRangeSales.length > salesHistoryLimit && <button type="button" className="stock-history-more" onClick={() => setSalesHistoryLimit((current) => current + 100)}>Yana 100 ta POS savdoni ko‘rsatish</button>}
           </section>
