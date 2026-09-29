@@ -1,8 +1,9 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { applyOwnerAuth, type OwnerAuthEnv } from "./owner-auth";
 
-interface Env {
+interface Env extends OwnerAuthEnv {
   ASSETS: Fetcher;
   OPENAI_API_KEY?: string;
   HALO_AI_MODEL?: string;
@@ -51,7 +52,16 @@ const worker = {
       }, allowedWidths);
     }
 
-    const response = await handler.fetch(request, env, ctx);
+    // O'z hosting rejimida rahbar kirishi shu yerda tekshiriladi (ChatGPT Sites'da hech narsa qilmaydi).
+    const auth = await applyOwnerAuth(request, env);
+    if ("response" in auth) {
+      const page = new Response(auth.response.body, auth.response);
+      page.headers.set("X-Content-Type-Options", "nosniff");
+      page.headers.set("X-Frame-Options", "DENY");
+      page.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+      return page;
+    }
+    const response = await handler.fetch(auth.request, env, ctx);
     const secured = new Response(response.body, response);
     secured.headers.set("X-Content-Type-Options", "nosniff");
     secured.headers.set("X-Frame-Options", "DENY");

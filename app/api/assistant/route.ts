@@ -1,8 +1,9 @@
 import { isAdminRequest } from '../../lib/integration-store';
 import { AssistantError } from '../../lib/assistant-engine';
 import { activeBranch, assistantDb, decideCommand, getAssistantConfig, getJob, hashSecret, prepareCommand, publicJob, telegramApi } from '../../lib/assistant-store';
-const ORIGIN='https://halo-control.uzbusinessman7.chatgpt.site';
-const WEBHOOK=`${ORIGIN}/api/assistant/telegram`;
+// Telegram webhook manzili sayt qayerda turgan bo'lsa, o'sha manzildan olinadi
+// (ChatGPT Sites yoki o'z Cloudflare akkaunti).
+const webhookFor=(request:Request)=>`${new URL(request.url).origin}/api/assistant/telegram`;
 export async function GET(request:Request){
  if(!await isAdminRequest(request))return Response.json({error:'Kirish taqiqlangan.'},{status:401});
  try{
@@ -35,17 +36,17 @@ export async function POST(request:Request){
    const old=oldTable?await db.prepare('SELECT bot_token FROM telegram_settings WHERE id=?').bind('main').first<{bot_token:string}>():null;
    if(old?.bot_token?.split(':')[0]===token.split(':')[0])throw new AssistantError('Bu hisobotlar botining tokeni. Yordamchi uchun BotFather orqali alohida bot yarating.');
    const me=await telegramApi(token,'getMe',{});const hook=await telegramApi(token,'getWebhookInfo',{});
-   if(hook.url&&hook.url!==WEBHOOK)throw new AssistantError('Bu bot boshqa tizimga ulangan. Yordamchi uchun yangi bot yarating.');
+   if(hook.url&&hook.url!==webhookFor(request))throw new AssistantError('Bu bot boshqa tizimga ulangan. Yordamchi uchun yangi bot yarating.');
    const generation=crypto.randomUUID(),secret=crypto.randomUUID()+crypto.randomUUID();
    await db.prepare("INSERT INTO halo_assistant_config (id,branch_id,bot_token,bot_name,secret,generation) VALUES ('main',?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET branch_id=excluded.branch_id,bot_token=excluded.bot_token,bot_name=excluded.bot_name,secret=excluded.secret,generation=excluded.generation,owner_id='',candidate_id='',candidate_name='',pair_hash='',pair_expires=0,enabled=0").bind(branch,token,me.username,secret,generation).run();
-   await telegramApi(token,'setWebhook',{url:WEBHOOK,secret_token:secret,allowed_updates:['message','callback_query'],max_connections:1});
+   await telegramApi(token,'setWebhook',{url:webhookFor(request),secret_token:secret,allowed_updates:['message','callback_query'],max_connections:1});
    return Response.json({ok:true,message:'Bot tayyor. Endi Telegram akkauntingizni bog‘lang.'});
   }
   if(!c)throw new AssistantError('Avval yordamchi botni sozlang.');
   if(b.action==='retryWebhook'){
    const hook=await telegramApi(c.bot_token,'getWebhookInfo',{});
-   if(hook.url&&hook.url!==WEBHOOK)throw new AssistantError('Bot boshqa tizimga ulangan. Avval o‘sha ulanishni tekshiring.');
-   await telegramApi(c.bot_token,'setWebhook',{url:WEBHOOK,secret_token:c.secret,allowed_updates:['message','callback_query'],max_connections:1});
+   if(hook.url&&hook.url!==webhookFor(request))throw new AssistantError('Bot boshqa tizimga ulangan. Avval o‘sha ulanishni tekshiring.');
+   await telegramApi(c.bot_token,'setWebhook',{url:webhookFor(request),secret_token:c.secret,allowed_updates:['message','callback_query'],max_connections:1});
    return Response.json({ok:true,message:'Bot ulanishi tiklandi.'});
   }
   if(b.action==='pair'){

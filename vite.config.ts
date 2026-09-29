@@ -8,26 +8,42 @@ const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
 
 const { d1, r2 } = hostingConfig;
 
+// O'z Cloudflare akkauntiga joylash (ChatGPT Sites'siz).
+// Bu o'zgaruvchilar berilmasa, qiymatlar ChatGPT Sites uchun avvalgidek qoladi.
+// Qarang: docs/CLOUDFLARE_KOCHISH.md
+const selfHosted = {
+  workerName: process.env.HALO_WORKER_NAME?.trim() || undefined,
+  d1DatabaseId: process.env.HALO_D1_DATABASE_ID?.trim() || undefined,
+  d1DatabaseName: process.env.HALO_D1_DATABASE_NAME?.trim() || undefined,
+  r2BucketName: process.env.HALO_R2_BUCKET_NAME?.trim() || undefined,
+};
+
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
 const localBindingConfig = {
+  ...(selfHosted.workerName ? { name: selfHosted.workerName } : {}),
+  // Wrangler deploy sanani talab qiladi; ChatGPT Sites o'zi beradi.
+  ...(selfHosted.d1DatabaseId ? { compatibility_date: "2026-06-01" } : {}),
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
   d1_databases: d1
     ? [
         {
           binding: d1,
-          database_name: "site-creator-d1",
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
+          database_name: selfHosted.d1DatabaseName || "site-creator-d1",
+          database_id: selfHosted.d1DatabaseId || SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
+          ...(selfHosted.d1DatabaseId ? { migrations_dir: "drizzle" } : {}),
         },
       ]
     : [],
-  r2_buckets: r2
+  // R2 (rasmlar) ixtiyoriy: o'z akkauntida bucket nomi berilmasa ulanmaydi,
+  // rasm yuklash o'chadi, qolgan hammasi ishlaydi.
+  r2_buckets: r2 && (!selfHosted.d1DatabaseId || selfHosted.r2BucketName)
     ? [
         {
           binding: r2,
-          bucket_name: "site-creator-r2",
+          bucket_name: selfHosted.r2BucketName || "site-creator-r2",
         },
       ]
     : [],
