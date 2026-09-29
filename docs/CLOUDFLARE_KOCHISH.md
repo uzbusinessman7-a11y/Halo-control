@@ -35,8 +35,10 @@ Workers & Pages → Create → Import a repository → `uzbusinessman7-a11y/Halo
 
 - Project/Worker nomi: `halo-control`
 - Production branch: `main` (sinov bosqichida — ko'chish branch'i)
-- Build command: `npx vite build`
-- Deploy command: `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`
+- Build command: `npm run build`
+- Deploy command: `npm run deploy:cloudflare`
+  (`scripts/cloudflare-deploy.mjs`: build natijasidan wrangler sozlamasini yozadi,
+  D1 migratsiyalarini qo'llaydi va joylaydi)
 
 **Build variables** (build paytida):
 
