@@ -7,7 +7,7 @@ import { isMezanaSupplierName } from "../lib/mezana-debts";
 import { bridgeOperationId } from "./bridge";
 import { assertScope, isIsoDate, LedgerError, type LedgerScope } from "./ledger";
 import {
-  debtMoveStatement, ensureDebtSchema, ensureParty, listParties, oldestUnpaid, partyBalances, validateDebtMove, type DebtMoveInput,
+  debtMoveStatement, ensureDebtSchema, partyStatement, listParties, oldestUnpaidAll, partyBalances, validateDebtMove, type DebtMoveInput,
 } from "./debts";
 import type { D1Like, D1StatementLike } from "../lib/full-migration";
 
@@ -30,9 +30,13 @@ export async function runDebtBridge(db: D1Like, scope: LedgerScope, state: Row, 
   if (!isIsoDate(today)) throw new LedgerError("Sana noto'g'ri.");
   await ensureDebtSchema(db);
   const suppliers = rows(state.suppliers).filter((supplier) => typeof supplier.id === "string" && supplier.id && !isMezanaSupplierName(supplier.name));
-  const idByOld = new Map<string, string>();
-  for (const supplier of suppliers) idByOld.set(String(supplier.id), await ensureParty(db, scope, partyCode(String(supplier.id)), String(supplier.name || supplier.id), now));
-  const parties = await listParties(db, scope);
+  const idByOld = new Map(suppliers.map((supplier) => [String(supplier.id), `${scope.tenantId}:${scope.branchId}:${partyCode(String(supplier.id))}`]));
+  const before = await listParties(db, scope);
+  const missing = suppliers.filter((supplier) => !before.has(idByOld.get(String(supplier.id))!));
+  for (let index = 0; index < missing.length; index += 90) {
+    await db.batch(missing.slice(index, index + 90).map((supplier) => partyStatement(db, scope, partyCode(String(supplier.id)), String(supplier.name || supplier.id), now)));
+  }
+  const parties = missing.length ? await listParties(db, scope) : before;
 
   const existing = new Map((await db.prepare(
     "SELECT id, operation_id, party_id, date, kind, amount FROM v2_party_moves WHERE tenant_id = ? AND branch_id = ? AND operation_id LIKE 'bridge:%'",
@@ -116,13 +120,14 @@ export async function runDebtBridge(db: D1Like, scope: LedgerScope, state: Row, 
   if (chunk.length) await db.batch(chunk);
 
   const balances = await partyBalances(db, scope);
+  const oldestByParty = await oldestUnpaidAll(db, scope);
   const dayMs = 86_400_000;
   const partyRows: PartyComparison[] = [];
   for (const supplier of suppliers) {
     const partyId = idByOld.get(String(supplier.id))!;
     const ledgerBalance = balances.get(partyId) || 0;
     const oldBalance = Number(supplier.balance) || 0;
-    const oldest = ledgerBalance > 0 ? await oldestUnpaid(db, scope, partyId) : null;
+    const oldest = ledgerBalance > 0 ? oldestByParty.get(partyId) ?? null : null;
     partyRows.push({
       partyId, name: String(supplier.name || supplier.id), oldBalance, ledgerBalance, difference: ledgerBalance - oldBalance,
       oldestUnpaidDate: oldest, ageDays: oldest ? Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${oldest}T00:00:00Z`)) / dayMs) : null,

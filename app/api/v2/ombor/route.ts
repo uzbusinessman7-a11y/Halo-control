@@ -73,7 +73,7 @@ button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:10px 14p
 .bar{grid-column:1/-1;height:6px;border-radius:3px;background:var(--line);overflow:hidden}.bar i{display:block;height:100%;background:var(--bad)}
 .msg{padding:12px;border-radius:12px}.msg.bad{background:var(--bad-soft);color:var(--bad)}.msg.ok{background:var(--ok-soft);color:var(--ok)}
 </style></head><body><main>
-<header><div><h1>Ombor nazorati</h1><small>Yangi jurnal · sinov</small></div><select id="branch"></select></header>
+<header><div><a href="/api/v2/bosh" style="color:var(--muted);font-size:14px;text-decoration:none">← Bosh sahifa</a><br><h1>Ombor nazorati</h1><small>Yangi jurnal · sinov</small></div><select id="branch"></select></header>
 <section class="card"><h2>Nazariy va haqiqiy sarf</h2>
 <p class="hint">Retsept bo'yicha qancha ketishi kerak edi va sanoqda qancha kam chiqdi. Eng katta yo'qotish — birinchi.</p>
 <div class="row"><input type="date" id="from"> — <input type="date" id="to"><button id="go">Ko'rsatish</button></div>

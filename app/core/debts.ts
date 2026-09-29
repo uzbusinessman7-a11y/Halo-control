@@ -68,13 +68,16 @@ export async function listParties(db: D1Like, scope: LedgerScope): Promise<Map<s
   return new Map(result.results.map((row) => [row.id, row]));
 }
 
-export async function ensureParty(db: D1Like, scope: LedgerScope, code: string, name: string, now = new Date()): Promise<string> {
+export function partyStatement(db: D1Like, scope: LedgerScope, code: string, name: string, now = new Date()): D1StatementLike {
   assertScope(scope);
   if (!/^[a-z0-9_-]{2,60}$/.test(code)) throw new LedgerError("Yetkazib beruvchi kodi noto'g'ri.");
-  const id = `${scope.tenantId}:${scope.branchId}:${code}`;
-  await db.prepare("INSERT OR IGNORE INTO v2_parties (id, tenant_id, branch_id, code, name, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(id, scope.tenantId, scope.branchId, code, String(name || code).slice(0, 80), now.toISOString()).run();
-  return id;
+  return db.prepare("INSERT OR IGNORE INTO v2_parties (id, tenant_id, branch_id, code, name, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(`${scope.tenantId}:${scope.branchId}:${code}`, scope.tenantId, scope.branchId, code, String(name || code).slice(0, 80), now.toISOString());
+}
+
+export async function ensureParty(db: D1Like, scope: LedgerScope, code: string, name: string, now = new Date()): Promise<string> {
+  await partyStatement(db, scope, code, name, now).run();
+  return `${scope.tenantId}:${scope.branchId}:${code}`;
 }
 
 export function debtMoveStatement(db: D1Like, scope: LedgerScope, move: DebtMoveInput, now: Date): D1StatementLike {
@@ -106,6 +109,29 @@ export async function oldestUnpaid(db: D1Like, scope: LedgerScope, partyId: stri
   }
   for (const debt of debts) { const used = Math.min(debt.left, credit); debt.left -= used; credit -= used; }
   return debts.find((debt) => debt.left > 0)?.date ?? null;
+}
+
+/** Hamma yetkazib beruvchi uchun eng eski to'lanmagan xarid sanasi — bitta so'rov bilan. */
+export async function oldestUnpaidAll(db: D1Like, scope: LedgerScope): Promise<Map<string, string>> {
+  const result = await db.prepare(
+    "SELECT party_id, date, amount FROM v2_party_moves WHERE tenant_id = ? AND branch_id = ? ORDER BY party_id, date, created_at",
+  ).bind(scope.tenantId, scope.branchId).all<{ party_id: string; date: string; amount: number }>();
+  const byParty = new Map<string, Array<{ date: string; amount: number }>>();
+  for (const row of result.results) {
+    const list = byParty.get(row.party_id) || [];
+    list.push({ date: row.date, amount: Number(row.amount) });
+    byParty.set(row.party_id, list);
+  }
+  const out = new Map<string, string>();
+  for (const [partyId, moves] of byParty) {
+    const debts: Array<{ date: string; left: number }> = [];
+    let credit = 0;
+    for (const move of moves) { if (move.amount > 0) debts.push({ date: move.date, left: move.amount }); else credit += -move.amount; }
+    for (const debt of debts) { const used = Math.min(debt.left, credit); debt.left -= used; credit -= used; }
+    const oldest = debts.find((debt) => debt.left > 0)?.date;
+    if (oldest) out.set(partyId, oldest);
+  }
+  return out;
 }
 
 export interface StatementLine { date: string; kind: DebtMoveKind; amount: number; balance: number; memo: string }

@@ -91,7 +91,7 @@ table{width:100%;border-collapse:collapse;font-size:15px}th,td{padding:8px 4px;b
 .msg{padding:12px;border-radius:12px;margin-bottom:8px}.msg.bad{background:var(--bad-soft);color:var(--bad)}.msg.ok{background:var(--ok-soft);color:var(--ok)}.msg.warn{background:var(--warn-soft);color:var(--warn)}
 @media print{body{background:#fff;color:#000;padding:0}header,#listCard,#checkCard,.noprint{display:none!important}.card{border:0;padding:0}}
 </style></head><body><main>
-<header><div><h1>Maosh</h1><small>Yangi daftar · sinov</small></div><div class="row"><input type="month" id="month"><select id="branch"></select></div></header>
+<header><div><a href="/api/v2/bosh" style="color:var(--muted);font-size:14px;text-decoration:none">← Bosh sahifa</a><br><h1>Maosh</h1><small>Yangi daftar · sinov</small></div><div class="row"><input type="month" id="month"><select id="branch"></select></div></header>
 <section class="card" id="checkCard"><h2>Nazorat</h2><div id="checks"><p class="hint">Yuklanmoqda…</p></div></section>
 <section class="card" id="listCard"><h2>Xodimlar</h2><div id="list"></div></section>
 <section class="card" id="slipCard" hidden></section>

@@ -14,7 +14,7 @@ import {
 } from "../lib/payroll";
 import { assertScope, isIsoDate, LedgerError, type LedgerScope } from "./ledger";
 import {
-  ensureEmployee, ensurePayrollSchema, hoursText, listEmployees, monthBalances, payMoveStatement, validatePayMove,
+  employeeStatement, ensurePayrollSchema, hoursText, listEmployees, monthBalances, payMoveStatement, validatePayMove,
   type PayMoveInput, type PayMoveKind,
 } from "./payroll-ledger";
 import type { D1Like, D1StatementLike } from "../lib/full-migration";
@@ -76,9 +76,13 @@ export async function runPayrollBridge(db: D1Like, scope: LedgerScope, state: Ro
   const attendance = normalizeAttendanceDays(state.attendanceDays);
   const payments = normalizePayrollPayments(state.payrollPayments);
 
-  const idByOld = new Map<string, string>();
-  for (const member of staff) idByOld.set(member.id, await ensureEmployee(db, scope, employeeCode(member.id), member.name, now));
-  const employees = await listEmployees(db, scope);
+  const idByOld = new Map(staff.map((member) => [member.id, `${scope.tenantId}:${scope.branchId}:${employeeCode(member.id)}`]));
+  const before = await listEmployees(db, scope);
+  const missing = staff.filter((member) => !before.has(idByOld.get(member.id)!));
+  for (let index = 0; index < missing.length; index += 90) {
+    await db.batch(missing.slice(index, index + 90).map((member) => employeeStatement(db, scope, employeeCode(member.id), member.name, now)));
+  }
+  const employees = missing.length ? await listEmployees(db, scope) : before;
 
   const invalid: string[] = [];
   const desired = new Map<string, Desired>();

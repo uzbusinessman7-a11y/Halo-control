@@ -62,3 +62,13 @@ chiqqan) va qoldiqlar to'g'ridan-to'g'ri o'zgartirilardi. V2 da:
   wonma-won solishtiriladi.
 - Nazorat: o'tgan oylardan to'lanmagan maosh, ortiqcha to'lov, kassadan chiqmagan avanslar.
 - Sinovlar: `tests/v2-payroll.test.mjs`, `tests/v2-maosh-route.test.mjs`.
+
+## 5-bosqich: bosh sahifa va kunlik hisobot (`/api/v2/bosh`)
+
+- `app/core/home.ts` — bitta so'rovda kassa, ombor, qarz va maosh ko'priklari yangilanadi
+  va asosiy ko'rsatkichlar yig'iladi: savdo (bugun, kecha, oy boshidan, o'tgan davr bilan),
+  prime cost (retsept sarfi + chiqit + sanoq kamomadi + ish haqi) %, pul holati, qarz,
+  maosh va ogohlantirishlar (qizil birinchi). `flashText()` — Telegram uchun qisqa matn.
+- Sahifada "Telegramga yuborish" (yangi saytda bot ulangan bo'lsa) va "Nusxa".
+- Unumdorlik: mahsulot, yetkazuvchi va xodimlarni yaratish endi bitta paketda
+  (Cloudflare D1 so'rov limitiga tushmaslik uchun); qarz yoshi bitta so'rov bilan.

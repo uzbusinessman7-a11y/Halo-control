@@ -10,7 +10,7 @@ import { isExpenseOnlyInventory } from "../lib/vegetable-expenses";
 import { assertScope, isIsoDate, LedgerError, type LedgerScope } from "./ledger";
 import { bridgeOperationId } from "./bridge";
 import {
-  ensureStockItem, ensureStockSchema, fromMilli, listStockItems, moveStatement, stockBalances, toMilli, validateMove,
+  stockItemStatement, ensureStockSchema, fromMilli, listStockItems, moveStatement, stockBalances, toMilli, validateMove,
   type StockMoveInput, type StockMoveKind,
 } from "./stock";
 import type { D1Like, D1StatementLike } from "../lib/full-migration";
@@ -48,10 +48,13 @@ export async function runStockBridge(db: D1Like, scope: LedgerScope, state: Row,
   if (!isIsoDate(today)) throw new LedgerError("Sana noto'g'ri.");
   await ensureStockSchema(db);
   const inventory = rows(state.inventory).filter((item) => typeof item.id === "string" && item.id);
-  for (const item of inventory) {
-    await ensureStockItem(db, scope, { code: stockItemCode(String(item.id)), name: String(item.name || item.id), unit: String(item.unit || "birlik") }, now);
+  // Yangi mahsulotlar bitta paketda (har so'rovda o'nlab alohida so'rov yubormaslik uchun).
+  const before = await listStockItems(db, scope);
+  const missing = inventory.filter((item) => !before.has(`${scope.tenantId}:${scope.branchId}:${stockItemCode(String(item.id))}`));
+  for (let index = 0; index < missing.length; index += 90) {
+    await db.batch(missing.slice(index, index + 90).map((item) => stockItemStatement(db, scope, { code: stockItemCode(String(item.id)), name: String(item.name || item.id), unit: String(item.unit || "birlik") }, now)));
   }
-  const items = await listStockItems(db, scope);
+  const items = missing.length ? await listStockItems(db, scope) : before;
   const idByOld = new Map(inventory.map((item) => [String(item.id), `${scope.tenantId}:${scope.branchId}:${stockItemCode(String(item.id))}`]));
   const costByOld = new Map(inventory.map((item) => [String(item.id), Number(item.unitCost)]));
 

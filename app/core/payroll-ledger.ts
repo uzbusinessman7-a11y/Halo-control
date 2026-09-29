@@ -81,13 +81,11 @@ export async function listEmployees(db: D1Like, scope: LedgerScope): Promise<Map
   return new Map(result.results.map((row) => [row.id, row]));
 }
 
-export async function ensureEmployee(db: D1Like, scope: LedgerScope, code: string, name: string, now = new Date()): Promise<string> {
+export function employeeStatement(db: D1Like, scope: LedgerScope, code: string, name: string, now = new Date()): D1StatementLike {
   assertScope(scope);
   if (!/^[a-z0-9_-]{2,60}$/.test(code)) throw new LedgerError("Xodim kodi noto'g'ri.");
-  const id = `${scope.tenantId}:${scope.branchId}:${code}`;
-  await db.prepare("INSERT OR IGNORE INTO v2_employees (id, tenant_id, branch_id, code, name, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(id, scope.tenantId, scope.branchId, code, String(name || code).slice(0, 80), now.toISOString()).run();
-  return id;
+  return db.prepare("INSERT OR IGNORE INTO v2_employees (id, tenant_id, branch_id, code, name, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(`${scope.tenantId}:${scope.branchId}:${code}`, scope.tenantId, scope.branchId, code, String(name || code).slice(0, 80), now.toISOString());
 }
 
 export function payMoveStatement(db: D1Like, scope: LedgerScope, move: PayMoveInput, now: Date): D1StatementLike {

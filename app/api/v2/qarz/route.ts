@@ -75,7 +75,7 @@ table{width:100%;border-collapse:collapse;font-size:15px}th,td{padding:8px 4px;b
 .msg{padding:12px;border-radius:12px}.msg.bad{background:var(--bad-soft);color:var(--bad)}.msg.ok{background:var(--ok-soft);color:var(--ok)}
 @media print{body{background:#fff;color:#000;padding:0}header,#listCard,.noprint{display:none!important}.card{border:0;padding:0}}
 </style></head><body><main>
-<header><div><h1>Qarzlar</h1><small>Yangi daftar · sinov</small></div><select id="branch"></select></header>
+<header><div><a href="/api/v2/bosh" style="color:var(--muted);font-size:14px;text-decoration:none">← Bosh sahifa</a><br><h1>Qarzlar</h1><small>Yangi daftar · sinov</small></div><select id="branch"></select></header>
 <section class="card" id="listCard"><h2>Yetkazib beruvchilarga qarz</h2><div id="list"><p class="hint">Yuklanmoqda…</p></div></section>
 <section class="card" id="stCard" hidden></section>
 </main>

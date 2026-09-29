@@ -105,13 +105,17 @@ export async function listStockItems(db: D1Like, scope: LedgerScope): Promise<Ma
   return new Map(result.results.map((row) => [row.id, row]));
 }
 
-export async function ensureStockItem(db: D1Like, scope: LedgerScope, input: { code: string; name: string; unit: string }, now = new Date()): Promise<StockItem> {
+export function stockItemStatement(db: D1Like, scope: LedgerScope, input: { code: string; name: string; unit: string }, now = new Date()): D1StatementLike {
   assertScope(scope);
   if (!/^[a-z0-9_-]{2,60}$/.test(input.code)) throw new LedgerError("Mahsulot kodi noto'g'ri.");
   const id = `${scope.tenantId}:${scope.branchId}:${input.code}`;
-  await db.prepare("INSERT OR IGNORE INTO v2_stock_items (id, tenant_id, branch_id, code, name, unit, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .bind(id, scope.tenantId, scope.branchId, input.code, String(input.name || input.code).slice(0, 80), String(input.unit || "birlik").slice(0, 20), now.toISOString()).run();
-  return { id, code: input.code, name: input.name, unit: input.unit };
+  return db.prepare("INSERT OR IGNORE INTO v2_stock_items (id, tenant_id, branch_id, code, name, unit, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, scope.tenantId, scope.branchId, input.code, String(input.name || input.code).slice(0, 80), String(input.unit || "birlik").slice(0, 20), now.toISOString());
+}
+
+export async function ensureStockItem(db: D1Like, scope: LedgerScope, input: { code: string; name: string; unit: string }, now = new Date()): Promise<StockItem> {
+  await stockItemStatement(db, scope, input, now).run();
+  return { id: `${scope.tenantId}:${scope.branchId}:${input.code}`, code: input.code, name: input.name, unit: input.unit };
 }
 
 export function moveStatement(db: D1Like, scope: LedgerScope, move: StockMoveInput, now: Date): D1StatementLike {
