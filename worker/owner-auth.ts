@@ -20,6 +20,8 @@ export interface OwnerAuthEnv {
   HALO_OWNER_EMAIL?: string;
   HALO_OWNER_PASSWORD?: string;
   HALO_AUTH_SECRET?: string;
+  /** O'z Cloudflare akkauntidagi build avtomatik "1" qiladi. */
+  HALO_SELF_HOSTED?: string;
 }
 
 type OwnerConfig = { email: string; password: string; secret: string };
@@ -45,7 +47,13 @@ export function ownerAuthMode(env: OwnerAuthEnv): OwnerAuthMode {
   const email = String(env.HALO_OWNER_EMAIL || "").trim().toLowerCase();
   const password = String(env.HALO_OWNER_PASSWORD || "");
   const secret = String(env.HALO_AUTH_SECRET || "");
-  if (!email && !password && !secret) return { mode: "platform" };
+  if (!email && !password && !secret) {
+    // O'z hostingda ChatGPT yo'q: secretlarsiz rahbar kirishi yopiq (xavfsiz tomonga).
+    if (env.HALO_SELF_HOSTED === "1") {
+      return { mode: "misconfigured", problem: "Rahbar secretlari (HALO_OWNER_EMAIL, HALO_OWNER_PASSWORD, HALO_AUTH_SECRET) hali kiritilmagan." };
+    }
+    return { mode: "platform" };
+  }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { mode: "misconfigured", problem: "HALO_OWNER_EMAIL noto‘g‘ri yoki berilmagan." };
   }

@@ -25,6 +25,8 @@ const localBindingConfig = {
   ...(selfHosted.workerName ? { name: selfHosted.workerName } : {}),
   // Wrangler deploy sanani talab qiladi; ChatGPT Sites o'zi beradi.
   ...(selfHosted.d1DatabaseId ? { compatibility_date: "2026-06-01" } : {}),
+  // O'z hostingda secretlar hali berilmagan bo'lsa ham rahbar kirishi yopiq turadi.
+  ...(selfHosted.d1DatabaseId ? { vars: { HALO_SELF_HOSTED: "1" } } : {}),
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
   d1_databases: d1

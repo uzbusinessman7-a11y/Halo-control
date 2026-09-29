@@ -123,3 +123,14 @@ test('xodim sahifalari va POST so‘rovlari tanasi bilan o‘zgarishsiz o‘tadi
   assert.equal(await result.request.text(), body);
   assert.equal(result.request.headers.get('oai-authenticated-user-email'), null);
 });
+
+test('o‘z hostingda secretlar hali kiritilmagan bo‘lsa ham soxta rahbar belgisi o‘tmaydi', async () => {
+  const selfHostedEmpty = { HALO_SELF_HOSTED: '1' };
+  assert.equal(ownerAuthMode(selfHostedEmpty).mode, 'misconfigured');
+  const result = await applyOwnerAuth(new Request(`${site}/api/backups?download=current`, {
+    headers: { 'oai-authenticated-user-email': 'hacker@example.com' },
+  }), selfHostedEmpty, noSleep);
+  assert.equal(result.request.headers.get('oai-authenticated-user-email'), null);
+  const page = await applyOwnerAuth(new Request(`${site}/signin-with-chatgpt`), selfHostedEmpty, noSleep);
+  assert.equal(page.response.status, 503);
+});
