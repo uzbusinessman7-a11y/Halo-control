@@ -1,3 +1,4 @@
+import { isParallelMode } from './cutover';
 import { readSettings, readBranchStatus, writeBranchStatus, koreaClock, scheduledReportDate, makeReport } from './telegram-service';
 
 function database() {
@@ -11,6 +12,7 @@ export async function scheduledDeliveryStatus(branchId: string) {
 
 /** Shared by owner refresh and the authenticated Sheets minute trigger. Never changes business records. */
 export async function dispatchScheduledDailyReport(branchId: string, now = new Date()) {
+  if (await isParallelMode()) return { ok: true, skipped: 'parallel-mode' };
   const settings = await readSettings();
   if (!settings.enabled || !settings.botToken || !settings.chatId) return { ok: true, skipped: 'disabled' };
   const db = database();

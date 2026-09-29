@@ -208,6 +208,12 @@ export async function createWorkerAccount(branchId: string, name: string, userna
   const safeName = cleanName(name);
   const safeUsername = cleanUsername(username);
   const safePin = cleanPin(pin);
+  const existing = await d1().prepare(
+    "SELECT name, active FROM halo_worker_users WHERE branch_id = ? AND username = ?",
+  ).bind(safeId, safeUsername).first<{ name: string; active: number }>();
+  if (existing) {
+    throw new Error(`“${safeUsername}” logini bu filialda allaqachon ${existing.name} uchun ochilgan${existing.active ? "" : " (to‘xtatilgan)"}. Boshqa login tanlang yoki shu akkauntning PIN'ini yangilang.`);
+  }
   const workerId = crypto.randomUUID();
   try {
     await d1().prepare(
@@ -224,8 +230,10 @@ export async function createWorkerAccount(branchId: string, name: string, userna
       new Date().toISOString(),
       new Date().toISOString(),
     ).run();
-  } catch {
-    throw new Error("Bu login shu filialda band. Boshqa login tanlang.");
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    if (/UNIQUE|constraint/i.test(reason)) throw new Error("Bu login shu filialda band. Boshqa login tanlang.");
+    throw new Error(`Akkaunt saqlanmadi (baza xatosi: ${reason.slice(0, 160)}). Shu matnni yuboring.`);
   }
   return workerId;
 }
