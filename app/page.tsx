@@ -1259,6 +1259,7 @@ function revealInventorySection(elementId: string) {
 export default function Home() {
   const [data, setData] = useState<AppState>(emptyState);
   const [adminAccess, setAdminAccess] = useState<"checking" | "authorized" | "denied" | "error">("checking");
+  const [navSheetOpen, setNavSheetOpen] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [activeBranchId, setActiveBranchId] = useState("main");
   const activeBranchRef = useRef("main");
@@ -7078,23 +7079,28 @@ export default function Home() {
     { id: "archive" as Tab, icon: "!", label: cancellationCount ? `Bekor qilinganlar · ${cancellationCount}` : "Bekor qilinganlar" },
   ], [cancellationCount]);
   const navById = new Map(nav.map((item) => [item.id, item]));
-  const primaryNav = (["dashboard", "sales", "intake", "inventory"] as const)
-    .map((itemId) => navById.get(itemId))
-    .filter((item): item is (typeof nav)[number] => Boolean(item));
-  const visiblePrimaryNav = userMode === "owner"
-    ? primaryNav
-    : primaryNav.filter((item) => item.id !== "intake");
-  const moreNavGroups = [
-    { label: "SAVDO KANALLARI", ids: ["deliverysales", "cashbank"] as Tab[] },
-    { label: "XARID VA SARF", ids: ["vegetables", "cashsales", "mezana", "oil"] as Tab[] },
-    { label: "PUL VA QARZ", ids: ["suppliers", "expenses", "finance"] as Tab[] },
-    { label: "XODIMLAR VA HISOBOT", ids: ["control", "reports", "archive"] as Tab[] },
-    { label: "SOZLAMALAR", ids: ["recipes", "fees", "integrations"] as Tab[] },
-  ].map((group) => ({
-    ...group,
-    items: group.ids.map((itemId) => navById.get(itemId)).filter((item): item is (typeof nav)[number] => Boolean(item)),
-  }));
-  const moreNavActive = moreNavGroups.some((group) => group.ids.includes(tab));
+  // Yangi menyu: hamma bo'limlar guruhlarda, yashirin "Yana" yo'q. Yangi nazorat sahifalari (V2) shu menyuning ichida.
+  type NavEntry = { kind: "tab"; id: Tab; icon: string; label: string } | { kind: "link"; href: string; icon: string; label: string; badge?: string };
+  const tabEntry = (id: Tab, label?: string): NavEntry | null => {
+    const item = navById.get(id);
+    return item ? { kind: "tab", id, icon: item.icon, label: label || item.label } : null;
+  };
+  const linkEntry = (href: string, icon: string, label: string, badge?: string): NavEntry => ({ kind: "link", href, icon, label, badge });
+  const navGroups: Array<{ label: string; items: NavEntry[] }> = (userMode === "owner" ? [
+    { label: "BUGUN", items: [tabEntry("dashboard"), linkEntry("/api/v2/bosh", "◎", "Nazorat paneli", "yangi")] },
+    { label: "SAVDO", items: [tabEntry("sales", "POS savdo"), tabEntry("cashbank"), tabEntry("deliverysales"), tabEntry("cashsales")] },
+    { label: "XARID VA OMBOR", items: [tabEntry("intake"), tabEntry("inventory"), tabEntry("vegetables", "Sabzavot va sous"), tabEntry("mezana"), tabEntry("oil")] },
+    { label: "MENYU", items: [tabEntry("recipes"), linkEntry("/api/v2/menyu", "★", "Menyu tahlili", "yangi")] },
+    { label: "PUL", items: [tabEntry("finance"), tabEntry("expenses"), tabEntry("suppliers"), tabEntry("fees"), linkEntry("/api/v2/qarz", "⇆", "Qarz aktlari", "yangi")] },
+    { label: "JAMOA", items: [linkEntry("/nazorat", "✓", "Kunlik nazorat"), linkEntry("/davomat", "◷", "Hodimlar va davomat"), linkEntry("/api/v2/maosh", "₩", "Maosh varaqasi", "yangi"), tabEntry("control"), linkEntry("/xodim", "♙", "Xodim dasturi")] },
+    { label: "HISOBOT VA NAZORAT", items: [tabEntry("reports"), linkEntry("/api/v2/sanoq", "▤", "Oy yakuni sanog‘i", "yangi"), linkEntry("/api/v2/tarix", "↺", "O‘zgarishlar tarixi", "yangi"), tabEntry("archive")] },
+    { label: "SOZLAMALAR", items: [tabEntry("integrations"), linkEntry("/hisob", "₩", "HALO HISOB oynasi"), linkEntry(haloMenuUrl, "▣", "HALO Menyu"), linkEntry("/api/v2/kochish", "🚀", "Yangi tizimga o‘tish", "yangi")] },
+  ] : [
+    { label: "ASOSIY", items: [tabEntry("dashboard"), tabEntry("sales"), tabEntry("inventory")] },
+  ]).map((group) => ({ label: group.label, items: group.items.filter((item): item is NavEntry => Boolean(item)) }));
+  const quickNavIds: Tab[] = userMode === "owner" ? ["dashboard", "sales", "intake", "inventory"] : ["dashboard", "sales", "inventory"];
+  const quickNav = quickNavIds.map((id) => navById.get(id)).filter((item): item is (typeof nav)[number] => Boolean(item));
+  const openTab = (id: Tab) => { setTab(id); setNavSheetOpen(false); };
   const salesChannelTabs = [
     { id: "sales" as Tab, icon: "▣", label: "POS" },
     { id: "cashbank" as Tab, icon: "₩", label: "Naqd / hisob" },
@@ -7193,16 +7199,20 @@ export default function Home() {
   return (
     <main className={`app-shell mode-${userMode}`}>
       {userMode === "owner" && <RecordRemovalDialog key={activeBranchId} branchId={activeBranchId} target={removalTarget} onClose={()=>setRemovalTarget(null)} onBeforeRemove={async()=>{if(!await saveQueueRef.current||failedSaveRef.current)throw new Error("Avval saqlanmay qolgan amalni saqlang.");}} onRemoved={async()=>{await reloadAuthoritativeState(activeBranchRef.current);}}/>}
-      <aside className="sidebar">
+      <aside className={`sidebar hx-sidebar${navSheetOpen ? " hx-open" : ""}`}>
         <div className="logo"><span>H</span><div><strong>HALO</strong><small>CONTROL</small></div></div>
-        <nav className="primary-nav" aria-label="Asosiy bo‘limlar"><span className="sidebar-group-title">ASOSIY</span>{visiblePrimaryNav.map((item) => <button key={item.id} className={`${tab === item.id ? "active " : ""}nav-${item.id}`} aria-current={tab === item.id ? "page" : undefined} onClick={() => setTab(item.id)}><i>{item.icon}</i>{item.label}</button>)}</nav>
-        {userMode === "owner" && <details className={`more-nav${moreNavActive ? " active" : ""}`}>
-          <summary aria-label="Yana bo‘limlarini ochish" aria-current={moreNavActive ? "page" : undefined}><i>•••</i><span>Yana</span><b>⌄</b></summary>
-          <div>{moreNavGroups.map((group) => <section className="more-nav-group" key={group.label}><strong>{group.label}</strong>{group.items.map((item) => <button type="button" key={item.id} className={`more-nav-item${tab === item.id ? " active" : ""}`} aria-current={tab === item.id ? "page" : undefined} onClick={(event) => { setTab(item.id); event.currentTarget.closest("details")?.removeAttribute("open"); }}><i>{item.icon}</i><span>{item.label}</span></button>)}</section>)}
-            <section className="more-nav-group"><strong>JAMOA</strong><a className="more-nav-item" href="/nazorat"><i>✓</i><span>Kunlik nazorat</span></a><a className="more-nav-item" href="/davomat"><i>◷</i><span>Hodimlar</span></a><a className="more-nav-item" href="/xodim"><i>♙</i><span>Xodim dasturi</span></a></section>
-            <section className="more-nav-group"><strong>ALOHIDA OYNALAR</strong><a className="more-nav-item" href="/hisob" target="_blank" rel="noreferrer"><i>₩</i><span>HALO HISOB</span></a><a className="more-nav-item" href={haloMenuUrl} target="_blank" rel="noreferrer"><i>▣</i><span>HALO Menyu</span></a></section>
-          </div>
-        </details>}
+        <div className="hx-quick" role="navigation" aria-label="Tezkor bo‘limlar">
+          {quickNav.map((item) => <button type="button" key={item.id} className={tab === item.id && !navSheetOpen ? "active" : ""} aria-current={tab === item.id ? "page" : undefined} onClick={() => openTab(item.id)}><i>{item.icon}</i><span>{item.id === "intake" ? "Kirim" : item.id === "dashboard" ? "Bugun" : item.id === "inventory" ? "Ombor" : "Savdo"}</span></button>)}
+          {userMode === "owner" && <button type="button" className={navSheetOpen ? "active" : ""} aria-expanded={navSheetOpen} onClick={() => setNavSheetOpen((open) => !open)}><i>☰</i><span>Menyu</span></button>}
+        </div>
+        <div className="hx-groups" role="navigation" aria-label="Barcha bo‘limlar">
+          {navGroups.map((group) => <section className="hx-group" key={group.label}>
+            <strong>{group.label}</strong>
+            {group.items.map((item) => item.kind === "tab"
+              ? <button type="button" key={item.id} className={`hx-item${tab === item.id ? " active" : ""}${item.id === "archive" && cancellationCount ? " hx-alert" : ""}`} aria-current={tab === item.id ? "page" : undefined} onClick={() => openTab(item.id)}><i>{item.icon}</i><span>{item.label}</span></button>
+              : <a key={item.href} className="hx-item" href={item.href} {...(item.href.startsWith("http") || item.href === "/hisob" ? { target: "_blank", rel: "noreferrer" } : {})}><i>{item.icon}</i><span>{item.label}</span>{item.badge && <em>{item.badge}</em>}</a>)}
+          </section>)}
+        </div>
         <div className="sidebar-foot"><span className="online-dot" /> {userMode === "owner" ? "Rahbar rejimi" : "Xodim rejimi"}<small>{status}</small></div>
       </aside>
 

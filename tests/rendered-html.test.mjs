@@ -2209,13 +2209,13 @@ test("owner reaches staff control from an exact five-area mobile navigation", ()
   const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const cssSource = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 
-  assert.match(pageSource, /const primaryNav = \(\["dashboard", "sales", "intake", "inventory"\] as const\)/);
-  assert.match(pageSource, /<span>Yana<\/span>/);
-  assert.match(pageSource, /className="more-nav-item" href="\/davomat"/);
-  assert.match(pageSource, /moreNavGroups\.map/,
-    "all secondary capabilities remain available from grouped Yana navigation");
-  assert.match(cssSource, /\.mode-owner \.sidebar>nav\.primary-nav\{width:calc\(100% - 56px\)!important;grid-template-columns:repeat\(4,minmax\(0,1fr\)\)!important\}/,
-    "the mobile dock has four direct destinations plus the separate Yana button");
+  assert.match(pageSource, /const quickNavIds: Tab\[\] = userMode === "owner" \? \["dashboard", "sales", "intake", "inventory"\]/);
+  assert.match(pageSource, /<span>Menyu<\/span>/);
+  assert.match(pageSource, /linkEntry\("\/davomat"/);
+  assert.match(pageSource, /navGroups\.map/,
+    "all secondary capabilities remain available from the grouped menu");
+  assert.match(cssSource, /\.hx-sidebar \.hx-quick\{width:100%;display:grid;grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/,
+    "the mobile dock has four direct destinations plus the Menyu button");
 });
 
 test("reads a Korean daily product XLS structure with its own date and stable IDs", () => {
@@ -2440,11 +2440,12 @@ test("desktop management navigation shows every section without depending on scr
   for (const section of ["recipes", "reports", "fees", "finance", "suppliers", "control", "integrations"]) {
     assert.match(shellSource, new RegExp(`id: "${section}" as Tab`));
   }
-  assert.match(shellSource, /summary aria-label="Yana bo‘limlarini ochish"/);
-  assert.match(shellSource, /moreNavGroups\.map/);
-  assert.match(cssSource, /\.sidebar \{[^}]*overflow-y:auto;[^}]*scrollbar-gutter:stable/);
-  assert.match(cssSource, /\.more-nav>div\{position:fixed;z-index:90;left:254px;bottom:24px;width:min\(430px,calc\(100vw - 278px\)\);max-height:calc\(100dvh - 48px\);padding:10px;overflow-y:scroll;[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
-  assert.match(cssSource, /\.more-nav>div\{position:fixed;right:8px;left:auto;bottom:80px;width:min\(330px,calc\(100vw - 16px\)\);max-height:calc\(100dvh - 96px\)/);
+  for (const section of ["recipes", "reports", "fees", "finance", "suppliers", "control", "integrations", "archive"]) {
+    assert.match(shellSource, new RegExp(`tabEntry\\("${section}"`), `${section} is visible in the grouped menu`);
+  }
+  assert.match(shellSource, /navGroups\.map/);
+  assert.match(cssSource, /\.sidebar \{[^}]*overflow-y:auto/);
+  assert.match(cssSource, /\.hx-sidebar\.hx-open \.hx-groups\{position:fixed;[^}]*overflow-y:auto/, "mobile full menu scrolls");
 });
 
 test("HALO Xodim attendance uses work-start/work-finish wording in four languages", () => {
@@ -2954,7 +2955,7 @@ test("every destructive action records a cancellation reason in one management w
 
   assert.match(pageSource, /Bekor qilinganlar/);
   assert.match(pageSource, /id: "archive" as Tab/);
-  assert.match(pageSource, /label: "XODIMLAR VA HISOBOT", ids: \["control", "reports", "archive"\]/);
+  assert.match(pageSource, /label: "HISOBOT VA NAZORAT", items: \[tabEntry\("reports"\)[^\n]*tabEntry\("archive"\)/);
   assert.match(archiveSource, /SABAB · KIM · VAQT/);
   assert.match(archiveSource, /QAYERDAN BEKOR QILINGAN/);
   assert.match(archiveSource, /cancellationReason/);
@@ -5638,8 +5639,8 @@ test("owner interface keeps daily navigation short and exposes a separate API wi
   const integrationSource = readFileSync(new URL("../app/integration-center.tsx", import.meta.url), "utf8");
   assert.match(ownerSource, /id: "integrations" as Tab/);
   assert.match(ownerSource, /<IntegrationCenter key=\{activeBranchId\}/);
-  assert.match(ownerSource, /const primaryNav = \(\["dashboard", "sales", "intake", "inventory"\] as const\)/);
-  assert.match(ownerSource, /label: "SOZLAMALAR", ids: \["recipes", "fees", "integrations"\]/);
+  assert.match(ownerSource, /const quickNavIds: Tab\[\] = userMode === "owner" \? \["dashboard", "sales", "intake", "inventory"\]/);
+  assert.match(ownerSource, /label: "SOZLAMALAR", items: \[tabEntry\("integrations"\)/);
   assert.match(integrationSource, /API va boshqa tizimlar/);
   assert.match(integrationSource, /To‘liq ma’lumotni yuklash/);
 });

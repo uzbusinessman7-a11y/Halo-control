@@ -1,6 +1,6 @@
 .pos-day-reset{border:1px solid #6c5140;background:#191b1c;border-radius:18px;padding:24px;display:grid;gap:16px;color:#f4f0e7}
 .pos-day-reset h3{margin:8px 0;font-size:22px}.pos-day-reset p{color:#b9c0c8;line-height:1.6;margin:8px 0}
-.pos-day-reset>div>span{color:#e8bd65;font-size:12px;letter-spacing:.1em;font-weight:800}
+.pos-day-reset>div>span{color:#e8bd65;font-size:14px;letter-spacing:.1em;font-weight:800}
 .pos-reset-controls{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.pos-reset-controls label{display:grid;gap:8px;font-weight:700}
 .pos-day-reset input,.pos-day-reset button{border:1px solid #596777;border-radius:10px;padding:13px 18px;color:inherit;background:#24303a;font:inherit}
 .pos-day-reset input{min-width:190px;color-scheme:dark}.pos-day-reset button{font-weight:700;cursor:pointer;min-height:48px}.pos-day-reset button:disabled{opacity:.55;cursor:wait}

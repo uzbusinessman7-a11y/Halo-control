@@ -1,7 +1,7 @@
 .veg-page { max-width: 1400px; margin: 0 auto; display: grid; gap: 20px; }
 .veg-page .panel { padding: 24px; min-width: 0; }
 .veg-header, .veg-section-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
-.veg-header span { color: #e9bd65; font-size: 12px; letter-spacing: .12em; font-weight: 700; }
+.veg-header span { color: #e9bd65; font-size:14px; letter-spacing: .12em; font-weight: 700; }
 .veg-page h2 { margin: 8px 0; font-size: clamp(23px, 3vw, 32px); }
 .veg-page h3 { margin: 0 0 16px; }
 .veg-page p, .veg-page small { color: #b6bfcb; line-height: 1.6; }
@@ -32,7 +32,7 @@
 .veg-page tbody th { color: #edf3f9; font-weight: 600; }
 .veg-page td { color: #cbd6e3; }
 .veg-chart svg { width: 100%; min-width: 300px; color: #b6bfcb; margin-top: 10px; }
-.veg-chart p { font-size: 12px; margin-bottom: 0; }
+.veg-chart p { font-size:14px; margin-bottom: 0; }
 .veg-empty { text-align: center; padding: 20px; }
 .veg-product-settings { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 24px; max-height: 440px; overflow: auto; margin-top: 16px; }
 .veg-product-settings label { display: flex; align-items: center; justify-content: space-between; padding: 16px 2px; gap: 15px; border-bottom: 1px solid #35414e; }
@@ -61,7 +61,7 @@
 .reserve-low .reserve-headline strong { color:#f4bb7a; }
 .reserve-numbers { display:grid; grid-template-columns:1fr 1fr; gap:15px; }
 .reserve-numbers div { display:grid; gap:5px; }
-.reserve-numbers dt { color:#aab9c8; font-size:12px; }
+.reserve-numbers dt { color:#aab9c8; font-size:14px; }
 .reserve-numbers dd { margin:0; color:#f0f5f8; font-size:17px; }
 .reserve-card details { margin-top:18px; }
 .reserve-section summary { cursor:pointer; color:#e3c380; }
