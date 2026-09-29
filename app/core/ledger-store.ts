@@ -200,7 +200,12 @@ export async function postEntry(db: D1Like, scope: LedgerScope, input: EntryInpu
     return { entry: previous, alreadySaved: true };
   }
   const closed = await lastClosedDate(db, scope);
-  if (closed && entry.date <= closed) {
+  // Kunni yopish = kassani solishtirish. Yopilgan kunga naqd kassaga tegadigan yozuv, savdo
+  // va kassa farqi kiritilmaydi. Kassaga tegmaydigan harakat (karta puli bankka tushishi)
+  // yopilgan kunda ham yozilishi mumkin — sanalgan kassa o'zgarmaydi.
+  const touchesCash = entry.lines.some((line) => accounts.get(line.accountId)?.isCash);
+  const lockedKind = entry.kind === "sale" || entry.kind === "cash_variance" || entry.kind === "opening";
+  if (closed && entry.date <= closed && (touchesCash || lockedKind)) {
     throw new LedgerError(`${closed} gacha bo'lgan kunlar yopilgan. Tuzatishni bugungi sana bilan kiriting.`);
   }
   if (entry.reversesId) {
