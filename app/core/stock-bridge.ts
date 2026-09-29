@@ -36,7 +36,7 @@ export function moveKindOf(movement: Row): StockMoveKind {
 
 export interface StockComparison { name: string; unit: string; oldStock: number; ledgerStock: number; difference: number; expenseOnly: boolean }
 export interface StockBridgeReport {
-  posted: number; alreadyPosted: number; reversed: number;
+  posted: number; alreadyPosted: number; reversed: number; corrected: number;
   changed: string[]; invalid: string[]; unknownItem: string[];
   items: StockComparison[];
   /** Hujjatsiz qoldiq farqi bor oddiy (xarajat emas) mahsulotlar soni. */
@@ -66,12 +66,31 @@ export async function runStockBridge(db: D1Like, scope: LedgerScope, state: Row,
     "SELECT reverses_id FROM v2_stock_moves WHERE tenant_id = ? AND branch_id = ? AND reverses_id IS NOT NULL",
   ).bind(scope.tenantId, scope.branchId).all<{ reverses_id: string }>()).results.map((row) => row.reverses_id));
 
+  // Versiyalar: asl amal raqami, keyin ":ver1"... Amaldagisi — bekor qilinmagan oxirgisi.
+  const versions = new Map<string, number>();
+  const live = new Map<string, { id: string; item_id: string; date: string; quantity_milli: number; theoretical_milli: number; version: number }>();
+  for (const [operationId, row] of existing) {
+    if (operationId.startsWith("bridge:mrev:")) continue;
+    const match = operationId.match(/^(.*):ver(\d+)$/);
+    const base = match ? match[1] : operationId;
+    const version = match ? Number(match[2]) : 0;
+    versions.set(base, Math.max(versions.get(base) ?? -1, version));
+    if (reversedIds.has(row.id)) continue;
+    const current = live.get(base);
+    if (!current || current.version < version) live.set(base, { ...row, version });
+  }
+  const reversalOf = (row: { id: string; item_id: string; quantity_milli: number }, memo: string): StockMoveInput => ({
+    operationId: `bridge:mrev:${row.id}`.slice(0, 120), itemId: row.item_id, date: today, kind: "reversal",
+    quantityMilli: -Number(row.quantity_milli), theoreticalMilli: 0, actor: "Ko'prik", reversesId: row.id, memo,
+  });
+
   const toPost: StockMoveInput[] = [];
   const changed: string[] = [];
   const invalid: string[] = [];
   const unknownItem: string[] = [];
   const wanted = new Set<string>();
   let alreadyPosted = 0;
+  let corrected = 0;
   for (const movement of rows(state.stockMovements)) {
     const itemId = idByOld.get(String(movement.inventoryId));
     const source = `harakat:${String(movement.id || "?")}`;
@@ -80,32 +99,35 @@ export async function runStockBridge(db: D1Like, scope: LedgerScope, state: Row,
     const quantityMilli = toMilli(movement.quantity);
     const theoreticalMilli = kind === "sale" ? Math.max(0, toMilli(movement.theoreticalQuantity ?? -Number(movement.quantity || 0))) : 0;
     if (!quantityMilli && !theoreticalMilli) continue;
-    const operationId = bridgeOperationId("m", String(movement.id));
-    wanted.add(operationId);
-    const previous = existing.get(operationId);
-    if (previous) {
-      if (previous.item_id !== itemId || Number(previous.quantity_milli) !== quantityMilli || Number(previous.theoretical_milli) !== theoreticalMilli || previous.date !== String(movement.date)) changed.push(source);
-      else alreadyPosted += 1;
+    const baseId = bridgeOperationId("m", String(movement.id));
+    wanted.add(baseId);
+    const previous = live.get(baseId);
+    if (previous && previous.item_id === itemId && Number(previous.quantity_milli) === quantityMilli && Number(previous.theoretical_milli) === theoreticalMilli && previous.date === String(movement.date)) {
+      alreadyPosted += 1;
       continue;
     }
+    const nextVersion = (versions.get(baseId) ?? -1) + 1;
     const unitCost = Number(movement.unitCost);
     try {
-      toPost.push(validateMove({
-        operationId, itemId, date: String(movement.date || ""), kind, quantityMilli, theoreticalMilli,
+      const move = validateMove({
+        operationId: nextVersion ? `${baseId}:ver${nextVersion}` : baseId, itemId, date: String(movement.date || ""), kind, quantityMilli, theoreticalMilli,
         unitCost: Number.isFinite(unitCost) && unitCost > 0 ? unitCost : (Number.isFinite(costByOld.get(String(movement.inventoryId))) ? costByOld.get(String(movement.inventoryId)) : undefined),
         memo: String(movement.note || "").slice(0, 200), actor: "Ko'prik",
-      }, items));
+      }, items);
+      if (previous) {
+        changed.push(source);
+        toPost.push(reversalOf(previous, "Eski tizimda o'zgartirildi — eski versiya bekor qilindi"));
+        corrected += 1;
+      }
+      toPost.push(move);
     } catch (error) {
+      if (previous) changed.push(source);
       invalid.push(`${source}: ${error instanceof LedgerError ? error.message : "noto'g'ri harakat"}`);
     }
   }
-  for (const [operationId, row] of existing) {
-    if (wanted.has(operationId) || reversedIds.has(row.id) || operationId.startsWith("bridge:mrev:")) continue;
-    toPost.push({
-      operationId: `bridge:mrev:${row.id}`.slice(0, 120), itemId: row.item_id, date: today, kind: "reversal",
-      quantityMilli: -Number(row.quantity_milli), theoreticalMilli: 0, actor: "Ko'prik", reversesId: row.id,
-      memo: "Bekor qilindi: eski tizimda bu harakat o'chirilgan",
-    });
+  for (const [base, row] of live) {
+    if (wanted.has(base)) continue;
+    toPost.push(reversalOf(row, "Bekor qilindi: eski tizimda bu harakat o'chirilgan"));
   }
   // Teskari harakat miqdorni qaytaradi; bekor qilingan harakat AvT hisobotidan butunlay chiqariladi.
 
@@ -127,7 +149,7 @@ export async function runStockBridge(db: D1Like, scope: LedgerScope, state: Row,
   }).sort((left, right) => Math.abs(right.difference) - Math.abs(left.difference));
   const reversed = toPost.filter((move) => move.kind === "reversal").length;
   return {
-    posted: toPost.length - reversed, alreadyPosted, reversed, changed, invalid, unknownItem,
+    posted: toPost.length - reversed, alreadyPosted, reversed, corrected, changed, invalid, unknownItem,
     items: comparison, mismatched: comparison.filter((row) => !row.expenseOnly && row.difference !== 0).length,
   };
 }

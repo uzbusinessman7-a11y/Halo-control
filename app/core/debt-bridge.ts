@@ -23,7 +23,7 @@ export function partyCode(oldId: string): string {
 }
 
 export interface PartyComparison { partyId: string; name: string; oldBalance: number; ledgerBalance: number; difference: number; oldestUnpaidDate: string | null; ageDays: number | null }
-export interface DebtBridgeReport { posted: number; alreadyPosted: number; reversed: number; changed: string[]; invalid: string[]; parties: PartyComparison[]; totalDebt: number; mismatched: number }
+export interface DebtBridgeReport { posted: number; alreadyPosted: number; reversed: number; corrected: number; changed: string[]; invalid: string[]; parties: PartyComparison[]; totalDebt: number; mismatched: number }
 
 export async function runDebtBridge(db: D1Like, scope: LedgerScope, state: Row, today: string, now = new Date()): Promise<DebtBridgeReport> {
   assertScope(scope);
@@ -44,11 +44,29 @@ export async function runDebtBridge(db: D1Like, scope: LedgerScope, state: Row, 
   const reversedIds = new Set((await db.prepare("SELECT reverses_id FROM v2_party_moves WHERE tenant_id = ? AND branch_id = ? AND reverses_id IS NOT NULL")
     .bind(scope.tenantId, scope.branchId).all<{ reverses_id: string }>()).results.map((row) => row.reverses_id));
 
+  // Versiyalar: asl amal raqami, keyin ":ver1"... Amaldagisi — bekor qilinmagan oxirgisi.
+  const versions = new Map<string, number>();
+  const live = new Map<string, { id: string; party_id: string; date: string; amount: number; version: number }>();
+  for (const [operationId, row] of existing) {
+    if (!operationId.startsWith("bridge:q:")) continue;
+    const match = operationId.match(/^(.*):ver(\d+)$/);
+    const base = match ? match[1] : operationId;
+    const version = match ? Number(match[2]) : 0;
+    versions.set(base, Math.max(versions.get(base) ?? -1, version));
+    if (reversedIds.has(row.id)) continue;
+    const current = live.get(base);
+    if (!current || current.version < version) live.set(base, { ...row, version });
+  }
+  const reversalOf = (row: { id: string; party_id: string; amount: number }, memo: string): DebtMoveInput => ({
+    operationId: `bridge:qrev:${row.id}`.slice(0, 120), partyId: row.party_id, date: today, kind: "reversal", amount: -Number(row.amount), actor: "Ko'prik", reversesId: row.id, memo,
+  });
+
   const toPost: DebtMoveInput[] = [];
   const changed: string[] = [];
   const invalid: string[] = [];
   const wanted = new Set<string>();
   let alreadyPosted = 0;
+  let corrected = 0;
   const transactions = rows(state.transactions);
   const firstDate = new Map<string, string>();
   for (const tx of transactions) {
@@ -60,16 +78,21 @@ export async function runDebtBridge(db: D1Like, scope: LedgerScope, state: Row, 
     const amount = Number(tx.amount);
     if ((tx.type !== "purchase" && tx.type !== "payment") || !Number.isSafeInteger(amount) || amount <= 0) { invalid.push(`${source}: turi yoki summasi noto'g'ri`); continue; }
     const signed = tx.type === "purchase" ? amount : -amount;
-    const operationId = bridgeOperationId("q", String(tx.id));
-    wanted.add(operationId);
-    const previous = existing.get(operationId);
-    if (previous) {
-      if (previous.party_id !== partyId || Number(previous.amount) !== signed || previous.date !== date) changed.push(source); else alreadyPosted += 1;
-      continue;
-    }
+    const baseId = bridgeOperationId("q", String(tx.id));
+    wanted.add(baseId);
+    const previous = live.get(baseId);
+    if (previous && previous.party_id === partyId && Number(previous.amount) === signed && previous.date === date) { alreadyPosted += 1; continue; }
+    const nextVersion = (versions.get(baseId) ?? -1) + 1;
     try {
-      toPost.push(validateDebtMove({ operationId, partyId, date, kind: tx.type as "purchase" | "payment", amount: signed, memo: String(tx.note || tx.description || "").slice(0, 200), actor: "Ko'prik" }, parties));
+      const move = validateDebtMove({ operationId: nextVersion ? `${baseId}:ver${nextVersion}` : baseId, partyId, date, kind: tx.type as "purchase" | "payment", amount: signed, memo: String(tx.note || tx.description || "").slice(0, 200), actor: "Ko'prik" }, parties);
+      if (previous) {
+        changed.push(source);
+        toPost.push(reversalOf(previous, `Eski tizimda o'zgartirildi: ${Math.abs(Number(previous.amount)).toLocaleString("en-US")} → ${amount.toLocaleString("en-US")} ₩`));
+        corrected += 1;
+      }
+      toPost.push(move);
     } catch (error) {
+      if (previous) changed.push(source);
       invalid.push(`${source}: ${error instanceof LedgerError ? error.message : "noto'g'ri"}`);
     }
   }
@@ -100,9 +123,9 @@ export async function runDebtBridge(db: D1Like, scope: LedgerScope, state: Row, 
   }
 
   // Eski tizimda o'chirilgan xarid/to'lov → teskari yozuv.
-  for (const [operationId, row] of existing) {
-    if (!operationId.startsWith("bridge:q:") || wanted.has(operationId) || reversedIds.has(row.id)) continue;
-    toPost.push({ operationId: `bridge:qrev:${row.id}`.slice(0, 120), partyId: row.party_id, date: today, kind: "reversal", amount: -Number(row.amount), actor: "Ko'prik", reversesId: row.id, memo: "Bekor qilindi: eski tizimda o'chirilgan" });
+  for (const [base, row] of live) {
+    if (wanted.has(base)) continue;
+    toPost.push(reversalOf(row, "Bekor qilindi: eski tizimda o'chirilgan"));
   }
 
   const valid: DebtMoveInput[] = [];
@@ -136,7 +159,7 @@ export async function runDebtBridge(db: D1Like, scope: LedgerScope, state: Row, 
   partyRows.sort((left, right) => right.ledgerBalance - left.ledgerBalance);
   const reversed = toPost.filter((move) => move.kind === "reversal").length;
   return {
-    posted: toPost.length - reversed, alreadyPosted, reversed, changed, invalid, parties: partyRows,
+    posted: toPost.length - reversed, alreadyPosted, reversed, corrected, changed, invalid, parties: partyRows,
     totalDebt: partyRows.reduce((sum, row) => sum + Math.max(0, row.ledgerBalance), 0),
     mismatched: partyRows.filter((row) => row.difference !== 0).length,
   };

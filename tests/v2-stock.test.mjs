@@ -89,6 +89,9 @@ test('keyin o‘zgartirilgan eski harakat jim o‘tmaydi', async () => {
   state.stockMovements[1].quantity = -120.4;
   const report = await runStockBridge(database, scope, state, today);
   assert.deepEqual(report.changed, ['harakat:s0']);
+  assert.equal(report.corrected, 1);
+  assert.equal(report.items.find((i) => i.name === state.inventory[0].name).difference, 0.1, 'harakat tuzatildi; saqlangan qoldiq o‘zgarmagani endi aniq ko‘rinadi');
+  assert.equal((await runStockBridge(database, scope, state, today)).corrected, 0);
 });
 
 test('baza ombor harakatini o‘zgartirish va o‘chirishni rad etadi', async () => {

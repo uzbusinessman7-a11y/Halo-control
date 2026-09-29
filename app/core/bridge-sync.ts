@@ -23,6 +23,10 @@ export interface BridgeReport {
   alreadyPosted: number;
   reversed: number;
   changed: string[];
+  /** Avtomatik tuzatilgan (eski versiya teskari yozilib, yangisi qo'shilgan) yozuvlar soni. */
+  corrected: number;
+  /** Yopilgan kunga tegishli bo'lgani uchun tuzatilmagan o'zgarishlar. */
+  blocked: string[];
   invalid: string[];
   unmatched: string[];
   zeroAmount: number;
@@ -61,30 +65,64 @@ export async function runBridge(db: D1Like, scope: LedgerScope, state: Row, toda
     "SELECT reverses_id FROM v2_ledger_entries WHERE tenant_id = ? AND branch_id = ? AND reverses_id IS NOT NULL",
   ).bind(scope.tenantId, scope.branchId).all<{ reverses_id: string }>()).results.map((row) => row.reverses_id));
 
+  // Har bir eski yozuvning versiyalari: asl amal raqami, keyin ":ver1", ":ver2"... Amaldagisi — bekor qilinmagan oxirgisi.
+  const versions = new Map<string, number>();
+  const live = new Map<string, { id: string; date: string; key: string[]; version: number }>();
+  for (const [operationId, item] of existing) {
+    if (operationId.startsWith("bridge:rev:")) continue;
+    const match = operationId.match(/^(.*):ver(\d+)$/);
+    const base = match ? match[1] : operationId;
+    const version = match ? Number(match[2]) : 0;
+    versions.set(base, Math.max(versions.get(base) ?? -1, version));
+    if (reversedIds.has(item.id)) continue;
+    const current = live.get(base);
+    if (!current || current.version < version) live.set(base, { ...item, version });
+  }
+
   const closedRow = await db.prepare("SELECT MAX(date) AS date FROM v2_day_closes WHERE tenant_id = ? AND branch_id = ?")
     .bind(scope.tenantId, scope.branchId).first<{ date: string | null }>();
   const closedThrough = String(closedRow?.date || "");
+  const isClosed = (date: string) => Boolean(closedThrough) && date <= closedThrough;
 
-  // 3) Yangi yozuvlar.
+  // 3) Yangi yozuvlar va eski tizimda keyin o'zgartirilganlarni tuzatish (eski versiya teskari yoziladi, yangisi qo'shiladi).
   const toPost: EntryInput[] = [];
   const changed: string[] = [];
+  const blocked: string[] = [];
   const invalid: string[] = [];
   let alreadyPosted = 0;
+  let corrected = 0;
   const wanted = new Set<string>();
+  const reversalOfLive = (item: { id: string; key: string[] }, memo: string): EntryInput => ({
+    operationId: `bridge:rev:${item.id}`.slice(0, 120), date: today, kind: "reversal", actor: "Ko'prik", memo, reversesId: item.id,
+    lines: item.key.map((pair) => { const at = pair.lastIndexOf(":"); return { accountId: pair.slice(0, at), amount: -Number(pair.slice(at + 1)) }; }),
+  });
   for (const bridgeEntry of plan.entries) {
     wanted.add(bridgeEntry.operationId);
+    const nextVersion = (versions.get(bridgeEntry.operationId) ?? -1) + 1;
     const entry: EntryInput = {
-      operationId: bridgeEntry.operationId, date: bridgeEntry.date, kind: bridgeEntry.kind, memo: bridgeEntry.memo, actor: bridgeEntry.actor,
+      operationId: nextVersion ? `${bridgeEntry.operationId}:ver${nextVersion}` : bridgeEntry.operationId,
+      date: bridgeEntry.date, kind: bridgeEntry.kind, memo: bridgeEntry.memo, actor: bridgeEntry.actor,
       lines: bridgeEntry.lines.map((line) => ({ accountId: idByCode.get(line.code) || `yo'q:${line.code}`, amount: line.amount })),
     };
-    const previous = existing.get(entry.operationId);
+    const previous = live.get(bridgeEntry.operationId);
     if (previous) {
       const key = entry.lines.map((line) => `${line.accountId}:${line.amount}`).sort().join("|");
-      if (previous.key.sort().join("|") !== key || previous.date !== entry.date) changed.push(bridgeEntry.source);
-      else alreadyPosted += 1;
+      if (previous.key.slice().sort().join("|") === key && previous.date === entry.date) { alreadyPosted += 1; continue; }
+      changed.push(bridgeEntry.source);
+      if (isClosed(previous.date) || isClosed(entry.date) || isClosed(today)) {
+        blocked.push(`${bridgeEntry.source}: yopilgan kunga tegishli — avtomatik tuzatilmadi`);
+        continue;
+      }
+      try {
+        const valid = validateEntry(entry, accounts);
+        toPost.push(reversalOfLive(previous, "Eski tizimda o'zgartirildi — eski versiya bekor qilindi"), valid);
+        corrected += 1;
+      } catch (error) {
+        invalid.push(`${bridgeEntry.source}: ${error instanceof LedgerError ? error.message : "noto'g'ri yozuv"}`);
+      }
       continue;
     }
-    if (closedThrough && entry.date <= closedThrough) {
+    if (isClosed(entry.date)) {
       invalid.push(`${bridgeEntry.source}: ${entry.date} kuni V2 da yopilgan — eski tizimda keyin kiritilgan yozuv`);
       continue;
     }
@@ -96,13 +134,9 @@ export async function runBridge(db: D1Like, scope: LedgerScope, state: Row, toda
   }
 
   // 4) Eski tizimda bekor qilingan yozuvlar → teskari yozuv (o'chirilmaydi).
-  for (const [operationId, item] of existing) {
-    if (wanted.has(operationId) || reversedIds.has(item.id) || operationId.startsWith("bridge:rev:")) continue;
-    toPost.push({
-      operationId: `bridge:rev:${item.id}`.slice(0, 120), date: today, kind: "reversal", actor: "Ko'prik",
-      memo: "Bekor qilindi: eski tizimda bu yozuv bekor qilingan yoki o'chirilgan", reversesId: item.id,
-      lines: item.key.map((pair) => { const at = pair.lastIndexOf(":"); return { accountId: pair.slice(0, at), amount: -Number(pair.slice(at + 1)) }; }),
-    });
+  for (const [base, item] of live) {
+    if (wanted.has(base)) continue;
+    toPost.push(reversalOfLive(item, "Bekor qilindi: eski tizimda bu yozuv bekor qilingan yoki o'chirilgan"));
   }
   const reversed = toPost.filter((entry) => entry.kind === "reversal").length;
 
@@ -134,7 +168,7 @@ export async function runBridge(db: D1Like, scope: LedgerScope, state: Row, toda
   });
   const grand = [...ledger.values()].reduce((sum, value) => sum + value, 0);
   return {
-    posted: toPost.length - reversed, alreadyPosted, reversed, changed, invalid, unmatched: plan.unmatched, zeroAmount: plan.zeroAmount,
-    comparison, ok: comparison.every((row) => row.difference === 0) && !changed.length && !invalid.length, ledgerBalanced: grand === 0,
+    posted: toPost.length - reversed, alreadyPosted, reversed, corrected, changed, blocked, invalid, unmatched: plan.unmatched, zeroAmount: plan.zeroAmount,
+    comparison, ok: comparison.every((row) => row.difference === 0) && !blocked.length && !invalid.length, ledgerBalanced: grand === 0,
   };
 }

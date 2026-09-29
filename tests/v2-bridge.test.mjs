@@ -110,15 +110,29 @@ test('eski tizimda bekor qilingan savdo jurnaldan o‘chirilmaydi — teskari yo
   assert.equal((await runBridge(database, scope, state, today)).reversed, 0, 'ikkinchi marta teskari yozilmaydi');
 });
 
-test('eski yozuv summasi keyin o‘zgartirilsa — jim o‘tmaydi, “o‘zgargan” deb ko‘rsatiladi', async () => {
-  const { db: database } = await db();
+test('eski yozuv summasi keyin o‘zgartirilsa — ko‘rsatiladi va tarixi saqlangan holda tuzatiladi', async () => {
+  const { db: database, sqlite } = await db();
   const state = oldState();
   await runBridge(database, scope, state, today);
   state.sales[5].totalRevenue += 1;
   const report = await runBridge(database, scope, state, today);
-  assert.equal(report.ok, false);
   assert.deepEqual(report.changed, ['savdo:sale-5']);
-  assert.equal(report.comparison.reduce((sum, row) => sum + Math.abs(row.difference), 0), 1, 'aynan 1 won farq ko‘rinadi');
+  assert.equal(report.corrected, 1);
+  assert.equal(report.ok, true);
+  assert.equal(report.comparison.reduce((sum, row) => sum + Math.abs(row.difference), 0), 0, 'qoldiq yana wonma-won mos');
+  const op = bridgeOperationId('s', 'sale-5');
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM v2_ledger_entries WHERE operation_id IN (?, ?)').get(op, op + ':ver1').n, 2, 'eski va yangi versiya ikkalasi tarixda');
+  const again = await runBridge(database, scope, state, today);
+  assert.equal(again.corrected, 0);
+  assert.equal(again.posted, 0);
+  state.sales[5].totalRevenue += 1;
+  const third = await runBridge(database, scope, state, today);
+  assert.equal(third.corrected, 1);
+  assert.equal(third.ok, true);
+  state.sales.splice(5, 1);
+  const removed = await runBridge(database, scope, state, today);
+  assert.equal(removed.reversed, 1);
+  assert.equal(removed.ok, true);
 });
 
 test('V2 da yopilgan kunga ko‘prik eski yozuv qo‘shmaydi', async () => {
