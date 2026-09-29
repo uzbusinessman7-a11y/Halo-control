@@ -62,6 +62,12 @@ test('ombor sanog‘i kamomadi: mahsulot bo‘yicha gramm va won, eng qimmati bi
   assert.equal(found.examples[1], 'Lavash · −3 dona · 900 ₩');
 });
 
+test('kun yopish ma’lumoti umuman berilmagan bo‘lsa, yopilmagan kun deb hisoblanmaydi', () => {
+  const state = { ...base(), sales: [sale('a', '2026-09-27')] };
+  assert.equal(issue(auditBusinessState(state, { today }), 'unclosed_days'), undefined);
+  assert.equal(issue(auditBusinessState({ ...state, dailyCloses: [] }, { today }), 'unclosed_days').count, 1);
+});
+
 test('eski ma’lumot va sanasiz holatda ham audit yiqilmaydi', () => {
   const audit = auditBusinessState({ ...base(), dailyCloses: 'x', stockMovements: null });
   assert.ok(Array.isArray(audit.issues));

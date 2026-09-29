@@ -117,7 +117,8 @@ export function auditBusinessState(state: State, options: { today?: string } = {
     const date = String(row.date || "");
     if (date >= unclosedFrom && date < today && !closedDates.has(date)) activityDates.add(date);
   }
-  add("unclosed_days", "error", `Kassa sanab yopilmagan kunlar (so‘nggi ${UNCLOSED_LOOKBACK_DAYS} kun)`,
+  // Kun yopish ma'lumoti umuman berilmagan bo'lsa (masalan, qisman holat), xulosa chiqarilmaydi.
+  if (Array.isArray(state.dailyCloses)) add("unclosed_days", "error", `Kassa sanab yopilmagan kunlar (so‘nggi ${UNCLOSED_LOOKBACK_DAYS} kun)`,
     [...activityDates].sort().reverse().map((date) => ({ name: `${date} · savdo bor, kun yopilmagan` })),
     "Kun yopilmasa, kassadagi haqiqiy pul dastur hisobi bilan solishtirilmaydi va farq sezilmay qoladi. Har kuni kechqurun kassani sanab, kunni yoping.", "finance");
 
