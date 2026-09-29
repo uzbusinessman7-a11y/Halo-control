@@ -29,7 +29,7 @@ export function roleOfOldType(type: unknown): AccountRole {
   return "other";
 }
 
-async function syncAndMap(db: D1Like, scope: LedgerScope, state: Row, today: string) {
+export async function syncAndMap(db: D1Like, scope: LedgerScope, state: Row, today: string) {
   const bridge = await runBridge(db, scope, state, today);
   const accounts = await listAccounts(db, scope);
   const byCode = new Map([...accounts.values()].map((account) => [account.code, account]));

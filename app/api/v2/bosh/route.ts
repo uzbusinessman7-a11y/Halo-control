@@ -100,6 +100,7 @@ function load(){
     document.getElementById('sub').textContent=r.today+' · '+(r.alerts.length?(bad?bad+' ta jiddiy, ':'')+r.alerts.length+' ta diqqat talab qiladi':'hammasi joyida ✓');
     body.innerHTML=
       '<section class="card"><h2>Diqqat talab qiladi</h2>'+(r.alerts.length?r.alerts.map(function(a){return '<a class="alert '+a.level+'" href="/api/v2/'+a.page+'"><span>'+esc(a.text)+'</span><span class="go">Ochish ›</span></a>'}).join(''):'<div class="msg ok">✓ Hammasi joyida — muammo topilmadi</div>')+'</section>'
+      +'<a class="alert" href="/api/v2/sanoq" style="text-decoration:none"><span>📋 Oy yakuni sanog‘i — pul, ombor va qarzlarni sanash</span><span class="go">Ochish ›</span></a>'
       +'<section class="card"><h2>Savdo</h2><div class="grid">'
       +kpi('Bugun',won(s.today),'kun hali tugamagan')
       +kpi('Kecha',won(s.yesterday)+chg(s.yesterday,s.weekAgo),'o‘tgan hafta shu kun: '+won(s.weekAgo))

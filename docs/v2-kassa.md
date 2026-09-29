@@ -72,3 +72,10 @@ chiqqan) va qoldiqlar to'g'ridan-to'g'ri o'zgartirilardi. V2 da:
 - Sahifada "Telegramga yuborish" (yangi saytda bot ulangan bo'lsa) va "Nusxa".
 - Unumdorlik: mahsulot, yetkazuvchi va xodimlarni yaratish endi bitta paketda
   (Cloudflare D1 so'rov limitiga tushmaslik uchun); qarz yoshi bitta so'rov bilan.
+
+## Oy yakuni sanog'i (`/api/v2/sanoq`)
+
+- `app/core/period-count.ts` — `v2_period_counts` (faqat qo'shiladi). Pul hisoblari, ombor
+  mahsulotlari (sabzavot kabi "faqat xarajat" mahsulotlardan tashqari) va yetkazib beruvchi
+  qarzlari tanlangan sana oxiriga tizim qoldig'i bilan "ko'r" sanaladi va solishtiriladi.
+  Qayta sanalsa, oxirgisi amal qiladi. To'liq o'tishda bu tasdiqlangan boshlang'ich qoldiq bo'ladi.
