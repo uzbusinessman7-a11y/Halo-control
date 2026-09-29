@@ -49,3 +49,16 @@ chiqqan) va qoldiqlar to'g'ridan-to'g'ri o'zgartirilardi. V2 da:
 3. **Ekranlar:** xodim uchun "Kassani sanash" (katta raqam maydonlari, 1 tugma),
    rahbar uchun "Kunni yopish" (kutilgan / sanalgan / farq).
 4. **01.10 ochilish qoldiqlari:** 30.09 sanog'idan `opening` yozuvi.
+
+## 4-bosqich: maosh daftari (`/api/v2/maosh`)
+
+- `app/core/payroll-ledger.ts` — `v2_employees`, `v2_pay_moves` (faqat qo'shiladi;
+  o'zgartirish/o'chirish bazada taqiqlangan). Ishora: + hisoblandi, − berildi/ushlandi.
+  Oy qoldig'i = shu oy yozuvlari yig'indisi. Hisob varaqasi va xodimga yuboriladigan matn.
+- `app/core/payroll-bridge.ts` — eski smena, dam kunlari, bonus/ushlanma/avans va
+  to'lovlardan yozuvlar. Har bir yozuvning manbasi bor (`d:` ish kuni, `l:` dam, `j:`
+  tuzatish, `p:` to'lov, `r:` oy yaxlitlashi). Eski tizimda o'zgarsa — eski versiya teskari
+  yozuv bilan yopiladi, yangisi qo'shiladi. Har xodim/oy `calculatePayroll()` bilan
+  wonma-won solishtiriladi.
+- Nazorat: o'tgan oylardan to'lanmagan maosh, ortiqcha to'lov, kassadan chiqmagan avanslar.
+- Sinovlar: `tests/v2-payroll.test.mjs`, `tests/v2-maosh-route.test.mjs`.
