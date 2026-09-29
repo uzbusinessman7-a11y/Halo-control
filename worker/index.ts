@@ -2,6 +2,7 @@
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 import { applyOwnerAuth, type OwnerAuthEnv } from "./owner-auth";
+import { runScheduledJobs } from "../app/lib/scheduled-jobs";
 
 interface Env extends OwnerAuthEnv {
   ASSETS: Fetcher;
@@ -73,6 +74,15 @@ const worker = {
       secured.headers.set("Cache-Control", "no-store");
     }
     return secured;
+  },
+
+  /** Cron: to'liq o'tishdan keyin kunlik Telegram hisobotlar (parallel rejimda hech narsa qilmaydi). */
+  async scheduled(_event: unknown, env: Env, ctx: ExecutionContext): Promise<void> {
+    globalThis.__HALO_CONTROL_DB__ = env.DB;
+    globalThis.__HALO_CONTROL_BUCKET__ = env.BUCKET;
+    globalThis.__HALO_SELF_HOSTED__ = env.HALO_SELF_HOSTED === "1";
+    if (!globalThis.__HALO_SELF_HOSTED__) return;
+    ctx.waitUntil(runScheduledJobs().then(() => undefined, () => undefined));
   },
 };
 

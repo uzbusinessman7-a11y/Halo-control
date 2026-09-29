@@ -60,6 +60,8 @@ export function deployConfig(generated, settings) {
   config.r2_buckets = settings.bucketName ? [...otherR2, { binding: "BUCKET", bucket_name: settings.bucketName }] : otherR2;
   if (!config.r2_buckets.length) delete config.r2_buckets;
   config.vars = { ...(config.vars || {}), HALO_SELF_HOSTED: "1" };
+  // Har 10 daqiqada: kunlik Telegram hisobotlar (faqat to'liq o'tishdan keyin yuboradi).
+  config.triggers = { ...(config.triggers || {}), crons: ["*/10 * * * *"] };
   // ChatGPT Sites'ga xos maydonlar o'z akkauntda kerak emas.
   delete config.account_id;
   return config;

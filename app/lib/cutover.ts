@@ -25,3 +25,19 @@ export async function completeCutover(by: string, now = new Date()) {
   await db.prepare(SQL).run();
   await db.prepare("INSERT OR IGNORE INTO halo_cutover (id, completed_at, completed_by) VALUES ('main', ?, ?)").bind(now.toISOString(), by.slice(0, 80)).run();
 }
+
+export async function cutoverStatus(): Promise<{ completed: boolean; completedAt: string | null; completedBy: string | null }> {
+  const db = globalThis.__HALO_CONTROL_DB__;
+  if (!db) return { completed: false, completedAt: null, completedBy: null };
+  await db.prepare(SQL).run();
+  const row = await db.prepare("SELECT completed_at, completed_by FROM halo_cutover WHERE id = 'main'").first<{ completed_at: string; completed_by: string }>();
+  return { completed: Boolean(row), completedAt: row?.completed_at ?? null, completedBy: row?.completed_by ?? null };
+}
+
+/** Favqulodda holat uchun: parallel rejimga qaytish (yangi sayt yana avtomatik hisobot yubormaydi). */
+export async function revertCutover() {
+  const db = globalThis.__HALO_CONTROL_DB__;
+  if (!db) throw new Error("Baza ulanmagan.");
+  await db.prepare(SQL).run();
+  await db.prepare("DELETE FROM halo_cutover WHERE id = 'main'").run();
+}
