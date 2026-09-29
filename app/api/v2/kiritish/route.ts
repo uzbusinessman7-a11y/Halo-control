@@ -1,5 +1,7 @@
 import { isAdminRequest } from "../../../lib/integration-store";
-import { listHaloBranches, readHaloState } from "../../../lib/halo-store";
+import { HaloStateConflictError, listHaloBranches, mutateHaloState, readHaloState } from "../../../lib/halo-store";
+import { costRuleCoversCategory } from "../../../lib/daily-report";
+import { isAccountingMonthClosed } from "../../../lib/month-end";
 import { expenseOnlyOnDate } from "../../../lib/vegetable-expenses";
 import { DELIVERY_PLATFORMS } from "../../../lib/delivery-sales";
 import { shell } from "../../../core/ui-shell";
@@ -40,15 +42,85 @@ function inventoryChoices(state: Row, today: string) {
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
+const EXPENSE_CATEGORIES = [
+  // Eski tizim ro'yxati bilan bir xil (hisobotlar mos bo'lishi uchun). Karta/delivery komissiyasi avtomatik,
+  // mahsulot xaridi esa yetkazib beruvchi orqali kiritiladi — shu sabab bu yerda yo'q.
+  "Ijara", "Elektr / gaz / suv", "Wi-Fi / telefon", "POS abonent to‘lovi", "Reklama", "Ta’mirlash", "Soliq", "Sug‘urta",
+  "Do‘kon / omborsiz mahsulot", "Boshqa",
+];
+class EntryError extends Error {
+  constructor(message: string, readonly status = 400, readonly code = "") { super(message); }
+}
+const clean = (value: unknown, max: number) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
+
+function moneyAccounts(state: Row) {
+  return (Array.isArray(state.accounts) ? state.accounts as Row[] : [])
+    .filter((account) => (account.type === "cash" || account.type === "bank") && account.active !== false)
+    .map((account) => ({ id: String(account.id), name: String(account.name || account.id), type: String(account.type) }));
+}
+
+function monthExpenses(state: Row, today: string) {
+  const month = today.slice(0, 7);
+  const accounts = new Map(moneyAccounts(state).map((account) => [account.id, account.name]));
+  return (Array.isArray(state.financialEntries) ? state.financialEntries as Row[] : [])
+    .filter((entry) => entry.type === "expense" && String(entry.date || "").startsWith(month) && !entry.voided && !entry.cancelledAt && !entry.reversalOf)
+    .map((entry) => ({ id: String(entry.id), date: String(entry.date), category: String(entry.category || "Boshqa"), amount: Number(entry.amount) || 0, note: String(entry.note || ""), account: accounts.get(String(entry.accountId)) || "", recurring: Boolean(entry.recurringExpenseId) }))
+    .sort((left, right) => right.date.localeCompare(left.date));
+}
+
+/** Xarajat yozuvi (eski tizim formatida, serverda tekshirib). Takroriy so'rov ikkinchi marta yozilmaydi. */
+function addExpense(state: Row, body: Row, today: string) {
+  const operationId = clean(body.operationId, 36);
+  if (!/^[a-f0-9-]{36}$/.test(operationId)) throw new EntryError("Oynani yangilang.");
+  const id = `v2-expense:${operationId}`;
+  const entries = Array.isArray(state.financialEntries) ? state.financialEntries as Row[] : [];
+  const existing = entries.find((entry) => entry.id === id);
+  if (existing) return { state, result: { entry: existing, alreadySaved: true } };
+  const category = clean(body.category, 80);
+  const name = clean(body.name, 140);
+  const note = clean(body.note, 300);
+  const date = clean(body.date, 10);
+  const amount = Number(body.amount);
+  const accountId = clean(body.accountId, 100);
+  if (!EXPENSE_CATEGORIES.includes(category)) throw new EntryError("Xarajat turini tanlang.");
+  if (!name) throw new EntryError("Nima uchun to‘langanini yozing.");
+  if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 100_000_000_000) throw new EntryError("Summani tekshiring.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today) throw new EntryError("Sanani tekshiring (kelajak bo‘lmasin).");
+  if (isAccountingMonthClosed(state.monthlyCloses, date)) throw new EntryError(`${date.slice(0, 7)} oyi yopilgan. Ochiq oy sanasini tanlang.`, 409);
+  if (!moneyAccounts(state).some((account) => account.id === accountId)) throw new EntryError("Pul qaysi hisobdan chiqqanini tanlang.");
+  if (costRuleCoversCategory(category, state.costRules as never)) throw new EntryError("Bu xarajat avtomatik hisoblanadi — qayta kiritmang.");
+  const reason = clean(body.duplicateReason, 200);
+  const twin = entries.find((entry) => entry.type === "expense" && entry.date === date && Number(entry.amount) === amount && entry.category === category && !entry.voided && !entry.cancelledAt);
+  if (twin && reason.length < 3) throw new EntryError("Shu kuni aynan shu turdagi va shu summadagi xarajat bor. Bu boshqa xarajat bo‘lsa, sababini yozing.", 409, "DUPLICATE");
+  const entry = {
+    id, type: "expense", category, amount, date, accountId,
+    note: [name, note].filter(Boolean).join(" · "), affectsProfit: true,
+    createdByName: "Rahbar", createdAt: new Date().toISOString(),
+    ...(twin ? { duplicateOf: twin.id, duplicateReason: reason } : {}),
+  };
+  return { state: { ...state, financialEntries: [entry, ...entries] }, result: { entry, alreadySaved: false } };
+}
+
 export async function POST(request: Request) {
   if (globalThis.__HALO_SELF_HOSTED__ !== true) return json({ error: "V2 faqat yangi saytda." }, 403);
   if (!await isAdminRequest(request)) return json({ error: "Faqat rahbar uchun." }, 401);
   try {
     const body = await request.json() as Row;
     const today = seoulToday();
-    const { state } = await readHaloState(String(body.branchId || "main"));
-    return json({ ok: true, today, inventory: inventoryChoices(state as Row, today), platforms: DELIVERY_PLATFORMS });
+    const branchId = String(body.branchId || "main");
+    if (body.action === "expense") {
+      const mutation = await mutateHaloState((state) => addExpense(state, body, today), 5, branchId, "Rahbar",
+        `Xarajat: ${clean(body.name, 60)} · ₩${Number(body.amount || 0).toLocaleString("en-US")}`, "Kiritish (yangi)");
+      return json({ ok: true, today, ...mutation.result, expenses: monthExpenses(mutation.state, today) });
+    }
+    const { state } = await readHaloState(branchId);
+    return json({
+      ok: true, today, inventory: inventoryChoices(state as Row, today), platforms: DELIVERY_PLATFORMS,
+      accounts: moneyAccounts(state as Row), categories: EXPENSE_CATEGORIES, expenses: monthExpenses(state as Row, today),
+    });
   } catch (error) {
+    if (error instanceof EntryError) return json({ error: error.message, code: error.code }, error.status);
+    if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     return json({ error: error instanceof Error && /filial/i.test(error.message) ? error.message : "Xatolik yuz berdi." }, 500);
   }
 }
@@ -57,7 +129,7 @@ function page(branches: Array<{ id: string; name: string }>): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
   return shell({
     title: "Kiritish", active: "kiritish", heading: "Kiritish",
-    subtitle: "Savdo, ombor kirimi, sabzavot va sous",
+    subtitle: "Savdo, xarajat, ombor kirimi, sabzavot va sous, yeyilgan ovqat",
     headerRight: '<div class="row"><input type="date" id="date"><select id="branch"></select></div>',
     body: `<section class="card"><div class="row" id="tabs"></div></section><div id="pane" style="display:grid;gap:16px"></div>
 <style>
@@ -85,7 +157,7 @@ function dec(v){var n=Number(String(v||'').replace(',','.').replace(/[^0-9.]/g,'
 function post(url,body){return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){return {status:r.status,body:j}})}).catch(function(){return {status:0,body:{error:'Internet aloqasini tekshiring.'}}})}
 var sel=document.getElementById('branch'),dt=document.getElementById('date');
 sel.innerHTML=BRANCHES.map(function(b){return '<option value="'+esc(b.id)+'">'+esc(b.name)+'</option>'}).join('');haloBranch(sel);
-var TABS={sale:'🧾 Savdo',stock:'📦 Ombor kirimi',veg:'🥬 Sabzavot va sous'};
+var TABS={sale:'🧾 Savdo',expense:'💸 Xarajat',stock:'📦 Ombor kirimi',veg:'🥬 Sabzavot va sous',meal:'🍽 Yeyilgan / isrof'};
 function tabs(){document.getElementById('tabs').innerHTML=Object.keys(TABS).map(function(k){return '<button class="'+(k===TAB?'':'ghost')+'" data-t="'+k+'">'+TABS[k]+'</button>'}).join('');
   document.querySelectorAll('[data-t]').forEach(function(b){b.addEventListener('click',function(){TAB=b.dataset.t;OP=uuid();render()})})}
 function load(){
@@ -95,7 +167,7 @@ function load(){
     DATA=res[0].body;MENU=res[1];if(!dt.value){dt.value=DATA.today}dt.max=DATA.today;CART={};LINES=[];OP=uuid();render();
   });
 }
-function render(){tabs();if(TAB==='sale')renderSale();else renderLines(TAB==='veg')}
+function render(){tabs();if(TAB==='sale')renderSale();else if(TAB==='expense')renderExpense();else if(TAB==='meal')renderMeal();else renderLines(TAB==='veg')}
 
 /* ---------- Savdo ---------- */
 function price(item){if(PAY==='delivery'){var pl=document.getElementById('plat');var p=pl?pl.value:(DATA.platforms[0]||{}).id;return Number((item.deliveryPrices||{})[p]||0)}return Number(item.salePrice||0)}
@@ -191,6 +263,64 @@ function saveLines(veg,reason){
     if(x.body.ok){LINES=[];OP=uuid();renderLines(veg);document.getElementById('lMsg').innerHTML='<div class="msg ok">✓ Saqlandi'+(x.body.alreadySaved?' (oldin saqlangan edi)':'')+' · '+won(total)+'</div>';return}
     if(x.body.code==='SIMILAR_PURCHASE'&&!reason){var why=prompt((x.body.error||'Shunga o‘xshash kirim bor.')+' Bu alohida xarid bo‘lsa, sababini yozing (kamida 5 harf):');if(why&&why.trim().length>=5)saveLines(veg,why.trim());return}
     msg.innerHTML='<div class="msg bad">'+esc(x.body.error||'Saqlanmadi.')+'</div>';
+  });
+}
+
+/* ---------- Xarajat ---------- */
+var EXP={cat:'',acc:''};
+function renderExpense(){
+  var pane=document.getElementById('pane'),d=DATA;
+  if(!EXP.acc&&d.accounts.length)EXP.acc=d.accounts[0].id;
+  var byCat={};d.expenses.forEach(function(e){byCat[e.category]=(byCat[e.category]||0)+e.amount});
+  var total=d.expenses.reduce(function(s,e){return s+e.amount},0);
+  pane.innerHTML='<section class="card"><h2>Xarajat kiritish</h2>'
+    +'<p class="hint">Ijara, svet, gaz, reklama, ta’mir… Mahsulot xaridi bu yerda emas — u “Ombor kirimi” va “Qarz” orqali.</p>'
+    +'<div class="row" style="gap:8px;margin-bottom:12px">'+d.categories.map(function(c){return '<button class="'+(EXP.cat===c?'':'ghost')+'" data-cat="'+esc(c)+'" style="min-height:40px;padding:8px 12px">'+esc(c)+'</button>'}).join('')+'</div>'
+    +'<label class="field"><span>Nima uchun</span><input id="xName" maxlength="140" placeholder="Masalan: oktabr ijarasi"></label>'
+    +'<label class="field"><span>Summa</span><input class="money" id="xAmt" inputmode="numeric" placeholder="0"></label>'
+    +'<label class="field"><span>Qaysi hisobdan to‘landi</span><select id="xAcc">'+d.accounts.map(function(a){return '<option value="'+esc(a.id)+'"'+(a.id===EXP.acc?' selected':'')+'>'+esc(a.name)+'</option>'}).join('')+'</select></label>'
+    +'<label class="field"><span>Izoh (ixtiyoriy)</span><input id="xNote" maxlength="300"></label>'
+    +'<button class="block" id="xSave">Saqlash</button><div id="xMsg"></div></section>'
+    +'<section class="card"><h2>Shu oy xarajatlari · '+won(total)+'</h2>'
+    +(Object.keys(byCat).length?'<div class="grid" style="margin-bottom:12px">'+Object.keys(byCat).sort(function(a,b){return byCat[b]-byCat[a]}).map(function(c){return '<div class="kpi"><small>'+esc(c)+'</small><b>'+won(byCat[c])+'</b></div>'}).join('')+'</div>':'')
+    +(d.expenses.length?d.expenses.slice(0,60).map(function(e){return '<div class="list-row"><div><b>'+esc(e.category)+'</b>'+(e.recurring?' <span class="tag warn">avtomatik</span>':'')+'<br><small style="color:var(--muted)">'+esc(e.date)+(e.account?' · '+esc(e.account):'')+(e.note?' · '+esc(e.note):'')+'</small></div><b>'+won(e.amount)+'</b></div>'}).join(''):'<p class="hint">Bu oyda xarajat yo‘q.</p>')+'</section>';
+  pane.querySelectorAll('[data-cat]').forEach(function(b){b.addEventListener('click',function(){EXP.cat=b.dataset.cat;var keep={n:document.getElementById('xName').value,a:document.getElementById('xAmt').value,o:document.getElementById('xNote').value};renderExpense();document.getElementById('xName').value=keep.n;document.getElementById('xAmt').value=keep.a;document.getElementById('xNote').value=keep.o})});
+  var amt=document.getElementById('xAmt');amt.addEventListener('input',function(){var v=digits(amt.value);amt.value=v?v.toLocaleString('en-US'):''});
+  document.getElementById('xAcc').addEventListener('change',function(){EXP.acc=this.value});
+  document.getElementById('xSave').addEventListener('click',function(){saveExpense()});
+}
+function saveExpense(reason){
+  var msg=document.getElementById('xMsg'),btn=document.getElementById('xSave');
+  var body={action:'expense',branchId:sel.value,operationId:OP,category:EXP.cat,name:document.getElementById('xName').value,amount:digits(document.getElementById('xAmt').value),accountId:document.getElementById('xAcc').value,date:dt.value,note:document.getElementById('xNote').value,duplicateReason:reason||undefined};
+  if(!body.category){msg.innerHTML='<div class="msg bad">Xarajat turini tanlang.</div>';return}
+  if(!body.name.trim()||!body.amount){msg.innerHTML='<div class="msg bad">Nima uchunligi va summani yozing.</div>';return}
+  if(!reason&&!confirm(body.category+' · '+won(body.amount)+' · '+body.date+'. Saqlansinmi?'))return;
+  btn.disabled=true;
+  post(location.pathname,body).then(function(x){btn.disabled=false;
+    if(x.body.ok){DATA.expenses=x.body.expenses;OP=uuid();EXP.cat='';renderExpense();document.getElementById('xMsg').innerHTML='<div class="msg ok">✓ Xarajat saqlandi'+(x.body.alreadySaved?' (oldin saqlangan edi)':'')+'</div>';return}
+    if(x.body.code==='DUPLICATE'&&!reason){var why=prompt(x.body.error);if(why&&why.trim().length>=3)saveExpense(why.trim());return}
+    msg.innerHTML='<div class="msg bad">'+esc(x.body.error||'Saqlanmadi.')+'</div>'});
+}
+
+/* ---------- Yeyilgan / isrof ---------- */
+var MEAL={},MEAL_REASON='Xodim ovqati';
+function renderMeal(){
+  var pane=document.getElementById('pane'),items=(MENU&&MENU.catalog)||[];
+  var reasons=['Xodim ovqati','Isrof / buzildi','Mehmonga tekin','Ta’m ko‘rish / sinov'];
+  var ids=Object.keys(MEAL).filter(function(k){return MEAL[k]>0});
+  pane.innerHTML='<section class="card"><h2>Pulsiz chiqqan taom</h2><p class="hint">Sotilmagan, lekin ombordan chiqqan taomlar. Retsept bo‘yicha mahsulot ombordan ayiriladi — “kamomad” bo‘lib ko‘rinmaydi.</p>'
+    +'<div class="row" style="gap:8px">'+reasons.map(function(r){return '<button class="'+(MEAL_REASON===r?'':'ghost')+'" data-r="'+esc(r)+'" style="min-height:40px;padding:8px 12px">'+esc(r)+'</button>'}).join('')+'</div></section>'
+    +'<section class="card"><h2>Taomni tanlang</h2><div class="menu-grid">'+items.map(function(i){var q=MEAL[i.id]||0;return '<button class="dish'+(q?' on':'')+'" data-meal="'+esc(i.id)+'">'+(q?'<span class="q">'+q+'</span>':'')+'<b>'+esc(i.name)+'</b></button>'}).join('')+'</div></section>'
+    +'<section class="card sticky-total">'+(ids.length?'<h2>'+esc(MEAL_REASON)+'</h2>'+ids.map(function(k){var it=items.find(function(i){return i.id===k});return '<div class="cart-row"><span>'+esc(it?it.name:k)+'</span><div class="stepper"><button class="ghost" data-mm="'+esc(k)+'">−</button><b>'+MEAL[k]+'</b><button class="ghost" data-mp="'+esc(k)+'">+</button></div></div>'}).join('')+'<button class="block" id="mSave" style="margin-top:10px">Saqlash</button>':'<p class="hint" style="margin:0">Taomni bosing.</p>')+'<div id="mMsg"></div></section>';
+  pane.querySelectorAll('[data-r]').forEach(function(b){b.addEventListener('click',function(){MEAL_REASON=b.dataset.r;renderMeal()})});
+  pane.querySelectorAll('[data-meal]').forEach(function(b){b.addEventListener('click',function(){MEAL[b.dataset.meal]=(MEAL[b.dataset.meal]||0)+1;renderMeal()})});
+  pane.querySelectorAll('[data-mm]').forEach(function(b){b.addEventListener('click',function(){MEAL[b.dataset.mm]=Math.max(0,(MEAL[b.dataset.mm]||0)-1);renderMeal()})});
+  pane.querySelectorAll('[data-mp]').forEach(function(b){b.addEventListener('click',function(){MEAL[b.dataset.mp]=(MEAL[b.dataset.mp]||0)+1;renderMeal()})});
+  var sv=document.getElementById('mSave');if(sv)sv.addEventListener('click',function(){
+    var btn=this,n=ids.reduce(function(s,k){return s+MEAL[k]},0);if(!confirm(MEAL_REASON+': '+n+' ta taom · '+dt.value+'. Saqlansinmi?'))return;btn.disabled=true;
+    post('/api/pos-terminal',{operationId:OP.replace(/-/g,''),date:dt.value,mode:'inventory_only',inventoryReason:MEAL_REASON,branchId:sel.value,items:ids.map(function(k){return {recipeId:k,quantity:MEAL[k]}})}).then(function(x){btn.disabled=false;
+      if(!x.body.ok){document.getElementById('mMsg').innerHTML='<div class="msg bad">'+esc(x.body.error||'Saqlanmadi.')+'</div>';return}
+      MEAL={};OP=uuid();renderMeal();document.getElementById('mMsg').innerHTML='<div class="msg ok">✓ Saqlandi — ombordan ayirildi</div>'});
   });
 }
 sel.addEventListener('change',load);dt.addEventListener('change',function(){OP=uuid();if(TAB==='sale')drawRecent()});load();

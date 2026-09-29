@@ -53,4 +53,23 @@ test('kiritish: sahifa, mahsulotlar ro‘yxati; savdo, ombor kirimi va sabzavot 
   const state = JSON.parse(sqlite.prepare("SELECT payload FROM app_state WHERE id = 'main'").get().payload);
   assert.equal(state.inventory.find((i) => i.id === 'g').stock, 5000 - 200, 'kirim 5 kg, savdo 2×100 g');
   assert.ok(state.sales.some((s) => s.recipeId === 'd' && s.accountId === 'bank'));
+
+  const kir = (body) => POST(new Request(base + '/api/v2/kiritish', { method: 'POST', headers: owner, body: JSON.stringify({ branchId: 'main', ...body }) }));
+  const op = crypto.randomUUID();
+  const e1 = await kir({ action: 'expense', operationId: op, category: 'Ijara', name: 'Oktabr ijarasi', amount: 1500000, accountId: 'bank', date: today });
+  const e1b = await e1.json();
+  assert.equal(e1.status, 200, JSON.stringify(e1b));
+  assert.equal(e1b.expenses[0].amount, 1500000);
+  const again = await (await kir({ action: 'expense', operationId: op, category: 'Ijara', name: 'Oktabr ijarasi', amount: 1500000, accountId: 'bank', date: today })).json();
+  assert.equal(again.alreadySaved, true, 'takror so‘rov ikkinchi marta yozmaydi');
+  const dup = await kir({ action: 'expense', operationId: crypto.randomUUID(), category: 'Ijara', name: 'Yana', amount: 1500000, accountId: 'bank', date: today });
+  assert.equal(dup.status, 409);
+  assert.equal((await dup.json()).code, 'DUPLICATE');
+  assert.equal((await kir({ action: 'expense', operationId: crypto.randomUUID(), category: 'Mahsulot xaridi', name: 'x', amount: 10, accountId: 'bank', date: today })).status, 400);
+  assert.equal((await kir({ action: 'expense', operationId: crypto.randomUUID(), category: 'Ijara', name: 'x', amount: 10, accountId: 'yoq', date: today })).status, 400);
+  const meal = await pos.POST(new Request(base + '/api/pos-terminal', { method: 'POST', headers: owner, body: JSON.stringify({ operationId: crypto.randomUUID().replace(/-/g, ''), date: today, mode: 'inventory_only', inventoryReason: 'Xodim ovqati', branchId: 'main', items: [{ recipeId: 'd', quantity: 1 }] }) }));
+  assert.equal(meal.status, 200, JSON.stringify(await meal.clone().json()));
+  const after = JSON.parse(sqlite.prepare("SELECT payload FROM app_state WHERE id = 'main'").get().payload);
+  assert.equal(after.inventory.find((i) => i.id === 'g').stock, 5000 - 200 - 100, 'xodim ovqati ham ombordan ayirildi');
+  assert.ok(after.financialEntries.some((f) => f.id === 'v2-expense:' + op && f.category === 'Ijara' && f.accountId === 'bank'));
 });
