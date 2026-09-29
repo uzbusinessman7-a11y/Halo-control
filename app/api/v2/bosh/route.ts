@@ -101,6 +101,7 @@ function load(){
     body.innerHTML=
       '<section class="card"><h2>Diqqat talab qiladi</h2>'+(r.alerts.length?r.alerts.map(function(a){return '<a class="alert '+a.level+'" href="/api/v2/'+a.page+'"><span>'+esc(a.text)+'</span><span class="go">Ochish ›</span></a>'}).join(''):'<div class="msg ok">✓ Hammasi joyida — muammo topilmadi</div>')+'</section>'
       +'<a class="alert" href="/api/v2/sanoq" style="text-decoration:none"><span>📋 Oy yakuni sanog‘i — pul, ombor va qarzlarni sanash</span><span class="go">Ochish ›</span></a>'
+      +'<a class="alert" href="/api/v2/sozlamalar" style="text-decoration:none;margin-top:-8px"><span>⚙ Sozlamalar — xodim akkauntlari, Telegram, filiallar</span><span class="go">Ochish ›</span></a>'
       +'<a class="alert" href="/api/v2/tarix" style="text-decoration:none;margin-top:-8px"><span>🕘 O‘zgarishlar tarixi — nima o‘chirildi va o‘zgartirildi</span><span class="go">Ochish ›</span></a>'
       +'<a class="alert" href="/api/v2/kochish" style="text-decoration:none;margin-top:-8px"><span>🚀 Yangi tizimga to‘liq o‘tish — tekshiruv ro‘yxati</span><span class="go">Ochish ›</span></a>'
       +'<section class="card"><h2>Savdo</h2><div class="grid">'

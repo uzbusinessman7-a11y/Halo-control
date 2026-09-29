@@ -43,6 +43,8 @@ a{color:var(--accent)}
  .side .nav-a{flex-direction:row;gap:12px;font-size:15px;padding:11px 12px}
  .side .nav-a.on{background:var(--accent-soft);color:var(--accent)}
  .side-foot{margin-top:auto;font-size:12px;color:var(--muted);padding:8px}
+ .side-more{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);display:grid;gap:2px}
+ .side .nav-a.side-extra{font-size:14px;padding:9px 12px}.side-extra .ico{width:24px;text-align:center;font-size:16px}
  .bottom,.top{display:none}
  .content{padding:28px 28px 40px}
 }
@@ -120,6 +122,11 @@ sel.addEventListener('change',function(){try{localStorage.setItem('halo-branch',
 function haloLoading(n){var s='';for(var i=0;i<(n||3);i++)s+='<div class="skeleton" style="margin:10px 0;width:'+(90-i*15)+'%"></div>';return s}
 `;
 
+const SIDE_MORE = [
+  ["/api/v2/sanoq", "▤", "Oy yakuni sanog‘i"], ["/api/v2/tarix", "↺", "O‘zgarishlar tarixi"],
+  ["/api/v2/sozlamalar", "⚙", "Sozlamalar"], ["/api/v2/kochish", "🚀", "To‘liq o‘tish"],
+].map(([href, icon, label]) => `<a class="nav-a side-extra" href="${href}"><span class="ico">${icon}</span><span>${label}</span></a>`).join("");
+
 function navLinks(active: NavKey | null, cls: string) {
   return NAV.map((item) => `<a class="nav-a ${cls}${item.key === active ? " on" : ""}" href="/api/v2/${item.key}"${item.key === active ? ' aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span>${item.label}</span></a>`).join("");
 }
@@ -150,7 +157,7 @@ export function shell(input: ShellInput): string {
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23d4a84b'/%3E%3Ctext x='16' y='23' font-family='Arial' font-weight='900' font-size='20' text-anchor='middle' fill='%23111'%3EH%3C/text%3E%3C/svg%3E">
 <style>${DESIGN_CSS}</style></head><body>
 <div class="app">
-${withNav ? `<aside class="side">${BRAND}${navLinks(input.active, "")}<div class="side-foot">Yangi tizim · sinov rejimi</div></aside>` : ""}
+${withNav ? `<aside class="side">${BRAND}${navLinks(input.active, "")}<div class="side-more">${SIDE_MORE}</div><div class="side-foot">Yangi tizim · sinov rejimi</div></aside>` : ""}
 <div>
 <div class="top"><div class="top-in">${BRAND}</div></div>
 <main class="content">${head}${input.body}</main>
