@@ -65,11 +65,11 @@ function page(branches: Array<{ id: string; name: string }>): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
   return shell({
     title: "Sozlamalar", active: "bosh", heading: "Sozlamalar",
-    subtitle: "Xodim akkauntlari, Telegram bot va filiallar",
+    subtitle: "Xodim akkauntlari va filiallar",
     headerRight: '<select id="branch"></select>',
     body: `<section class="card"><h2>Xodim akkauntlari</h2><p class="hint">Xodim telefonidan <b>/api/v2/xodim</b> sahifasiga login va PIN bilan kiradi: ish boshlash/tugatish, kassa sanog‘i, kirim. Har bir akkauntni xodimga bog‘lang — smena maoshga shu orqali tushadi.</p><div id="acc"></div>
 <div class="row" style="margin-top:12px"><button id="accNew">+ Yangi akkaunt</button></div><div id="accForm"></div></section>
-<section class="card"><h2>Telegram bot</h2><div id="tg"></div></section>
+<section class="card"><h2>Telegram, Google Sheets, API</h2><p class="hint">Ular endi alohida bo‘limda.</p><a href="/api/v2/ulanishlar"><button class="ghost">🔌 Ulanishlarni ochish</button></a></section>
 <section class="card"><h2>Filiallar</h2><div id="br"></div><div class="row" style="margin-top:12px"><button class="ghost" id="brNew">+ Yangi filial</button></div><div id="brForm"></div></section>`,
     script: `
 var BRANCHES=${boot},STAFF=[];
@@ -124,7 +124,7 @@ function loadBranches(){
   });
 }
 document.getElementById('brNew').addEventListener('click',function(){var n=prompt('Yangi filial nomi:');if(!n)return;var a=prompt('Manzil (ixtiyoriy):')||'';req('/api/branches','POST',{name:n,address:a}).then(function(r){if(r.body.error)alert(r.body.error);else location.reload()})});
-function loadAll(){loadAccounts();loadTelegram();loadBranches()}
+function loadAll(){loadAccounts();loadBranches()}
 sel.addEventListener('change',loadAll);loadAll();
 `,
   });

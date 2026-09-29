@@ -43,8 +43,7 @@ a{color:var(--accent)}
  .side .nav-a{flex-direction:row;gap:12px;font-size:15px;padding:11px 12px}
  .side .nav-a.on{background:var(--accent-soft);color:var(--accent)}
  .side-foot{margin-top:auto;font-size:12px;color:var(--muted);padding:8px}
- .side-more{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);display:grid;gap:2px}
- .side .nav-a.side-extra{font-size:14px;padding:9px 12px}.side-extra .ico{width:24px;text-align:center;font-size:16px}
+
  .bottom,.top{display:none}
  .content{padding:28px 28px 40px}
 }
@@ -102,6 +101,13 @@ pre{white-space:pre-wrap;font:14px/1.55 ui-monospace,Menlo,monospace;background:
 @keyframes sk{to{background-position:-200% 0}}
 details summary{cursor:pointer;color:var(--muted);font-size:14px}
 [hidden]{display:none!important}
+.more-btn{position:fixed;z-index:20;top:calc(10px + env(safe-area-inset-top));right:14px;width:44px;height:44px;min-height:44px;padding:0;border-radius:12px;background:var(--card);color:var(--text);border:1px solid var(--line);font-size:24px;line-height:1;font-weight:900}
+.more-panel{position:fixed;z-index:30;top:calc(62px + env(safe-area-inset-top));right:14px;width:min(340px,calc(100vw - 28px));max-height:calc(100dvh - 160px);overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:8px;box-shadow:0 20px 50px rgba(0,0,0,.5)}
+.more-head{display:flex;justify-content:space-between;align-items:center;padding:4px 8px 8px}.more-head button{min-height:34px;padding:4px 10px}
+.more-item{display:flex;gap:12px;align-items:center;padding:11px 10px;border-radius:12px;color:var(--text);text-decoration:none}
+.more-item:hover{background:var(--card-2)}.more-item .ico{width:28px;text-align:center;font-size:18px}.more-item small{display:block;color:var(--muted);font-size:12.5px;font-weight:500}
+@media (min-width:900px){.more-btn{top:24px;right:28px}.more-panel{top:76px;right:28px}.page-head{padding-right:60px}}
+
 .page-head>*{min-width:0;max-width:100%}.page-head .row>*{flex:1 1 140px;min-width:0}select,input{max-width:100%}.content{min-width:0;overflow-x:clip}
 .card h2{text-transform:none;letter-spacing:-.01em;font-size:17px;color:var(--text);font-weight:700}
 .kpi,.tile{background:var(--card)}
@@ -122,10 +128,23 @@ sel.addEventListener('change',function(){try{localStorage.setItem('halo-branch',
 function haloLoading(n){var s='';for(var i=0;i<(n||3);i++)s+='<div class="skeleton" style="margin:10px 0;width:'+(90-i*15)+'%"></div>';return s}
 `;
 
-const SIDE_MORE = [
-  ["/api/v2/sanoq", "▤", "Oy yakuni sanog‘i"], ["/api/v2/tarix", "↺", "O‘zgarishlar tarixi"],
-  ["/api/v2/sozlamalar", "⚙", "Sozlamalar"], ["/api/v2/kochish", "🚀", "To‘liq o‘tish"],
-].map(([href, icon, label]) => `<a class="nav-a side-extra" href="${href}"><span class="ico">${icon}</span><span>${label}</span></a>`).join("");
+/** "⋯" menyu: kam ishlatiladigan bo'limlar — ulanishlar, sozlamalar, nazorat va chiqish. */
+const MORE_MENU = [
+  ["/api/v2/ulanishlar", "🔌", "Ulanishlar", "Telegram, Google Sheets, API"],
+  ["/api/v2/sozlamalar", "⚙️", "Sozlamalar", "Xodim akkauntlari, filiallar"],
+  ["/api/v2/sanoq", "▤", "Oy yakuni sanog‘i", "Pul, ombor, qarz"],
+  ["/api/v2/tarix", "↺", "O‘zgarishlar tarixi", "Nima o‘chirildi, o‘zgartirildi"],
+  ["/api/v2/kochish", "🚀", "To‘liq o‘tish", "Tekshiruv ro‘yxati"],
+  ["/api/v2/xodim", "👷", "Xodim ilovasi", "Xodimlar telefoni uchun"],
+  ["/signout-with-chatgpt", "⎋", "Chiqish", ""],
+].map(([href, icon, label, hint]) => `<a class="more-item" href="${href}"><span class="ico">${icon}</span><span><b>${label}</b>${hint ? `<small>${hint}</small>` : ""}</span></a>`).join("");
+const MORE_UI = `<button class="more-btn" id="moreBtn" aria-label="Yana" aria-expanded="false">⋯</button>
+<div class="more-panel" id="morePanel" hidden><div class="more-head"><b>Yana</b><button class="ghost" id="moreClose" aria-label="Yopish">✕</button></div>${MORE_MENU}</div>`;
+const MORE_SCRIPT = `(function(){var b=document.getElementById('moreBtn'),p=document.getElementById('morePanel');if(!b)return;
+function set(o){p.hidden=!o;b.setAttribute('aria-expanded',o?'true':'false')}
+b.addEventListener('click',function(e){e.stopPropagation();set(p.hidden)});document.getElementById('moreClose').addEventListener('click',function(){set(false)});
+document.addEventListener('click',function(e){if(!p.hidden&&!p.contains(e.target)&&e.target!==b)set(false)});document.addEventListener('keydown',function(e){if(e.key==='Escape')set(false)})})();
+`;
 
 function navLinks(active: NavKey | null, cls: string) {
   return NAV.map((item) => `<a class="nav-a ${cls}${item.key === active ? " on" : ""}" href="/api/v2/${item.key}"${item.key === active ? ' aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span>${item.label}</span></a>`).join("");
@@ -157,13 +176,13 @@ export function shell(input: ShellInput): string {
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23d4a84b'/%3E%3Ctext x='16' y='23' font-family='Arial' font-weight='900' font-size='20' text-anchor='middle' fill='%23111'%3EH%3C/text%3E%3C/svg%3E">
 <style>${DESIGN_CSS}</style></head><body>
 <div class="app">
-${withNav ? `<aside class="side">${BRAND}${navLinks(input.active, "")}<div class="side-more">${SIDE_MORE}</div><div class="side-foot">Yangi tizim · sinov rejimi</div></aside>` : ""}
+${withNav ? `<aside class="side">${BRAND}${navLinks(input.active, "")}<div class="side-foot">Yangi tizim · sinov rejimi</div></aside>` : ""}
 <div>
 <div class="top"><div class="top-in">${BRAND}</div></div>
 <main class="content">${head}${input.body}</main>
 </div>
 </div>
-${withNav ? `<nav class="bottom">${navLinks(input.active, "")}</nav>` : ""}
-<script>${COMMON_SCRIPT}${input.script}</script>
+${withNav ? `<nav class="bottom">${navLinks(input.active, "")}</nav>${MORE_UI}` : ""}
+<script>${COMMON_SCRIPT}${withNav ? MORE_SCRIPT : ""}${input.script}</script>
 </body></html>`;
 }
