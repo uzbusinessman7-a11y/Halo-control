@@ -14,11 +14,9 @@ const NAV: Array<{ key: NavKey; label: string; icon: string }> = [
 ];
 
 export const DESIGN_CSS = `
-:root{color-scheme:light;--bg:#f6f5f2;--card:#ffffff;--card-2:#faf9f7;--text:#1c1917;--muted:#78716c;--line:#e7e5e4;
---accent:#ea580c;--accent-ink:#ffffff;--accent-soft:#ffedd5;--ok:#15803d;--ok-soft:#dcfce7;--bad:#dc2626;--bad-soft:#fee2e2;--warn:#b45309;--warn-soft:#fef3c7;
---shadow:0 1px 2px rgba(28,25,23,.05),0 4px 16px rgba(28,25,23,.04);--radius:18px}
-@media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#0f0e0d;--card:#1a1817;--card-2:#211f1d;--text:#f5f5f4;--muted:#a8a29e;--line:#2e2b29;
---accent:#fb923c;--accent-ink:#1c1917;--accent-soft:#431407;--ok:#4ade80;--ok-soft:#052e16;--bad:#f87171;--bad-soft:#450a0a;--warn:#fbbf24;--warn-soft:#451a03;--shadow:none}}
+:root{color-scheme:dark;--bg:#0b0b0c;--card:#141416;--card-2:#1b1b1e;--text:#f4f4f5;--muted:#9a9aa2;--line:#27272b;
+--accent:#d4a84b;--accent-ink:#111111;--accent-soft:#2c2414;--ok:#4ade80;--ok-soft:#0d2a18;--bad:#f87171;--bad-soft:#3a1111;--warn:#fbbf24;--warn-soft:#33260a;
+--bar:#3a3a40;--shadow:none;--radius:16px}
 *{box-sizing:border-box}html,body{margin:0}
 body{background:var(--bg);color:var(--text);font:16px/1.5 "Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 a{color:var(--accent)}
@@ -27,7 +25,7 @@ a{color:var(--accent)}
 .top{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .top-in{max-width:980px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px}
 .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit}
-.logo{width:34px;height:34px;border-radius:10px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:900;font-size:18px;letter-spacing:-.04em;box-shadow:inset 0 -3px 0 rgba(0,0,0,.12)}
+.logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#e7c77a,#b8862b);color:var(--accent-ink);display:grid;place-items:center;font-weight:900;font-size:18px;letter-spacing:-.04em;box-shadow:inset 0 -3px 0 rgba(0,0,0,.12)}
 .brand b{font-size:17px;letter-spacing:.08em}.brand small{display:block;font-size:11px;color:var(--muted);letter-spacing:.02em;margin-top:-2px}
 .content{max-width:980px;margin:0 auto;padding:18px 16px calc(96px + env(safe-area-inset-bottom));display:grid;gap:16px}
 .page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
@@ -100,8 +98,16 @@ pre{white-space:pre-wrap;font:14px/1.55 ui-monospace,Menlo,monospace;background:
 @keyframes sk{to{background-position:-200% 0}}
 details summary{cursor:pointer;color:var(--muted);font-size:14px}
 [hidden]{display:none!important}
+.card h2{text-transform:none;letter-spacing:-.01em;font-size:17px;color:var(--text);font-weight:700}
+.kpi,.tile{background:var(--card)}
+.alert{background:var(--card-2)!important;color:var(--text)!important;font-weight:600;border:1px solid var(--line)}
+.alert::before{content:"";flex:0 0 8px;height:8px;border-radius:50%;background:var(--warn);margin-right:-2px}
+.alert.bad::before{background:var(--bad)}.alert span:first-child{flex:1}.alert .go{color:var(--muted)}
+.bars .b{background:var(--bar);opacity:1}.bars .b.last{background:var(--accent)}
+.side .nav-a.on{background:var(--accent-soft);color:var(--accent)}
+
 @media (max-width:600px){.grid{grid-template-columns:1fr 1fr;gap:10px}.kpi,.tile{padding:12px}.kpi b,.tile b{font-size:clamp(14px,4.4vw,18px)}.big,.total{font-size:28px}.alert .go{display:none}.alert::after{content:'›';font-size:22px;line-height:1}}
-@media print{.side,.top,.bottom,.noprint{display:none!important}.app{display:block}body{background:#fff;color:#000}.card{border:0;box-shadow:none;padding:0}.content{padding:0}}
+@media print{.side,.top,.bottom,.noprint{display:none!important}.app{display:block}body{background:#fff;color:#000}:root{--text:#000;--muted:#444;--line:#ccc;--card:#fff;--card-2:#fff}.card{border:0;box-shadow:none;padding:0}.content{padding:0}}
 `;
 
 /** Sahifalar uchun umumiy yordamchi: tanlangan filialni eslab qoladi (sahifadan sahifaga). */
@@ -136,9 +142,9 @@ export function shell(input: ShellInput): string {
     : "";
   return `<!doctype html><html lang="uz"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex">
-<meta name="theme-color" content="#ea580c">
+<meta name="theme-color" content="#0b0b0c">
 <title>${input.title} · HALO</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23ea580c'/%3E%3Ctext x='16' y='23' font-family='Arial' font-weight='900' font-size='20' text-anchor='middle' fill='white'%3EH%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23d4a84b'/%3E%3Ctext x='16' y='23' font-family='Arial' font-weight='900' font-size='20' text-anchor='middle' fill='%23111'%3EH%3C/text%3E%3C/svg%3E">
 <style>${DESIGN_CSS}</style></head><body>
 <div class="app">
 ${withNav ? `<aside class="side">${BRAND}${navLinks(input.active, "")}<div class="side-foot">Yangi tizim · sinov rejimi</div></aside>` : ""}
