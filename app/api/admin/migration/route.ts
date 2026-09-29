@@ -1,5 +1,6 @@
 import { isAdminRequest } from "../../../lib/integration-store";
-import { exportDatabase, importDatabase, MigrationError, REPLACE_CONFIRMATION, type D1Like } from "../../../lib/full-migration";
+import { exportDatabase, importBranchExports, importDatabase, MigrationError, REPLACE_CONFIRMATION, type D1Like } from "../../../lib/full-migration";
+import { ensureHaloState } from "../../../lib/halo-store";
 
 declare global {
   var __HALO_CONTROL_DB__: D1Database | undefined;
@@ -46,7 +47,16 @@ export async function POST(request: Request) {
   }
   const owner = String(request.headers.get("oai-authenticated-user-email") || "");
   try {
-    const body = await request.json() as { dump?: unknown; dryRun?: unknown; replaceExisting?: unknown };
+    const body = await request.json() as { dump?: unknown; files?: unknown; dryRun?: unknown; replaceExisting?: unknown };
+    if (body.files !== undefined) {
+      // ChatGPT'siz yo'l: filial zaxira fayllari ("To'liq ma'lumotni yuklash").
+      await ensureHaloState();
+      const branchReport = await importBranchExports(database(), body.files, {
+        dryRun: body.dryRun === true,
+        replaceExisting: String(body.replaceExisting || ""),
+      });
+      return Response.json({ ok: branchReport.ok, branchReport }, { status: branchReport.ok ? 200 : 500 });
+    }
     const report = await importDatabase(database(), body.dump, {
       ownerEmail: owner,
       dryRun: body.dryRun === true,
@@ -88,34 +98,43 @@ table{width:100%;border-collapse:collapse;font-size:14px;margin-top:12px}th,td{t
 <p><b>Diqqat:</b> faylda Telegram bot tokeni va xodimlar ma'lumoti bor — uni hech kimga yubormang.</p>
 <a class="btn" href="${PAGE_PATH}?download=1">↓ Faylni yuklab olish</a></section>
 ${isNewSite ? `<section><h2>2. Yangi saytga yuklash</h2>
-<p>Avval <b>Tekshirish</b> — hech narsa yozilmaydi, faqat fayl butunligi va mosligi tekshiriladi. Keyin <b>Ko'chirish</b>. Ko'chirish bitta tranzaksiyada bajariladi: yo hammasi, yo hech narsa.</p>
-<input type="file" id="file" accept="application/json,.json">
+<p>Ikki xil fayl qabul qilinadi: <b>to'liq ko'chirish fayli</b> yoki eski saytdagi <b>"To'liq ma'lumotni yuklash"</b> fayllari (har bir filial uchun bittadan — hammasini birga tanlang).</p>
+<p>Avval <b>Tekshirish</b> — hech narsa yozilmaydi. Keyin <b>Ko'chirish</b>. Ko'chirish bitta tranzaksiyada bajariladi: yo hammasi, yo hech narsa.</p>
+<input type="file" id="file" accept="application/json,.json" multiple>
 <label><input type="checkbox" id="replace"> Yangi saytda allaqachon kiritilgan ma'lumot bo'lsa ham ustidan yozish (odatda kerak emas)</label>
 <div class="row"><button id="check" class="secondary" disabled>Tekshirish</button><button id="run" disabled>Ko'chirish</button></div>
 <div id="out"></div></section>` : ""}
 </main>
 ${isNewSite ? `<script>
 const file=document.getElementById('file'),check=document.getElementById('check'),run=document.getElementById('run'),out=document.getElementById('out'),replace=document.getElementById('replace');
-let dump=null,checked=false;
+let dump=null,files=null,checked=false;
+const won=n=>Number(n||0).toLocaleString('en-US')+' ₩';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const show=(cls,html)=>{out.innerHTML='<div class="msg '+cls+'">'+html+'</div>'};
-file.addEventListener('change',async()=>{checked=false;run.disabled=true;dump=null;out.innerHTML='';
-  try{dump=JSON.parse(await file.files[0].text());check.disabled=false;show('','Fayl o\\'qildi. Endi "Tekshirish" ni bosing.');}
+file.addEventListener('change',async()=>{checked=false;run.disabled=true;dump=null;files=null;out.innerHTML='';
+  try{const parsed=[];for(const f of file.files)parsed.push(JSON.parse(await f.text()));
+    if(!parsed.length)throw 0;
+    if(parsed.length===1&&parsed[0].format==='halo-control-full-migration'){dump=parsed[0];}
+    else{files=parsed;}
+    check.disabled=false;show('',(dump?'To\\'liq ko\\'chirish fayli':parsed.length+' ta filial fayli')+' o\\'qildi. Endi "Tekshirish" ni bosing.');}
   catch{check.disabled=true;show('bad','Fayl o\\'qilmadi — bu JSON fayl emas.');}});
 async function send(dryRun){
-  const r=await fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dump,dryRun,replaceExisting:replace.checked?'${REPLACE_CONFIRMATION}':''})});
+  const r=await fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign(dump?{dump}:{files},{dryRun,replaceExisting:replace.checked?'${REPLACE_CONFIRMATION}':''}))});
   return r.json().catch(()=>({ok:false,error:'Server javobi o\\'qilmadi.'}));}
+function branchTable(r){return '<table><tr><th>Filial</th><th>Savdolar</th><th>Savdo summasi</th><th>Ombor</th><th>Yetkazuvchi qarzi</th>'+(r.dryRun?'':'<th>Holat</th>')+'</tr>'+r.branches.map(b=>'<tr><td>'+esc(b.branchId)+'</td><td class="n">'+b.summary.sales+'</td><td class="n">'+won(b.summary.salesRevenue)+'</td><td class="n">'+b.summary.inventoryItems+'</td><td class="n">'+won(b.summary.supplierBalance)+'</td>'+(r.dryRun?'':'<td class="'+(b.ok?'ok':'bad')+'">'+(b.ok?'✓ mos':'✗ farq')+'</td>')+'</tr>').join('')+'</table>';}
 function table(report,dry){return '<table><tr><th>Jadval</th><th>Faylda</th>'+(dry?'':'<th>Bazada</th><th>Holat</th>')+'</tr>'+report.tables.map(t=>'<tr><td>'+esc(t.table)+'</td><td class="n">'+t.fileRows+'</td>'+(dry?'':'<td class="n">'+t.databaseRows+'</td><td class="'+(t.ok?'ok':'bad')+'">'+(t.ok?'✓ mos':'✗ farq')+'</td>')+'</tr>').join('')+'</table>';}
 check.addEventListener('click',async()=>{check.disabled=true;show('','Tekshirilmoqda…');
   const res=await send(true);check.disabled=false;
   if(!res.ok){show('bad',esc(res.error||'Xato'));return;}
   checked=true;run.disabled=false;
+  if(res.branchReport){show('ok','✓ Fayllar butun. Ko\\'chirilgandan keyin shu raqamlarni eski saytdagi raqamlar bilan solishtiring:'+branchTable(res.branchReport));return;}
   show('ok','✓ Fayl butun va mos. Manba: '+esc(res.report.source)+'<br>Yuklab olingan: '+esc(res.report.exportedAt)+table(res.report,true));});
 run.addEventListener('click',async()=>{if(!checked)return;
   if(!confirm('Ma\\'lumotlar yangi saytga ko\\'chirilsinmi? Eski saytga tegilmaydi.'))return;
   run.disabled=true;check.disabled=true;show('','Ko\\'chirilmoqda… sahifani yopmang.');
   const res=await send(false);
-  if(!res.ok||!res.report){show('bad',esc(res.error||'Xato')+(res.report?table(res.report,false):''));check.disabled=false;return;}
+  if(res.branchReport&&res.ok){show('ok','✓ Ko\\'chirish tugadi. Har bir filial ma\\'lumoti fayl bilan baytma-bayt mos.<br>Endi xodim loginlari va Telegram botni yangi saytda qayta sozlang.'+branchTable(res.branchReport)+'<p style="margin-top:12px"><a class="btn" href="/">Boshqaruv paneliga o\\'tish</a></p>');return;}
+  if(!res.ok||!res.report){show('bad',esc(res.error||'Xato')+(res.report?table(res.report,false):'')+(res.branchReport?branchTable(res.branchReport):''));check.disabled=false;return;}
   show('ok','✓ Ko\\'chirish tugadi. Barcha jadvallar fayl bilan wonma-won mos.'+(res.report.telegramPaused?'<br>Telegram avtomatik hisoboti yangi saytda vaqtincha to\\'xtatildi (eski sayt yuborishda davom etadi).':'')+table(res.report,false)+'<p style="margin-top:12px"><a class="btn" href="/">Boshqaruv paneliga o\\'tish</a></p>');});
 </script>` : ""}
 </body></html>`;

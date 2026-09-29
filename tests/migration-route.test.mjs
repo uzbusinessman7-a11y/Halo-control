@@ -119,3 +119,15 @@ test('yangi sayt sahifasidagi skript sintaktik jihatdan to‘g‘ri', async () =
   assert.doesNotThrow(() => new vm.Script(script));
   assert.match(script, /HA_ALMASHTIR/);
 });
+
+test('yangi sayt: eski saytdagi "To‘liq ma’lumotni yuklash" fayllari orqali ko‘chirish', async () => {
+  const target = newSite();
+  use(target, true);
+  const files = [{ format: 'halo-control-api-export', branchId: 'main', exportedAt: '2026-09-29T06:00:00Z', updatedAt: 'rev-1', state: { sales: [{ id: 's', totalRevenue: 7000, totalCost: 2100.5 }] } }];
+  const dry = await (await POST(new Request(site, { method: 'POST', headers: asOwner, body: JSON.stringify({ files, dryRun: true }) }))).json();
+  assert.equal(dry.ok, true);
+  assert.equal(dry.branchReport.branches[0].summary.salesRevenue, 7000);
+  const done = await (await POST(new Request(site, { method: 'POST', headers: asOwner, body: JSON.stringify({ files }) }))).json();
+  assert.equal(done.ok, true);
+  assert.equal(target.prepare("SELECT payload FROM app_state WHERE id='main'").get().payload, JSON.stringify(files[0].state));
+});

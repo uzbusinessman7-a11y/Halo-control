@@ -309,3 +309,145 @@ export async function importDatabase(
 
   return { dryRun: false, source: dump.source, exportedAt: dump.exportedAt, tables, ok, telegramPaused };
 }
+
+// ---------------------------------------------------------------------------
+// ChatGPT'siz yo'l: eski saytdagi "To'liq ma'lumotni yuklash" tugmasi fayli.
+// Har bir filial uchun bitta fayl (format: halo-control-api-export).
+// Faqat biznes ma'lumotlari (app_state) ko'chadi; xodim loginlari, Telegram va
+// zaxira tarixi yangi saytda qayta sozlanadi.
+// Ma'lumot fayldagidek yoziladi — hech qanday hisob-kitob qayta qo'llanmaydi.
+// ---------------------------------------------------------------------------
+
+export const BRANCH_EXPORT_FORMATS = new Set(["halo-control-api-export", "halo-control-portable-export"]);
+const BRANCH_ID = /^[a-z0-9][a-z0-9-]{0,79}$/;
+
+export interface BranchExport {
+  format: string;
+  branchId: string;
+  exportedAt: string;
+  updatedAt: string;
+  state: Row;
+}
+
+export interface BranchSummary {
+  sales: number;
+  salesRevenue: number;
+  financialEntries: number;
+  inventoryItems: number;
+  suppliers: number;
+  supplierBalance: number;
+  recipes: number;
+}
+
+export interface BranchReport {
+  branchId: string;
+  exportedAt: string;
+  replaced: boolean;
+  summary: BranchSummary;
+  ok: boolean;
+}
+
+export interface BranchImportReport { dryRun: boolean; ok: boolean; branches: BranchReport[] }
+
+export function isBranchExport(value: unknown): boolean {
+  return Boolean(value && typeof value === "object" && BRANCH_EXPORT_FORMATS.has(String((value as Row).format)));
+}
+
+const list = (value: unknown): Row[] => (Array.isArray(value) ? value as Row[] : []);
+const money = (value: unknown) => (Number.isFinite(Number(value)) ? Number(value) : 0);
+
+/** Eski va yangi saytda solishtirish uchun asosiy jami ko'rsatkichlar. */
+export function summarizeState(state: Row): BranchSummary {
+  const sales = list(state.sales);
+  const suppliers = list(state.suppliers);
+  return {
+    sales: sales.length,
+    salesRevenue: sales.reduce((sum, sale) => sum + Math.round(money(sale.totalRevenue)), 0),
+    financialEntries: list(state.financialEntries).length,
+    inventoryItems: list(state.inventory).length,
+    suppliers: suppliers.length,
+    supplierBalance: suppliers.reduce((sum, supplier) => sum + Math.round(money(supplier.balance)), 0),
+    recipes: list(state.recipes).length,
+  };
+}
+
+export function validateBranchExports(inputs: unknown): BranchExport[] {
+  if (!Array.isArray(inputs) || !inputs.length) throw new MigrationError("Kamida bitta filial fayli tanlang.");
+  const seen = new Set<string>();
+  return inputs.map((input) => {
+    if (!isBranchExport(input)) throw new MigrationError("Fayllardan biri HALO Control filial zaxirasi emas.");
+    const file = input as BranchExport;
+    const branchId = String(file.branchId || "");
+    if (!BRANCH_ID.test(branchId)) throw new MigrationError(`Filial nomi noto'g'ri: ${branchId.slice(0, 40)}`);
+    if (seen.has(branchId)) throw new MigrationError(`"${branchId}" filiali uchun ikkita fayl tanlangan.`);
+    seen.add(branchId);
+    if (!file.state || typeof file.state !== "object" || Array.isArray(file.state)) {
+      throw new MigrationError(`${branchId}: faylda ma'lumot (state) yo'q yoki buzilgan.`);
+    }
+    if (!file.updatedAt || typeof file.updatedAt !== "string") throw new MigrationError(`${branchId}: fayl versiyasi (updatedAt) yo'q.`);
+    return { format: file.format, branchId, exportedAt: String(file.exportedAt || ""), updatedAt: file.updatedAt, state: file.state };
+  });
+}
+
+function payloadHasBusinessData(payload: string | undefined): boolean {
+  if (!payload) return false;
+  try {
+    const state = JSON.parse(payload) as Row;
+    return BUSINESS_KEYS.some((key) => Array.isArray(state[key]) && (state[key] as unknown[]).length > 0);
+  } catch {
+    return true;
+  }
+}
+
+export async function importBranchExports(
+  db: D1Like,
+  inputs: unknown,
+  options: { dryRun?: boolean; replaceExisting?: string; now?: Date } = {},
+): Promise<BranchImportReport> {
+  const files = validateBranchExports(inputs);
+  const existing = new Map<string, { payload: string; updated_at: string }>();
+  for (const file of files) {
+    const row = await db.prepare("SELECT payload, updated_at FROM app_state WHERE id = ?").bind(file.branchId).first<{ payload: string; updated_at: string }>();
+    if (row) existing.set(file.branchId, row);
+  }
+  const busy = files.filter((file) => payloadHasBusinessData(existing.get(file.branchId)?.payload));
+  if (busy.length && options.replaceExisting !== REPLACE_CONFIRMATION) {
+    throw new MigrationError(`Yangi saytda "${busy.map((file) => file.branchId).join(", ")}" filialida allaqachon savdo/ombor ma'lumoti bor. Ustidan yozish uchun alohida tasdiq ("${REPLACE_CONFIRMATION}") kerak.`);
+  }
+
+  const reports = (ok: boolean): BranchReport[] => files.map((file) => ({
+    branchId: file.branchId, exportedAt: file.exportedAt, replaced: existing.has(file.branchId),
+    summary: summarizeState(file.state), ok,
+  }));
+  if (options.dryRun) return { dryRun: true, ok: true, branches: reports(true) };
+
+  const now = (options.now || new Date()).toISOString();
+  const statements: D1StatementLike[] = [];
+  for (const file of files) {
+    const previous = existing.get(file.branchId);
+    if (previous) {
+      // Yangi saytdagi avvalgi holat ham izsiz yo'qolmaydi: zaxira tarixiga yoziladi.
+      statements.push(db.prepare(
+        "INSERT INTO halo_state_backups (id, branch_id, revision, payload, actor, action, section, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      ).bind(crypto.randomUUID(), file.branchId, previous.updated_at, previous.payload, "Ko'chirish", "Eski saytdan ko'chirishdan oldingi holat", "Tizim", now));
+    }
+    statements.push(db.prepare(
+      "INSERT INTO app_state (id, payload, updated_at) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at",
+    ).bind(file.branchId, JSON.stringify(file.state), file.updatedAt));
+    statements.push(db.prepare(
+      "INSERT OR IGNORE INTO halo_branches (id, name, address, active) VALUES (?, ?, '', 1)",
+    ).bind(file.branchId, file.branchId === "main" ? "Asosiy filial" : `Filial ${file.branchId}`));
+  }
+  await db.batch(statements);
+
+  const branches: BranchReport[] = [];
+  for (const file of files) {
+    const row = await db.prepare("SELECT payload, updated_at FROM app_state WHERE id = ?").bind(file.branchId).first<{ payload: string; updated_at: string }>();
+    const ok = Boolean(row && row.payload === JSON.stringify(file.state) && row.updated_at === file.updatedAt);
+    branches.push({
+      branchId: file.branchId, exportedAt: file.exportedAt, replaced: existing.has(file.branchId),
+      summary: row ? summarizeState(JSON.parse(row.payload) as Row) : summarizeState({}), ok,
+    });
+  }
+  return { dryRun: false, ok: branches.every((branch) => branch.ok), branches };
+}

@@ -175,3 +175,57 @@ test('noto‘g‘ri yoki xavfli fayl rad etiladi', async () => {
   sessions.tables.halo_worker_sessions = dump.tables.halo_branches;
   await assert.rejects(validateDump(sessions), /ko'chirilmaydigan/);
 });
+
+// ---- ChatGPT'siz yo'l: filial zaxira fayllari ----
+import { importBranchExports, summarizeState } from '../app/lib/full-migration.ts';
+
+function freshSite() {
+  const db = new DatabaseSync(':memory:');
+  db.exec(`
+    CREATE TABLE app_state (id TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE halo_branches (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, address TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE halo_state_backups (id TEXT PRIMARY KEY NOT NULL, branch_id TEXT NOT NULL, revision TEXT NOT NULL, payload TEXT NOT NULL, actor TEXT NOT NULL DEFAULT 'Rahbar', action TEXT NOT NULL DEFAULT '', section TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+  `);
+  db.prepare('INSERT INTO app_state (id, payload, updated_at) VALUES (?, ?, ?)').run('main', JSON.stringify({ sales: [], inventory: [] }), 'rev-empty');
+  db.prepare('INSERT INTO halo_branches (id, name) VALUES (?, ?)').run('main', 'HALO');
+  return db;
+}
+const branchFile = (branchId, state) => ({ product: 'HALO Control', format: 'halo-control-api-export', apiVersion: '1.0', exportedAt: '2026-09-29T06:00:00.000Z', branchId, updatedAt: `rev-${branchId}`, sections: Object.keys(state).sort(), state });
+const mainState = { sales: [sale('s1', 7000, 2100.5), sale('s2', 7000, 2100.5)], inventory: [{ id: 'goosht', stock: 4200.25 }], suppliers: [{ id: 'nodir', balance: 198000 }], recipes: [{ id: 'shaurma' }], financialEntries: [{ id: 'e1', amount: 50000 }], vegetableExpenseVersion: 1 };
+
+test('filial fayllari: ma’lumot baytma-bayt yoziladi, hisob-kitob qayta qo‘llanmaydi', async () => {
+  const db = freshSite();
+  const files = [branchFile('main', mainState), branchFile('filial-2', { sales: [sale('b1', 9000, 3000)] })];
+  const report = await importBranchExports(d1(db), files);
+  assert.equal(report.ok, true);
+  assert.equal(db.prepare("SELECT payload FROM app_state WHERE id='main'").get().payload, JSON.stringify(mainState));
+  assert.equal(db.prepare("SELECT updated_at FROM app_state WHERE id='main'").get().updated_at, 'rev-main');
+  assert.equal(db.prepare("SELECT name FROM halo_branches WHERE id='filial-2'").get().name, 'Filial filial-2');
+  assert.equal(db.prepare("SELECT name FROM halo_branches WHERE id='main'").get().name, 'HALO', 'mavjud filial nomi saqlanadi');
+  assert.deepEqual(report.branches[0].summary, { sales: 2, salesRevenue: 14000, financialEntries: 1, inventoryItems: 1, suppliers: 1, supplierBalance: 198000, recipes: 1 });
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM halo_state_backups WHERE branch_id='main'").get().n, 1, 'avvalgi bo‘sh holat ham tarixda');
+});
+
+test('filial fayllari: tekshiruv rejimi yozmaydi, band filialga tasdiqsiz yozilmaydi', async () => {
+  const db = freshSite();
+  const dry = await importBranchExports(d1(db), [branchFile('main', mainState)], { dryRun: true });
+  assert.equal(dry.dryRun, true);
+  assert.equal(JSON.parse(db.prepare("SELECT payload FROM app_state WHERE id='main'").get().payload).sales.length, 0);
+  await importBranchExports(d1(db), [branchFile('main', mainState)]);
+  await assert.rejects(importBranchExports(d1(db), [branchFile('main', { sales: [] })]), /HA_ALMASHTIR/);
+  assert.equal(JSON.parse(db.prepare("SELECT payload FROM app_state WHERE id='main'").get().payload).sales.length, 2);
+});
+
+test('filial fayllari: noto‘g‘ri, takroriy yoki xavfli fayl rad etiladi, hech narsa yozilmaydi', async () => {
+  const db = freshSite();
+  await assert.rejects(importBranchExports(d1(db), []), /Kamida bitta/);
+  await assert.rejects(importBranchExports(d1(db), [{ format: 'boshqa' }]), /filial zaxirasi emas/);
+  await assert.rejects(importBranchExports(d1(db), [branchFile('main', mainState), branchFile('main', mainState)]), /ikkita fayl/);
+  await assert.rejects(importBranchExports(d1(db), [branchFile("x'; DROP TABLE app_state;--", mainState)]), /Filial nomi noto'g'ri/);
+  await assert.rejects(importBranchExports(d1(db), [{ ...branchFile('main', mainState), state: [] }]), /state/);
+  assert.equal(JSON.parse(db.prepare("SELECT payload FROM app_state WHERE id='main'").get().payload).sales.length, 0);
+});
+
+test('jami ko‘rsatkichlar buzilgan qiymatlarda ham ishlaydi', () => {
+  assert.deepEqual(summarizeState({ sales: [{ totalRevenue: 'abc' }, { totalRevenue: 1000.4 }], suppliers: 'x' }), { sales: 2, salesRevenue: 1000, financialEntries: 0, inventoryItems: 0, suppliers: 0, supplierBalance: 0, recipes: 0 });
+});
