@@ -1,4 +1,5 @@
 import { calculateAccountBalances } from "./account-balances";
+import { auditBusinessState } from "./business-audit";
 import { isExpenseOnlyInventory } from "./vegetable-expenses";
 import { dispatchBusinessTrendNotification } from "./business-trend-notifications";
 import { isAdminRequest } from "./integration-store";
@@ -333,6 +334,21 @@ function makeSupplierOrderMessage(
   ].join("\n");
 }
 
+/** Kunlik hisobot boshidagi "DIQQAT" bloki: faqat istisnolar (istisno bo'yicha boshqarish). */
+export function controlAlertLines(state: StateShape, reportDate: string): string[] {
+  const [year, month, day] = reportDate.split("-").map(Number);
+  // Hisobot kuni ham tekshirilsin: "bugun" sifatida keyingi kun beriladi.
+  const nextDay = new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10);
+  const audit = auditBusinessState(state as Parameters<typeof auditBusinessState>[0], { today: nextDay });
+  const shown = audit.issues
+    .filter((issue) => issue.severity === "error" || issue.code === "stock_count_shortage")
+    .slice(0, 5)
+    .map((issue) => `${issue.severity === "error" ? "🔴" : "🟡"} ${issue.title}${issue.examples[0] ? ` — ${issue.examples[0]}` : ""}`);
+  return shown.length
+    ? ["🚦 DIQQAT", ...shown, ...(audit.issues.length > shown.length ? [`… yana ${audit.issues.length - shown.length} ta tekshiruv — HALO Control’da.`] : [])]
+    : ["🟢 Kritik farq yo‘q — kassa, ombor va qarzlar tekshirildi."];
+}
+
 export function makeReport(state: StateShape, reportDate: string) {
   const inventory = (Array.isArray(state.inventory) ? state.inventory : []).filter(item => !isExpenseOnlyInventory(item));
   const recipes = Array.isArray(state.recipes) ? state.recipes : [];
@@ -374,6 +390,8 @@ export function makeReport(state: StateShape, reportDate: string) {
     "📊 HALO | KUNLIK HISOBOT",
     `📅 ${displayDate(reportDate)}`,
     "🕛 Hisob oralig‘i: 00:00–23:59",
+    "",
+    ...controlAlertLines(state, reportDate),
     "",
     "💰 MOLIYA",
     `Savdo: ${won(revenue)}`,
