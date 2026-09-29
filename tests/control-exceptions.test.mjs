@@ -72,3 +72,12 @@ test('eski ma’lumot va sanasiz holatda ham audit yiqilmaydi', () => {
   const audit = auditBusinessState({ ...base(), dailyCloses: 'x', stockMovements: null });
   assert.ok(Array.isArray(audit.issues));
 });
+
+test('oy yopilgach, o‘sha oydagi yopilmagan kunlar endi ko‘rsatilmaydi', () => {
+  const state = { ...base(), sales: [sale('a', '2026-09-27'), sale('b', '2026-10-02')], dailyCloses: [] };
+  const before = issue(auditBusinessState(state, { today: '2026-10-05' }), 'unclosed_days');
+  assert.equal(before.count, 2);
+  const after = issue(auditBusinessState({ ...state, monthlyCloses: [{ month: '2026-09' }] }, { today: '2026-10-05' }), 'unclosed_days');
+  assert.equal(after.count, 1);
+  assert.match(after.examples[0], /^2026-10-02/);
+});

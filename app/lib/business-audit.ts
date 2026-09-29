@@ -6,7 +6,7 @@ import { deliveryCommissionAmount } from "./delivery-sales.ts";
 import { calculateAccountBalances } from "./account-balances.ts";
 
 type Row = Record<string, unknown>;
-type State = { accounts?: unknown; sales?: unknown; inventory?: unknown; recipes?: unknown; suppliers?: unknown; transactions?: unknown; financialEntries?: unknown; dailyCloses?: unknown; stockMovements?: unknown; costRules?: { deliveryCommissionPct?: number } };
+type State = { accounts?: unknown; sales?: unknown; inventory?: unknown; recipes?: unknown; suppliers?: unknown; transactions?: unknown; financialEntries?: unknown; dailyCloses?: unknown; monthlyCloses?: unknown; stockMovements?: unknown; costRules?: { deliveryCommissionPct?: number } };
 export type BusinessIssue = {
   code: string;
   severity: "error" | "review";
@@ -109,13 +109,15 @@ export function auditBusinessState(state: State, options: { today?: string } = {
   const today = /^\d{4}-\d{2}-\d{2}$/.test(String(options.today || "")) ? String(options.today) : seoulToday();
   const closes = rows(state.dailyCloses);
   const closedDates = new Set(closes.map((close) => String(close.date || "")));
+  // Yopilgan oy yakunlangan: undagi kunlar endi "yopilmagan kun" deb ko'rsatilmaydi.
+  const closedMonths = new Set(rows(state.monthlyCloses).map((close) => String(close.month || "")));
 
   // 1) Savdo yoki pul harakati bo'lgan, lekin kassasi sanab yopilmagan kunlar.
   const unclosedFrom = daysBefore(today, UNCLOSED_LOOKBACK_DAYS);
   const activityDates = new Set<string>();
   for (const row of [...sales, ...entries]) {
     const date = String(row.date || "");
-    if (date >= unclosedFrom && date < today && !closedDates.has(date)) activityDates.add(date);
+    if (date >= unclosedFrom && date < today && !closedDates.has(date) && !closedMonths.has(date.slice(0, 7))) activityDates.add(date);
   }
   // Kun yopish ma'lumoti umuman berilmagan bo'lsa (masalan, qisman holat), xulosa chiqarilmaydi.
   if (Array.isArray(state.dailyCloses)) add("unclosed_days", "error", `Kassa sanab yopilmagan kunlar (so‘nggi ${UNCLOSED_LOOKBACK_DAYS} kun)`,
