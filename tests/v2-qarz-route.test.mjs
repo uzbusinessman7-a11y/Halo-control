@@ -36,3 +36,23 @@ test('faqat rahbar; ro‘yxat va akt matni', async () => {
   assert.equal(st.statement.closing, 198000);
   assert.match(st.text, /30\.09\.2026 holatiga qarz: 198,000 ₩/);
 });
+
+test('qarz sahifasidan xarid va to‘lov kiritish: eski tizim API orqali saqlanadi va qarz yangilanadi', async () => {
+  const records = await import('../app/api/supplier-records/route.ts');
+  const list = await (await POST(new Request(url, { method: 'POST', headers: owner, body: JSON.stringify({ branchId: 'main' }) }))).json();
+  const party = list.bridge.parties[0];
+  assert.equal(party.oldId, 'n');
+  const payload = JSON.parse(sqlite.prepare("SELECT payload FROM app_state WHERE id = 'main'").get().payload);
+  payload.accounts = [{ id: 'cash', name: 'Naqd', type: 'cash', openingBalance: 500000 }];
+  sqlite.prepare("UPDATE app_state SET payload = ? WHERE id = 'main'").run(JSON.stringify(payload));
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+  const save = (tx) => records.POST(new Request('https://halo.example.workers.dev/api/supplier-records?branch=main', { method: 'POST', headers: owner, body: JSON.stringify({ action: 'saveTransaction', transaction: tx }) }));
+  const p1 = await save({ id: 'v2-test-purchase-1', supplierId: 'n', type: 'purchase', amount: 50000, date: today, note: 'Go‘sht' });
+  assert.equal(p1.status, 200, JSON.stringify(await p1.clone().json()));
+  const p2 = await save({ id: 'v2-test-payment-1', supplierId: 'n', type: 'payment', amount: 100000, date: today, accountId: 'cash' });
+  assert.equal(p2.status, 200);
+  const after = await (await POST(new Request(url, { method: 'POST', headers: owner, body: JSON.stringify({ branchId: 'main' }) }))).json();
+  assert.equal(after.bridge.parties[0].ledgerBalance, 198000 + 50000 - 100000);
+  assert.equal(after.bridge.parties[0].difference, 0);
+  assert.deepEqual(after.accounts, [{ id: 'cash', name: 'Naqd', type: 'cash' }]);
+});

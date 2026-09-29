@@ -22,7 +22,7 @@ export function partyCode(oldId: string): string {
   return `y-${clean}-${hash.toString(36).slice(0, 5)}`;
 }
 
-export interface PartyComparison { partyId: string; name: string; oldBalance: number; ledgerBalance: number; difference: number; oldestUnpaidDate: string | null; ageDays: number | null }
+export interface PartyComparison { partyId: string; oldId: string; name: string; oldBalance: number; ledgerBalance: number; difference: number; oldestUnpaidDate: string | null; ageDays: number | null }
 export interface DebtBridgeReport { posted: number; alreadyPosted: number; reversed: number; corrected: number; changed: string[]; invalid: string[]; parties: PartyComparison[]; totalDebt: number; mismatched: number }
 
 export async function runDebtBridge(db: D1Like, scope: LedgerScope, state: Row, today: string, now = new Date()): Promise<DebtBridgeReport> {
@@ -152,7 +152,7 @@ export async function runDebtBridge(db: D1Like, scope: LedgerScope, state: Row, 
     const oldBalance = Number(supplier.balance) || 0;
     const oldest = ledgerBalance > 0 ? oldestByParty.get(partyId) ?? null : null;
     partyRows.push({
-      partyId, name: String(supplier.name || supplier.id), oldBalance, ledgerBalance, difference: ledgerBalance - oldBalance,
+      partyId, oldId: String(supplier.id), name: String(supplier.name || supplier.id), oldBalance, ledgerBalance, difference: ledgerBalance - oldBalance,
       oldestUnpaidDate: oldest, ageDays: oldest ? Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${oldest}T00:00:00Z`)) / dayMs) : null,
     });
   }
