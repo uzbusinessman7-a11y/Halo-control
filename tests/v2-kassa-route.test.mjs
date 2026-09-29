@@ -110,3 +110,14 @@ test('rahbar sahifasi skripti to‘g‘ri va filial tanlovi bor', async () => {
   assert.match(html, /"role":"owner"/);
   assert.doesNotThrow(() => new vm.Script(scriptOf(html)));
 });
+
+test('pul harakati: yopilgan kunga yozilmaydi; xodimga taqiqlangan', async () => {
+  const owner = { 'oai-authenticated-user-email': 'owner@example.com', 'content-type': 'application/json' };
+  const accounts = await post(owner, { action: 'accounts', branchId: 'main' });
+  assert.equal(accounts.status, 200);
+  const move = { action: 'move', kind: 'transfer', branchId: 'main', operationId: crypto.randomUUID(), accountId: 'account-cash', toAccountId: 'account-bank', amount: 5000, date: today };
+  const t = await post(owner, move);
+  assert.equal(t.status, 409, 'bugun yuqoridagi testda yopilgan');
+  assert.match(t.body.error, /yopilgan/);
+  assert.equal((await post(staff, move)).status, 403);
+});

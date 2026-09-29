@@ -59,7 +59,8 @@ function page(branches: Array<{ id: string; name: string }>): string {
     title: "Qarzlar", active: "qarz", heading: "Qarzlar",
     subtitle: "Yetkazib beruvchilar bilan hisob-kitob va solishtirish akti",
     headerRight: '<select id="branch"></select>',
-    body: `<section class="card noprint" id="listCard"><h2>Yetkazib beruvchilarga qarz</h2><div id="list"><p class="hint">Yuklanmoqda…</p></div></section>
+    body: `<section class="card noprint"><div class="row"><button id="addSup">+ Yangi yetkazib beruvchi</button></div><div id="supForm"></div></section>
+<section class="card noprint" id="listCard"><h2>Yetkazib beruvchilarga qarz</h2><div id="list"><p class="hint">Yuklanmoqda…</p></div></section>
 <section class="card" id="stCard" hidden></section>`,
     script: `
 var BRANCHES=${boot},TODAY='',PARTIES={},ACCOUNTS=[];
@@ -139,6 +140,26 @@ function entryForm(partyId,type){
   });
 }
 sel.addEventListener('change',load);load();
+
+document.getElementById('addSup').addEventListener('click',function(){
+  var box=document.getElementById('supForm'),id='sup-'+(crypto.randomUUID?crypto.randomUUID():String(Date.now()));
+  box.innerHTML='<div style="margin-top:12px"><label class="field"><span>Nomi</span><input id="sName" maxlength="100" placeholder="Masalan: Nodir aka (go‘sht)"></label>'
+    +'<label class="field"><span>Telefon (ixtiyoriy)</span><input id="sPhone" maxlength="60" inputmode="tel"></label>'
+    +'<label class="field"><span>Bank hisob raqami (ixtiyoriy)</span><input id="sBank" maxlength="120"></label>'
+    +'<div class="row"><button id="sSave">Saqlash</button><button class="ghost" id="sCancel">Bekor</button></div><div id="sMsg"></div></div>';
+  document.getElementById('sCancel').addEventListener('click',function(){box.innerHTML=''});
+  document.getElementById('sSave').addEventListener('click',function(){
+    var name=document.getElementById('sName').value.trim(),msg=document.getElementById('sMsg');
+    if(name.length<2){msg.innerHTML='<div class="msg bad">Nomini yozing.</div>';return}
+    var exists=Object.keys(PARTIES).some(function(k){return PARTIES[k].name.toLowerCase()===name.toLowerCase()});
+    if(exists&&!confirm('Shu nomli yetkazib beruvchi bor. Baribir yangisini qo‘shasizmi?'))return;
+    var btn=this;btn.disabled=true;
+    fetch('/api/supplier-records?branch='+encodeURIComponent(sel.value),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveSupplier',supplier:{id:id,name:name,phone:document.getElementById('sPhone').value,bankAccount:document.getElementById('sBank').value}})})
+    .then(function(r){return r.json()}).catch(function(){return {error:'Internet aloqasini tekshiring.'}}).then(function(x){btn.disabled=false;
+      if(!x.ok){msg.innerHTML='<div class="msg bad">'+esc(x.error||'Saqlanmadi.')+'</div>';return}
+      box.innerHTML='<div class="msg ok" style="margin-top:12px">✓ '+esc(name)+' qo‘shildi. Endi uni bosib xarid yoki to‘lov kiritasiz.</div>';load()});
+  });
+});
 `,
   });
 }

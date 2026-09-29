@@ -1,6 +1,7 @@
 import { isAdminRequest } from "../../../lib/integration-store";
 import { authenticateWorkerRequest } from "../../../lib/worker-auth";
-import { listHaloBranches, readHaloState } from "../../../lib/halo-store";
+import { HaloStateConflictError, listHaloBranches, mutateHaloState, readHaloState } from "../../../lib/halo-store";
+import { addMoneyMove, moneyAccounts, MoneyMoveError } from "../../../core/money-moves";
 import { LedgerError } from "../../../core/ledger";
 import { ownerClose, ownerReview, ownerSettle, ownerSummary, staffCount, staffView } from "../../../core/kassa-service";
 import type { D1Like } from "../../../lib/full-migration";
@@ -80,8 +81,18 @@ export async function POST(request: Request) {
         received: Number(body.received), fee: Number(body.fee), memo: String(body.memo || ""),
       }) });
     }
+    if (action === "accounts") return json({ ok: true, today, accounts: moneyAccounts(data) });
+    if (action === "move") {
+      await ownerSummary(db, scope, data, today);
+      const closed = await db.prepare("SELECT MAX(date) AS d FROM v2_day_closes WHERE tenant_id = ? AND branch_id = ?").bind(scope.tenantId, scope.branchId).first<{ d: string | null }>();
+      const mutation = await mutateHaloState((state) => addMoneyMove(state as Record<string, unknown>, body, today, String(closed?.d || "")), 5, branchId, user.name,
+        body.kind === "transfer" ? "Pul o‘tkazmasi" : "Pul kirimi", "Kassa (yangi)");
+      return json({ ok: true, ...mutation.result });
+    }
     return json({ error: "Noma'lum amal." }, 400);
   } catch (error) {
+    if (error instanceof MoneyMoveError) return json({ error: error.message }, error.status);
+    if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     if (error instanceof LedgerError) return json({ error: error.message }, 400);
     if (error instanceof Error && /filial/i.test(error.message)) return json({ error: error.message }, 400);
     return json({ error: "Xatolik yuz berdi. Qayta urinib ko'ring." }, 500);
@@ -145,10 +156,12 @@ function ownerScreen(){
     +'<section class="card"><h2>Pul qayerda</h2><div class="grid" id="balances"></div></section>'
     +'<section class="card"><h2>Karta va delivery — hali tushmagan pul</h2><div class="grid" id="recv"></div><div class="row" style="margin-top:12px"><button class="ghost" id="openSettle">+ Pul bankka tushdi</button></div><div id="settle" hidden></div></section>'
     +'<section class="card"><h2>Kunlar</h2><div id="days"></div><div id="review"></div></section>'
+    +'<section class="card"><h2>Pul harakati</h2><p class="hint">Kassadagi pulni bankka topshirish, bankdan naqd olish, boshqa kirim yoki o‘z pulingizni kiritish.</p><div class="row"><button class="ghost" data-mv="transfer">⇄ O‘tkazma</button><button class="ghost" data-mv="income">＋ Kirim</button></div><div id="moveBox"></div></section>'
     +'<section class="card"><h2>Kassani o‘zim sanayman</h2><div class="row"><button class="ghost" id="openCount">Sanashni boshlash</button></div><div id="ownCount"></div></section>';
   haloBranch(document.getElementById('branch'));document.getElementById('branch').addEventListener('change',load);
   document.getElementById('openCount').addEventListener('click',function(){countForm(document.getElementById('ownCount'),load)});
   document.getElementById('openSettle').addEventListener('click',function(){var s=document.getElementById('settle');s.hidden=!s.hidden});
+  document.querySelectorAll('[data-mv]').forEach(function(b){b.addEventListener('click',function(){moveForm(b.dataset.mv)})});
   load();
 }
 
@@ -228,7 +241,37 @@ function renderSettle(){
     });
   });
 }
+
+function moveForm(kind){
+  var box=document.getElementById('moveBox');box.innerHTML='<p class="hint">Yuklanmoqda…</p>';
+  api({action:'accounts',branchId:branch()}).then(function(res){
+    if(!res.ok){box.innerHTML='<div class="msg bad">'+esc(res.error)+'</div>';return}
+    var acc=res.accounts,op=uid('m').replace(/^m-/,'');
+    if(!/^[a-f0-9-]{36}$/.test(op))op=(crypto.randomUUID?crypto.randomUUID():op);
+    var opts=function(sel){return acc.map(function(a,i){return '<option value="'+esc(a.id)+'"'+(i===sel?' selected':'')+'>'+esc(a.name)+'</option>'}).join('')};
+    var cash=acc.findIndex(function(a){return a.type==='cash'}),bank=acc.findIndex(function(a){return a.type==='bank'});
+    box.innerHTML='<div style="margin-top:12px">'+(kind==='transfer'
+      ?'<label class="field"><span>Qayerdan</span><select id="mFrom">'+opts(cash<0?0:cash)+'</select></label><label class="field"><span>Qayerga</span><select id="mTo">'+opts(bank<0?1:bank)+'</select></label>'
+      :'<label class="field"><span>Kirim turi</span><select id="mKind"><option value="other">Boshqa daromad (foydaga qo‘shiladi)</option><option value="owner">Egasi pul kiritdi (foydaga ta’sir qilmaydi)</option><option value="loan">Qarz olindi (foydaga ta’sir qilmaydi)</option></select></label><label class="field"><span>Qaysi hisobga</span><select id="mFrom">'+opts(cash<0?0:cash)+'</select></label>')
+      +'<label class="field"><span>Summa</span><input class="money" id="mAmt" inputmode="numeric" placeholder="0"></label>'
+      +'<label class="field"><span>Sana</span><input type="date" id="mDate" value="'+esc(res.today)+'" max="'+esc(res.today)+'"></label>'
+      +'<label class="field"><span>Izoh'+(kind==='transfer'?' (ixtiyoriy)':'')+'</span><input id="mNote" maxlength="200"></label>'
+      +'<button class="block" id="mSave">Saqlash</button><div id="mMsg"></div></div>';
+    moneyInput(document.getElementById('mAmt'));
+    document.getElementById('mSave').addEventListener('click',function(){
+      var amount=parseWon(document.getElementById('mAmt').value)||0,msg=document.getElementById('mMsg');
+      if(!amount){msg.innerHTML='<div class="msg bad">Summani yozing.</div>';return}
+      var body={action:'move',kind:kind,branchId:branch(),operationId:op,accountId:document.getElementById('mFrom').value,amount:amount,date:document.getElementById('mDate').value,note:document.getElementById('mNote').value};
+      if(kind==='transfer')body.toAccountId=document.getElementById('mTo').value;else body.incomeKind=document.getElementById('mKind').value;
+      if(!confirm((kind==='transfer'?'O‘tkazma':'Kirim')+': '+won(amount)+'. Saqlansinmi?'))return;
+      this.disabled=true;var btn=this;
+      api(body).then(function(x){btn.disabled=false;
+        if(!x.ok){msg.innerHTML='<div class="msg bad">'+esc(x.error)+'</div>';return}
+        box.innerHTML='<div class="msg ok" style="margin-top:12px">✓ Saqlandi'+(x.alreadySaved?' (oldin saqlangan edi)':'')+'</div>';load();
+      });
+    });
+  });
+}
 `,
   });
 }
-
