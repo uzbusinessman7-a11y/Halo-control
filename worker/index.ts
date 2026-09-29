@@ -26,6 +26,7 @@ interface ExecutionContext {
 declare global {
   var __HALO_CONTROL_DB__: D1Database | undefined;
   var __HALO_CONTROL_BUCKET__: R2Bucket | undefined;
+  var __HALO_SELF_HOSTED__: boolean | undefined;
 }
 
 // Image security config. SVG sources with .svg extension auto-skip the
@@ -39,6 +40,7 @@ const worker = {
     globalThis.__HALO_ASSISTANT_AI__ = { key: env.OPENAI_API_KEY || "", model: env.HALO_AI_MODEL || "gpt-4o-mini" };
     globalThis.__HALO_CONTROL_DB__ = env.DB;
     globalThis.__HALO_CONTROL_BUCKET__ = env.BUCKET;
+    globalThis.__HALO_SELF_HOSTED__ = env.HALO_SELF_HOSTED === "1";
     const url = new URL(request.url);
 
     if (url.pathname === "/_vinext/image") {
