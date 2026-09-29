@@ -1,5 +1,6 @@
 "use client";
 import InventoryAccountingPanel from "./inventory-accounting-panel";
+import { wholeWon } from "./lib/sale-cost";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { categoriesForKind, type ProductCategory } from "./lib/product-categories";
@@ -1821,8 +1822,8 @@ export default function ControlCenter({
           Hisob: account?.name || sale.accountId || "Karta / POS",
           Menyu_qiymati: sale.totalRevenue,
           Moliyaviy_savdo: inventoryOnly ? 0 : sale.totalRevenue,
-          Tannarx: inventoryOnly ? 0 : sale.totalCost,
-          Foyda: inventoryOnly ? 0 : sale.totalRevenue - sale.totalCost,
+          Tannarx: inventoryOnly ? 0 : wholeWon(sale.totalCost),
+          Foyda: inventoryOnly ? 0 : sale.totalRevenue - wholeWon(sale.totalCost),
         };
       })), "Savdo");
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(selectActiveFinancialEntries(data.financialEntries).map((entry) => ({
