@@ -226,7 +226,7 @@ function renderSettle(){
     +'<label class="field"><span>Qayerga tushdi</span><select id="sTo">'+to.map(function(b){return '<option value="'+esc(b.id)+'">'+esc(b.name)+'</option>'}).join('')+'</select></label>'
     +'<label class="field"><span>Sana</span><input type="date" id="sDate" value="'+esc(s.date)+'" max="'+esc(s.date)+'"></label>'
     +'<label class="field"><span>Bankka tushgan summa</span><input class="money" id="sRecv" inputmode="numeric" placeholder="0"></label>'
-    +'<label class="field"><span>Komissiya (ushlab qolingan)</span><input class="money" id="sFee" inputmode="numeric" placeholder="0"></label>'
+    +'<label class="field"><span>Qo‘shimcha ushlanma (faqat farq bo‘lsa)</span><input class="money" id="sFee" inputmode="numeric" placeholder="0"><small class="hint">Karta komissiyasi va delivery ushlanmasi savdoda avtomatik ayirilgan. Bu yerga faqat kutilgandan ortiq ushlangan summani yozing.</small></label>'
     +'<label class="field"><span>Izoh (ixtiyoriy)</span><input id="sMemo" maxlength="120"></label>'
     +'<button class="block" id="doSettle">Saqlash</button><div id="sMsg"></div></div>';
   moneyInput(document.getElementById('sRecv'));moneyInput(document.getElementById('sFee'));

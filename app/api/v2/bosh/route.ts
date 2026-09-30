@@ -111,7 +111,8 @@ function load(){
       +'<div class="grid">'
       +kpi('Oziq-ovqat'+(p.foodPercent!=null?' · '+p.foodPercent+'%':''),won(p.food),'retsept '+won(p.theoreticalFood)+' · chiqit '+won(p.waste)+' · kamomad '+won(p.countLoss))
       +kpi('Ish haqi'+(p.laborPercent!=null?' · '+p.laborPercent+'%':''),won(p.labor),'hisoblangan maosh, bonus bilan')
-      +kpi('Boshqa xarajatlar',won(r.expenses.monthToDate),'xarajat, komissiya, kassa farqi')
+      +kpi('Boshqa xarajatlar',won(r.expenses.monthToDate),'xarajat, komissiya, soliq, kassa farqi')
+      +kpi('Avtomatik ushlanma',won(r.deductions.commission+r.deductions.tax),'komissiya '+won(r.deductions.commission)+' · soliq '+won(r.deductions.tax)+(r.deductions.taxReserve?' · to‘lanadigan soliq zaxirasi '+won(r.deductions.taxReserve):''))
       +'</div></section>'
       +'<section class="card"><h2>Pul va majburiyatlar</h2><div class="grid">'
       +kpi('Kassa (naqd)',won(r.money.cash))+kpi('Bank',won(r.money.bank))

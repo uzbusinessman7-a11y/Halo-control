@@ -278,6 +278,7 @@ export function applyPosOrder(
   input: PosOrderInput,
   worker: { id: string; name: string },
   createdAt = new Date().toISOString(),
+  options: { ownerEntry?: boolean } = {},
 ): { state: JsonRecord; result: PosMutationResult } {
   const today = seoulBusinessDate(new Date(createdAt));
   const date = input.date === undefined ? today : String(input.date).trim();
@@ -374,7 +375,9 @@ export function applyPosOrder(
     if(delivery && !unitPrice)throw new PosTerminalError(`“${cleanText(recipe.name,120)}” uchun delivery narxi kiritilmagan. Rahbar narx belgilashi kerak.`,409);
     preparedItems.push({ recipe, recipeId, quantity, unitPrice:unitPrice! });
   }
-  const allowsUnstockedSale = delivery || input.paymentType === "cash" || input.paymentType === "bank";
+  // Rahbar keyin kiritayotgan karta savdosi allaqachon bo'lgan — ombor yetmasa ham yoziladi (kamomad qayd etiladi).
+  // Kassadagi xodim terminalida esa karta savdosi uchun ombor nazorati saqlanadi.
+  const allowsUnstockedSale = delivery || input.paymentType === "cash" || input.paymentType === "bank" || (input.paymentType === "card" && options.ownerEntry === true);
   for (const [inventoryId, required] of requirements) {
     const item = inventoryById.get(inventoryId)!;
     const stock = Number(item.stock || 0);
@@ -472,7 +475,8 @@ export function applyPosOrder(
       date,
       source: delivery ? "delivery" : "pos",
       ...(delivery ? {deliveryPlatform:platform,deliveryOrderNumber:deliveryNumber,deliveryBatchId:orderId,deliveryCommissionAmount:allocated[itemIndex].total,deliveryCommissionPct:gross?calculateDeliveryManualFees(gross,deliveryFees).total/gross*100:0,deliveryFeeBreakdown:allocated[itemIndex],deliveryManualFees:deliveryFees,soldAt:date === today ? createdAt : date,createdAt,posOrderId:orderId} : {}),
-      taxTreatment: "accountant_managed",
+      // Soliq faqat POS (karta) savdosidan avtomatik ushlanadi; naqd/hisob-raqam/delivery — yo'q.
+      taxTreatment: accountType === "card" ? "automatic" : "accountant_managed",
       externalId: `${orderId}:${itemIndex}`,
       stockUsage,
       ...(lineShortages.length ? { stockShortages: lineShortages } : {}),

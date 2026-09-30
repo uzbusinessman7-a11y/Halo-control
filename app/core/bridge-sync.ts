@@ -162,7 +162,8 @@ export async function runBridge(db: D1Like, scope: LedgerScope, state: Row, toda
   const oldBalances = calculateAccountBalances(state, "9999-12-31").balances;
   const ledger = await rawBalances(db, scope);
   const comparison = plan.moneyAccounts.map((account) => {
-    const oldBalance = oldBalances.get(account.oldId) || 0;
+    // Eski tizim qoldig'i avtomatik komissiyani ayirmaydi — solishtirishda ayiriladi.
+    const oldBalance = (oldBalances.get(account.oldId) || 0) - (plan.feeByOldAccount.get(account.oldId) || 0);
     const ledgerBalance = ledger.get(idByCode.get(account.code)!) || 0;
     return { oldId: account.oldId, name: account.name, oldBalance, ledgerBalance, difference: ledgerBalance - oldBalance };
   });

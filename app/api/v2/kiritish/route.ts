@@ -4,6 +4,7 @@ import { costRuleCoversCategory } from "../../../lib/daily-report";
 import { isAccountingMonthClosed } from "../../../lib/month-end";
 import { expenseOnlyOnDate } from "../../../lib/vegetable-expenses";
 import { DELIVERY_PLATFORMS } from "../../../lib/delivery-sales";
+import { readDeductionRules } from "../../../core/deductions";
 import { shell } from "../../../core/ui-shell";
 
 declare global {
@@ -88,13 +89,15 @@ function addExpense(state: Row, body: Row, today: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today) throw new EntryError("Sanani tekshiring (kelajak bo‘lmasin).");
   if (isAccountingMonthClosed(state.monthlyCloses, date)) throw new EntryError(`${date.slice(0, 7)} oyi yopilgan. Ochiq oy sanasini tanlang.`, 409);
   if (!moneyAccounts(state).some((account) => account.id === accountId)) throw new EntryError("Pul qaysi hisobdan chiqqanini tanlang.");
-  if (costRuleCoversCategory(category, state.costRules as never)) throw new EntryError("Bu xarajat avtomatik hisoblanadi — qayta kiritmang.");
+  // Soliq POS savdosidan avtomatik zaxiraga yig'iladi: to'langan soliq zaxirani yopadi, foydaga qayta tushmaydi.
+  const paysTaxReserve = category === "Soliq" && costRuleCoversCategory(category, state.costRules as never);
+  if (!paysTaxReserve && costRuleCoversCategory(category, state.costRules as never)) throw new EntryError("Bu xarajat avtomatik hisoblanadi — qayta kiritmang.");
   const reason = clean(body.duplicateReason, 200);
   const twin = entries.find((entry) => entry.type === "expense" && entry.date === date && Number(entry.amount) === amount && entry.category === category && !entry.voided && !entry.cancelledAt);
   if (twin && reason.length < 3) throw new EntryError("Shu kuni aynan shu turdagi va shu summadagi xarajat bor. Bu boshqa xarajat bo‘lsa, sababini yozing.", 409, "DUPLICATE");
   const entry = {
     id, type: "expense", category, amount, date, accountId,
-    note: [name, note].filter(Boolean).join(" · "), affectsProfit: true,
+    note: [paysTaxReserve ? "Soliq to‘lovi (avtomatik zaxiradan)" : "", name, note].filter(Boolean).join(" · "), affectsProfit: !paysTaxReserve,
     createdByName: "Rahbar", createdAt: new Date().toISOString(),
     ...(twin ? { duplicateOf: twin.id, duplicateReason: reason } : {}),
   };
@@ -115,7 +118,7 @@ export async function POST(request: Request) {
     }
     const { state } = await readHaloState(branchId);
     return json({
-      ok: true, today, inventory: inventoryChoices(state as Row, today), platforms: DELIVERY_PLATFORMS,
+      ok: true, today, inventory: inventoryChoices(state as Row, today), platforms: DELIVERY_PLATFORMS, rules: readDeductionRules(state as Row),
       accounts: moneyAccounts(state as Row), categories: EXPENSE_CATEGORIES, expenses: monthExpenses(state as Row, today),
     });
   } catch (error) {
@@ -179,7 +182,8 @@ function renderSale(){
   var groups=cats.map(function(c){return {name:c.name,items:items.filter(function(i){return i.categoryId===c.id})}}).filter(function(g){return g.items.length});
   var rest=items.filter(function(i){return !cats.some(function(c){return c.id===i.categoryId})});if(rest.length)groups.push({name:groups.length?'Boshqa':'Menyu',items:rest});
   pane.innerHTML='<section class="card"><h2>To‘lov turi</h2><div class="pay">'
-    +[['cash','💵 Naqd'],['bank','🏦 Hisob-raqam'],['delivery','🛵 Delivery']].map(function(p){return '<button class="'+(PAY===p[0]?'':'ghost')+'" data-pay="'+p[0]+'">'+p[1]+'</button>'}).join('')+'</div>'
+    +[['card','💳 Karta (POS)'],['cash','💵 Naqd'],['bank','🏦 Hisob-raqam'],['delivery','🛵 Delivery']].map(function(p){return '<button class="'+(PAY===p[0]?'':'ghost')+'" data-pay="'+p[0]+'">'+p[1]+'</button>'}).join('')+'</div>'
+    +(PAY==='card'&&DATA.rules?'<p class="hint" style="margin:10px 0 0">Avtomatik ushlanadi: soliq '+DATA.rules.taxPct+'% · karta komissiyasi '+DATA.rules.cardPct+'%. <a href="/api/v2/ushlanmalar">O‘zgartirish</a></p>':'')
     +(PAY==='delivery'?'<div class="row" style="margin-top:12px"><select id="plat" style="flex:1">'+DATA.platforms.map(function(p){return '<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>'}).join('')+'</select><input id="ordNo" maxlength="64" placeholder="Buyurtma raqami (ixtiyoriy)" style="flex:1"></div><p class="hint" style="margin:8px 0 0">Delivery narxi va platforma ushlanmalari avtomatik hisoblanadi.</p>':'')
     +'</section>'
     +groups.map(function(g){return '<section class="card"><h2>'+esc(g.name)+'</h2><div class="menu-grid">'+g.items.map(function(i){var q=CART[i.id]||0,p=price(i);
