@@ -6,15 +6,15 @@
  * o'zgartirilsa ham eski savdolar qayta hisoblanmaydi (eski tizim qoidasi, app/lib/sale-financial-snapshots.ts).
  *
  * Qoidalar (eski tizim bilan bir xil):
- *  - Soliq: faqat POS (karta) savdosidan, savdo × foiz. Naqd, hisob-raqam va delivery savdosiga soliq yozilmaydi.
+ *  - Soliq: POS apparati orqali (karta yoki naqd) va delivery savdosidan, savdo × foiz.
+ *    HALO hisob (naqd pul va hisob-raqamga o'tkazma) — soliqsiz.
  *  - Karta komissiyasi: faqat karta savdosidan, savdo × foiz. Pul kutilayotgan summadan ayriladi.
  *  - Delivery: har platforma uchun umumiy ushlanma foizi + har buyurtmadan qat'iy summa (₩).
  * Har bir summa savdo bo'yicha bir marta butun wonga yaxlitlanadi.
  */
 import { DELIVERY_PLATFORMS, deliveryCombinedPercent, deliveryCommissionAmount, deliveryFeeRuleForPlatform, withSimpleDeliveryRule, type DeliveryPlatform, type DeliveryPlatformRules } from "../lib/delivery-sales";
 import { validCostRules } from "../lib/daily-report";
-import { saleAccountType, saleCardCommissionPercent, saleTaxPercent } from "../lib/sale-financial-snapshots";
-import { isAutomaticTaxSale } from "../lib/sale-tax";
+import { saleAccountType, saleCardCommissionPercent } from "../lib/sale-financial-snapshots";
 
 type Row = Record<string, unknown>;
 
@@ -100,9 +100,13 @@ export function saleDeductions(sale: Row, state: Row, accountTypeById: Map<strin
   const accountType = saleAccountType(sale, accountTypeById.get(String(sale.accountId ?? "account-card")) || "card");
   const card = accountType === "card" ? Math.round(revenue * saleCardCommissionPercent(sale, rules.cardCommissionPct) / 100) : 0;
   const delivery = accountType === "delivery" ? Math.max(0, deliveryCommissionAmount(sale, rules.deliveryCommissionPct)) : 0;
-  // Soliq faqat POS (karta) savdosidan.
-  const tax = accountType === "card" && isAutomaticTaxSale(sale, accountType)
-    ? Math.round(revenue * saleTaxPercent(sale, rules.taxPct) / 100) : 0;
+  // Soliq: POS apparati (karta yoki naqd) va delivery savdosidan. HALO hisob (naqd/hisob-raqam) — soliqsiz.
+  // Savdoga yozilgan foiz ustun; eski (foizi yozilmagan) savdolarda: karta va delivery — joriy foiz, qolgani — 0.
+  const saved = sale.taxPctAtSale === undefined || sale.taxPctAtSale === null || sale.taxPctAtSale === "" ? NaN : Number(sale.taxPctAtSale);
+  const taxPct = Number.isFinite(saved) && saved >= 0 && saved <= 100
+    ? saved
+    : accountType === "card" || accountType === "delivery" ? clampPct(rules.taxPct) : 0;
+  const tax = Math.round(revenue * taxPct / 100);
   return { card: Math.min(card, revenue), delivery: Math.min(delivery, revenue), tax, accountType };
 }
 
@@ -113,9 +117,10 @@ export function exampleDeductions(rules: DeductionRulesView, amount = 10_000) {
   return {
     amount,
     card: { commission: card, tax, net: amount - card - tax },
+    posCash: { tax, net: amount - tax },
     delivery: rules.platforms.map((platform) => {
       const fee = Math.min(amount, Math.round(amount * platform.pct / 100) + platform.feeWon);
-      return { id: platform.id, label: platform.label, fee, net: amount - fee };
+      return { id: platform.id, label: platform.label, fee, tax, net: amount - fee - tax };
     }),
   };
 }

@@ -11,6 +11,7 @@ const { homeReport } = await import('../app/core/home.ts');
 const route = await import('../app/api/v2/ushlanmalar/route.ts');
 const pos = await import('../app/api/pos-terminal/route.ts');
 const kiritish = await import('../app/api/v2/kiritish/route.ts');
+const posRoute = await import('../app/api/v2/pos/route.ts');
 
 function d1(sqlite) {
   const make = (query, params = []) => ({
@@ -40,16 +41,20 @@ test('foizlar: bir marta saqlanadi, tekshiriladi, boshqa delivery sozlamalari sa
   const ex = exampleDeductions(view);
   assert.deepEqual(ex.card, { commission: 150, tax: 1000, net: 8850 });
   assert.equal(ex.delivery.find((d) => d.id === 'coupang').fee, 1540 + 3400);
+  assert.deepEqual(ex.posCash, { tax: 1000, net: 9000 });
 });
 
-test('har savdodan: soliq faqat POS (karta), komissiya karta/delivery; savdodagi foiz ustun', () => {
+test('har savdodan: soliq POS va delivery’dan, HALO hisobdan emas; komissiya karta/delivery; savdodagi foiz ustun', () => {
   const state = { costRules: { taxPct: 10, cardCommissionPct: 2 } };
   const types = new Map([['card', 'card'], ['cash', 'cash'], ['bank', 'bank'], ['dl', 'delivery']]);
   assert.deepEqual(saleDeductions({ totalRevenue: 12345, accountId: 'card', source: 'pos', taxTreatment: 'automatic', cardCommissionPctAtSale: 1.5, taxPctAtSale: 10, accountTypeAtSale: 'card' }, state, types),
     { card: 185, delivery: 0, tax: 1235, accountType: 'card' });
   assert.deepEqual(saleDeductions({ totalRevenue: 9000, accountId: 'cash', source: 'pos', taxTreatment: 'automatic' }, state, types), { card: 0, delivery: 0, tax: 0, accountType: 'cash' });
   assert.deepEqual(saleDeductions({ totalRevenue: 9000, accountId: 'bank', source: 'pos' }, state, types), { card: 0, delivery: 0, tax: 0, accountType: 'bank' });
-  assert.deepEqual(saleDeductions({ totalRevenue: 20000, accountId: 'dl', source: 'delivery', deliveryPlatform: 'coupang', deliveryCommissionAmount: 4480 }, state, types), { card: 0, delivery: 4480, tax: 0, accountType: 'delivery' });
+  assert.deepEqual(saleDeductions({ totalRevenue: 20000, accountId: 'dl', source: 'delivery', deliveryPlatform: 'coupang', deliveryCommissionAmount: 4480 }, state, types), { card: 0, delivery: 4480, tax: 2000, accountType: 'delivery' });
+  // POS apparati orqali naqd: savdoda yozilgan foiz bo'yicha soliq.
+  assert.equal(saleDeductions({ totalRevenue: 9000, accountId: 'cash', salesChannel: 'pos', taxPctAtSale: 10 }, state, types).tax, 900);
+  assert.equal(saleDeductions({ totalRevenue: 9000, accountId: 'cash', salesChannel: 'halo', taxPctAtSale: 0 }, state, types).tax, 0);
   // Saqlangan 0 — ataylab: joriy foiz qo'llanmaydi.
   assert.equal(saleDeductions({ totalRevenue: 10000, accountId: 'card', taxTreatment: 'automatic', cardCommissionPctAtSale: 0, taxPctAtSale: 0, accountTypeAtSale: 'card' }, state, types).tax, 0);
 });
@@ -89,23 +94,28 @@ test('to‘liq oqim: sahifada saqlash → karta/naqd/delivery savdo → jurnal v
   assert.equal(saved.ok, true);
   assert.equal(saved.rules.taxPct, 10);
 
-  const sell = (paymentType, extra = {}) => pos.POST(new Request(base + '/api/pos-terminal', { method: 'POST', headers: owner, body: JSON.stringify({ operationId: crypto.randomUUID().replace(/-/g, ''), date: today, mode: 'sale', paymentType, branchId: 'main', items: [{ recipeId: 'd', quantity: 1 }], ...extra }) }));
-  const card = await sell('card');
-  assert.equal(card.status, 200, 'rahbar kiritgan karta savdosi ombor 0 bo‘lsa ham saqlanadi');
-  assert.equal((await sell('cash')).status, 200);
-  assert.equal((await sell('delivery', { deliveryPlatform: 'coupang', expectedTotal: 12000 })).status, 200);
+  const posUrl = base + '/api/v2/pos';
+  const posCall = async (body) => (await posRoute.POST(new Request(posUrl, { method: 'POST', headers: owner, body: JSON.stringify({ branchId: 'main', operationId: crypto.randomUUID().replace(/-/g, ''), ...body }) }))).json();
+  const card = await posCall({ action: 'sale', paymentType: 'card', items: [{ recipeId: 'd', quantity: 1 }] });
+  assert.equal(card.ok, true, 'karta savdosi ombor 0 bo‘lsa ham saqlanadi: ' + JSON.stringify(card.error));
+  assert.equal((await posCall({ action: 'sale', paymentType: 'cash', items: [{ recipeId: 'd', quantity: 1 }] })).ok, true);
+  assert.equal((await posCall({ action: 'sale', paymentType: 'delivery', deliveryPlatform: 'coupang', expectedTotal: 12000, items: [{ recipeId: 'd', quantity: 1 }] })).ok, true);
+  // HALO hisob (Kiritish): naqd — soliqsiz.
+  const halo = await pos.POST(new Request(base + '/api/pos-terminal', { method: 'POST', headers: owner, body: JSON.stringify({ operationId: crypto.randomUUID().replace(/-/g, ''), date: today, mode: 'sale', paymentType: 'cash', branchId: 'main', items: [{ recipeId: 'd', quantity: 1 }] }) }));
+  assert.equal(halo.status, 200);
 
   const state = JSON.parse(sqlite.prepare("SELECT payload FROM app_state WHERE id = 'main'").get().payload);
   const cardSale = state.sales.find((s) => s.accountTypeAtSale === 'card');
-  assert.equal(cardSale.taxTreatment, 'automatic');
   assert.equal(cardSale.taxPctAtSale, 10);
   assert.equal(cardSale.cardCommissionPctAtSale, 1.5);
-  assert.equal(state.sales.find((s) => s.accountTypeAtSale === 'cash').taxPctAtSale, 0);
+  assert.equal(state.sales.find((s) => s.salesChannel === 'pos' && s.accountTypeAtSale === 'cash').taxPctAtSale, 10, 'POS naqd — soliq');
+  assert.equal(state.sales.find((s) => s.salesChannel === 'halo').taxPctAtSale, 0, 'HALO hisob — soliqsiz');
+  assert.equal(state.sales.find((s) => s.salesChannel === 'delivery').taxPctAtSale, 10, 'delivery — soliq');
 
   const report = await homeReport(globalThis.__HALO_CONTROL_DB__, { tenantId: 'halo', branchId: 'main' }, state, today);
-  assert.equal(report.deductions.tax, 1000, 'soliq faqat karta savdosidan');
+  assert.equal(report.deductions.tax, 1000 + 1000 + 1200, 'karta + POS naqd + delivery; HALO hisob — yo‘q');
   assert.equal(report.deductions.commission, 150 + 1200 + 1000, 'karta 1.5% + delivery 10% + 1000₩');
-  assert.equal(report.deductions.taxReserve, 1000);
+  assert.equal(report.deductions.taxReserve, 3200);
   const bridge = await runBridge(globalThis.__HALO_CONTROL_DB__, { tenantId: 'halo', branchId: 'main' }, state, today);
   assert.equal(bridge.ok, true, 'eski tizim qoldig‘i bilan solishtirish komissiyani hisobga oladi');
   assert.equal(bridge.posted, 0, 'qayta ishga tushirish takror yozmaydi');
