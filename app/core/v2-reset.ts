@@ -25,3 +25,13 @@ export async function resetV2Journals(db: D1Like): Promise<string[]> {
   }
   return dropped;
 }
+
+/** Noldan boshlashda: sinov paytidagi oy yakuni sanoqlari ham o'chadi (yangi oy — yangi sanoq). */
+export async function clearPeriodCounts(db: D1Like): Promise<number> {
+  if (!await isParallelMode()) throw new Error("To'liq o'tishdan keyin sanoqlarni o'chirib bo'lmaydi.");
+  const exists = await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'v2_period_counts'").first<{ name: string }>();
+  if (!exists) return 0;
+  const row = await db.prepare("SELECT COUNT(*) AS n FROM v2_period_counts").first<{ n: number }>();
+  await db.prepare("DELETE FROM v2_period_counts").run();
+  return Number(row?.n || 0);
+}

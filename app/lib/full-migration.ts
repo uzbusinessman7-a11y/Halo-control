@@ -16,6 +16,8 @@
  *   saytda avtomatik hisobot to'xtatiladi (eski sayt yuborishda davom etadi).
  */
 
+import { toBaseState, type BaseResetReport } from "./base-reset.ts";
+
 type Row = Record<string, unknown>;
 type Value = string | number | null;
 
@@ -345,6 +347,8 @@ export interface BranchReport {
   replaced: boolean;
   summary: BranchSummary;
   ok: boolean;
+  /** Faqat "noldan boshlash" rejimida: nima saqlandi, nima nolga tushdi. */
+  base?: BaseResetReport;
 }
 
 export interface BranchImportReport { dryRun: boolean; ok: boolean; branches: BranchReport[] }
@@ -402,9 +406,16 @@ function payloadHasBusinessData(payload: string | undefined): boolean {
 export async function importBranchExports(
   db: D1Like,
   inputs: unknown,
-  options: { dryRun?: boolean; replaceExisting?: string; now?: Date } = {},
+  options: { dryRun?: boolean; replaceExisting?: string; now?: Date; baseOnly?: string } = {},
 ): Promise<BranchImportReport> {
-  const files = validateBranchExports(inputs);
+  const baseReports = new Map<string, BaseResetReport>();
+  const files = validateBranchExports(inputs).map((file) => {
+    if (!options.baseOnly) return file;
+    // Noldan boshlash: fayldan faqat bazaviy ma'lumot olinadi, qoldiq/qarz/tarix nol.
+    const { state, report } = toBaseState(file.state as Row, options.baseOnly);
+    baseReports.set(file.branchId, report);
+    return { ...file, state, updatedAt: `${(options.now || new Date()).toISOString()}-${crypto.randomUUID()}` };
+  });
   const existing = new Map<string, { payload: string; updated_at: string }>();
   for (const file of files) {
     const row = await db.prepare("SELECT payload, updated_at FROM app_state WHERE id = ?").bind(file.branchId).first<{ payload: string; updated_at: string }>();
@@ -417,7 +428,7 @@ export async function importBranchExports(
 
   const reports = (ok: boolean): BranchReport[] => files.map((file) => ({
     branchId: file.branchId, exportedAt: file.exportedAt, replaced: existing.has(file.branchId),
-    summary: summarizeState(file.state), ok,
+    summary: summarizeState(file.state), ok, base: baseReports.get(file.branchId),
   }));
   if (options.dryRun) return { dryRun: true, ok: true, branches: reports(true) };
 
@@ -447,7 +458,51 @@ export async function importBranchExports(
     branches.push({
       branchId: file.branchId, exportedAt: file.exportedAt, replaced: existing.has(file.branchId),
       summary: row ? summarizeState(JSON.parse(row.payload) as Row) : summarizeState({}), ok,
+      base: baseReports.get(file.branchId),
     });
   }
   return { dryRun: false, ok: branches.every((branch) => branch.ok), branches };
 }
+
+/**
+ * Yangi saytdagi mavjud ma'lumotni joyida "noldan boshlash" holatiga keltirish (fayl kerak emas).
+ * Har bir filialning avvalgi holati halo_state_backups'ga saqlanadi; hammasi bitta batch'da.
+ */
+export async function resetBranchesToBase(
+  db: D1Like,
+  options: { dryRun?: boolean; confirm?: string; startDate: string; now?: Date },
+): Promise<BranchImportReport> {
+  const rows = (await db.prepare("SELECT id, payload, updated_at FROM app_state ORDER BY id").all<{ id: string; payload: string; updated_at: string }>()).results;
+  if (!rows.length) throw new MigrationError("Yangi saytda hali filial ma'lumoti yo'q — avval fayl orqali ko'chiring.");
+  const now = (options.now || new Date()).toISOString();
+  const planned = rows.map((row) => {
+    let parsed: Row;
+    try { parsed = JSON.parse(row.payload) as Row; } catch { throw new MigrationError(`${row.id}: saqlangan ma'lumot buzilgan.`); }
+    const { state, report } = toBaseState(parsed, options.startDate);
+    return { row, state, report, updatedAt: `${now}-${crypto.randomUUID()}` };
+  });
+  const branchReports = (ok: boolean): BranchReport[] => planned.map((p) => ({
+    branchId: p.row.id, exportedAt: "", replaced: true, summary: summarizeState(p.state), ok, base: p.report,
+  }));
+  if (options.dryRun) return { dryRun: true, ok: true, branches: branchReports(true) };
+  if (options.confirm !== BASE_RESET_CONFIRMATION) {
+    throw new MigrationError(`Tasdiq uchun "${BASE_RESET_CONFIRMATION}" deb yozing.`);
+  }
+  const statements: D1StatementLike[] = [];
+  for (const p of planned) {
+    statements.push(db.prepare(
+      "INSERT INTO halo_state_backups (id, branch_id, revision, payload, actor, action, section, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    ).bind(crypto.randomUUID(), p.row.id, p.row.updated_at, p.row.payload, "Ko'chirish", "Noldan boshlashdan oldingi holat", "Tizim", now));
+    statements.push(db.prepare("UPDATE app_state SET payload = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify(p.state), p.updatedAt, p.row.id));
+  }
+  await db.batch(statements);
+  const branches: BranchReport[] = [];
+  for (const p of planned) {
+    const row = await db.prepare("SELECT payload, updated_at FROM app_state WHERE id = ?").bind(p.row.id).first<{ payload: string; updated_at: string }>();
+    const ok = Boolean(row && row.payload === JSON.stringify(p.state) && row.updated_at === p.updatedAt);
+    branches.push({ branchId: p.row.id, exportedAt: "", replaced: true, summary: summarizeState(p.state), ok, base: p.report });
+  }
+  return { dryRun: false, ok: branches.every((b) => b.ok), branches };
+}
+
+export const BASE_RESET_CONFIRMATION = "NOLDAN_BOSHLA";
