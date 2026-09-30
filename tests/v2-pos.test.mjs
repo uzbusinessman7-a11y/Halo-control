@@ -70,7 +70,8 @@ test('HALO HISOB oynasi: naqd/hisob-raqam soliqsiz, delivery alohida narx bilan,
   assert.equal((await call(anon, { action: 'sale', paymentType: 'cash', operationId: op(), items: [{ recipeId: 'd', quantity: 2 }] })).ok, true);
   assert.equal((await call(anon, { action: 'sale', paymentType: 'bank', operationId: op(), items: one })).ok, true);
   assert.equal((await call(anon, { action: 'sale', paymentType: 'card', operationId: op(), items: one }))._status, 400, 'POS karta bu oynaga kiritilmaydi');
-  assert.equal((await call(anon, { action: 'load', date: '2020-01-01' }))._status, 403);
+  const past = await call(anon, { action: 'load', date: '2020-01-01' });
+  assert.equal(past.date, past.today, 'loginsiz — sana har doim bugun (tunda ochiq qolgan planshet ham)');
   assert.equal((await call(anon, { action: 'cancel', id: 'pos-order:x' }))._status, 403);
 
   await createWorkerAccount('main', 'Ali', 'ali', '1234');

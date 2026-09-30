@@ -104,21 +104,6 @@ document.getElementById('accNew').addEventListener('click',function(){
     req('/api/worker-auth','POST',{action:'create',branchId:sel.value,name:document.getElementById('aN').value,username:document.getElementById('aU').value.trim().toLowerCase(),pin:document.getElementById('aP').value}).then(function(x){btn.disabled=false;
       if(!x.body.ok){msg(document.getElementById('aM'),false,x.body.error||'Yaratilmadi.');return}box.innerHTML='';loadAccounts()})});
 });
-/* --- Telegram --- */
-function loadTelegram(){
-  var box=document.getElementById('tg');
-  req('/api/telegram?branch='+encodeURIComponent(sel.value),'GET').then(function(x){var t=x.body||{};
-    box.innerHTML='<p class="hint">'+(t.configured?'✓ Ulangan: '+esc(t.botName||'bot')+' · chat '+esc(t.chatId)+(t.enabled?' · kunlik hisobot yoqilgan ('+esc(t.reportTime)+')':' · kunlik hisobot o‘chirilgan'):'Bot ulanmagan.')+'</p>'
-      +'<label class="field"><span>Bot token '+(t.tokenSaved?'(saqlangan — o‘zgartirish uchun yangisini yozing)':'(BotFather beradi)')+'</span><input id="tT" autocomplete="off" placeholder="'+(t.tokenSaved?'••••••••':'123456:ABC…')+'"></label>'
-      +'<div class="row"><label class="field" style="flex:2"><span>Chat ID</span><input id="tC" value="'+esc(t.chatId||'')+'"></label><button class="ghost" id="tD" style="align-self:flex-end;margin-bottom:12px">Topish</button></div>'
-      +'<div class="row"><label class="field" style="flex:1"><span>Hisobot vaqti</span><input type="time" id="tR" value="'+esc(t.reportTime||'00:10')+'"></label><label class="row" style="flex:1;gap:8px"><input type="checkbox" id="tE" style="width:18px;height:18px;min-height:auto"'+(t.enabled?' checked':'')+'> Har kuni avtomatik</label></div>'
-      +'<div class="row"><button id="tS">Saqlash</button><button class="ghost" id="tX">Sinov xabari</button></div><div id="tM"></div>'
-      +'<p class="hint" style="margin-top:10px">Eslatma: to‘liq o‘tishgacha bu sayt avtomatik hisobot yubormaydi (eski saytdan keladi).</p>';
-    document.getElementById('tD').addEventListener('click',function(){req('/api/telegram','POST',{action:'discover',branchId:sel.value,botToken:document.getElementById('tT').value.trim()||undefined}).then(function(r){if(r.body.ok){document.getElementById('tC').value=r.body.chatId;msg(document.getElementById('tM'),true,'Topildi: '+r.body.chatName)}else msg(document.getElementById('tM'),false,r.body.error)})});
-    document.getElementById('tS').addEventListener('click',function(){req('/api/telegram','POST',{action:'save',branchId:sel.value,botToken:document.getElementById('tT').value.trim()||undefined,chatId:document.getElementById('tC').value.trim(),reportTime:document.getElementById('tR').value,enabled:document.getElementById('tE').checked}).then(function(r){if(r.body.ok){loadTelegram()}else msg(document.getElementById('tM'),false,r.body.error)})});
-    document.getElementById('tX').addEventListener('click',function(){req('/api/telegram','POST',{action:'test',branchId:sel.value}).then(function(r){msg(document.getElementById('tM'),r.body.ok,r.body.ok?r.body.message:r.body.error)})});
-  });
-}
 /* --- Filiallar --- */
 function loadBranches(){
   req('/api/branches','GET').then(function(x){var list=(x.body&&x.body.branches)||BRANCHES;

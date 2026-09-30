@@ -57,8 +57,9 @@ export async function runDebtBridge(db: D1Like, scope: LedgerScope, state: Row, 
     const current = live.get(base);
     if (!current || current.version < version) live.set(base, { ...row, version });
   }
-  const reversalOf = (row: { id: string; party_id: string; amount: number }, memo: string): DebtMoveInput => ({
-    operationId: `bridge:qrev:${row.id}`.slice(0, 120), partyId: row.party_id, date: today, kind: "reversal", amount: -Number(row.amount), actor: "Ko'prik", reversesId: row.id, memo,
+  // Teskari yozuv asl sanaga: bekor qilingan xarid/to'lov o'sha davr solishtirishidan chiqadi.
+  const reversalOf = (row: { id: string; party_id: string; amount: number; date: string }, memo: string): DebtMoveInput => ({
+    operationId: `bridge:qrev:${row.id}`.slice(0, 120), partyId: row.party_id, date: row.date || today, kind: "reversal", amount: -Number(row.amount), actor: "Ko'prik", reversesId: row.id, memo,
   });
 
   const toPost: DebtMoveInput[] = [];

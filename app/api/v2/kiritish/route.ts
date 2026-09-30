@@ -5,6 +5,7 @@ import { isAccountingMonthClosed } from "../../../lib/month-end";
 import { expenseOnlyOnDate } from "../../../lib/vegetable-expenses";
 import { DELIVERY_PLATFORMS } from "../../../lib/delivery-sales";
 import { readDeductionRules } from "../../../core/deductions";
+import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
 import { shell } from "../../../core/ui-shell";
 
 declare global {
@@ -112,6 +113,7 @@ export async function POST(request: Request) {
     const today = seoulToday();
     const branchId = String(body.branchId || "main");
     if (body.action === "expense") {
+      await assertV2DayOpen(branchId, clean(body.date, 10));
       const mutation = await mutateHaloState((state) => addExpense(state, body, today), 5, branchId, "Rahbar",
         `Xarajat: ${clean(body.name, 60)} · ₩${Number(body.amount || 0).toLocaleString("en-US")}`, "Kiritish (yangi)");
       return json({ ok: true, today, ...mutation.result, expenses: monthExpenses(mutation.state, today) });
@@ -123,6 +125,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof EntryError) return json({ error: error.message, code: error.code }, error.status);
+    if (error instanceof ClosedDayError) return json({ error: error.message }, 409);
     if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     return json({ error: error instanceof Error && /filial/i.test(error.message) ? error.message : "Xatolik yuz berdi." }, 500);
   }

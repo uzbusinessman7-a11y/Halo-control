@@ -5,6 +5,7 @@ import {
   replaceHaloState,
 } from "../../lib/halo-store";
 import { authenticateWorkerRequest } from "../../lib/worker-auth";
+import { v2ClosedThrough } from "../../core/closed-days";
 import { buildWorkerStateView } from "../../lib/worker-state-view";
 import { preservesClosedMonthFinance } from "../../lib/month-end";
 
@@ -50,6 +51,10 @@ export async function POST(request: Request) {
       || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isSafeInteger(amount)
       || amount <= 0 || amount > 100_000_000_000) {
       return Response.json({ error: "Xarajat nomi, turi, sanasi va summasini tekshiring." }, { status: 400 });
+    }
+    const closedThrough = await v2ClosedThrough(session.branchId);
+    if (closedThrough && date <= closedThrough) {
+      return Response.json({ error: `${date} kuni kassada yopilgan. Xarajatni bugungi sana bilan kiriting.` }, { status: 409 });
     }
     const current = await readHaloState(session.branchId);
     const entries = Array.isArray(current.state.financialEntries)

@@ -34,8 +34,8 @@ export async function POST(request: Request) {
       const input = body.rules as DeductionRulesInput;
       if (!input || typeof input !== "object") throw new DeductionError("Foizlarni yozing.");
       const targets = body.allBranches === true ? (await listHaloBranches()).map((branch) => branch.id) : [branchId];
-      // Avval hammasini tekshiramiz — bitta filialda xato bo'lsa, hech biriga yozilmaydi.
-      applyDeductionRules({}, input);
+      // Avval har bir filialning o'z holati bilan tekshiramiz — bittasida xato bo'lsa, hech biriga yozilmaydi.
+      for (const target of targets) applyDeductionRules((await readHaloState(target)).state as Row, input);
       for (const target of targets) {
         await mutateHaloState((state) => ({ state: applyDeductionRules(state as Row, input), result: null }), 5, target, "Rahbar",
           "Soliq va komissiya foizlari yangilandi", "Soliq va komissiyalar (yangi)");

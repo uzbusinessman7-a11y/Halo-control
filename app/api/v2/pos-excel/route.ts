@@ -3,6 +3,7 @@ import { authenticateWorkerRequest } from "../../../lib/worker-auth";
 import { HaloStateConflictError, listHaloBranches, mutateHaloState, readHaloState } from "../../../lib/halo-store";
 import { seoulBusinessDate } from "../../../lib/business-time";
 import { applyPosImport, MAX_POS_FILE_BYTES, PosExcelError, previewPosImport, readPosFile } from "../../../core/pos-excel";
+import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
 
 declare global {
   var __HALO_SELF_HOSTED__: boolean | undefined;
@@ -37,6 +38,11 @@ export async function POST(request: Request) {
     const today = seoulBusinessDate(new Date());
     const actorName = worker ? String(worker.name || "Xodim") : "Rahbar";
     if (String(form.get("action")) === "apply") {
+      const pre = previewPosImport((await readHaloState(branchId)).state as Row, table, links, today);
+      // Xodim faqat bugungi yoki kechagi (tungi yopilish) hisobotni yuklaydi; eskisini — rahbar.
+      const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+      if (worker && pre.dates.some((date) => date < yesterday)) return json({ error: `Xodim faqat bugungi yoki kechagi POS hisobotini yuklaydi. ${pre.dates[0]} — rahbarga ayting.` }, 403);
+      await assertV2DayOpen(branchId, pre.dates);
       const mutation = await mutateHaloState((state) => applyPosImport(state as Row, table, links, {
         accountId: String(form.get("accountId") || ""), actor: { id: worker ? String(worker.userId) : "owner", name: actorName }, createdAt: new Date().toISOString(), today,
       }), 5, branchId, actorName, `POS hisobot yuklandi: ${file.name.slice(0, 60)}`, "POS hisobot (yangi)");
@@ -49,6 +55,7 @@ export async function POST(request: Request) {
     return json({ ok: true, preview: previewPosImport(state as Row, table, links, today), accounts });
   } catch (error) {
     if (error instanceof PosExcelError) return json({ error: error.message }, error.status);
+    if (error instanceof ClosedDayError) return json({ error: error.message }, 409);
     if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     return json({ error: error instanceof Error && /oy|filial/i.test(error.message) ? error.message : "Xatolik yuz berdi." }, 500);
   }

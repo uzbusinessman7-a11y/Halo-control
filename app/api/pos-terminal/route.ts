@@ -14,6 +14,8 @@ import {
 
 import { isAdminRequest } from "../../lib/integration-store";
 import { authenticateWorkerRequest } from "../../lib/worker-auth";
+import { seoulBusinessDate } from "../../lib/business-time";
+import { assertV2DayOpen, ClosedDayError } from "../../core/closed-days";
 
 const POS_ACTOR = { id: "pos-terminal", name: "POS terminal" } as const;
 
@@ -87,6 +89,10 @@ export async function POST(request: Request) {
     const body = await request.json() as PosOrderInput & { branchId?: unknown };
     const { branchId, owner, actor } = await authorizePosRequest(request, body.branchId);
     const createdAt = new Date().toISOString();
+    if (body.mode !== "inventory_only") {
+      try { await assertV2DayOpen(branchId, String(body.date || seoulBusinessDate(new Date()))); }
+      catch (error) { if (error instanceof ClosedDayError) throw new PosTerminalError(error.message, 409); throw error; }
+    }
     const mutation = await mutateHaloState(
       (state) => applyPosOrder(state, body, actor, createdAt, { ownerEntry: owner }),
       5,
