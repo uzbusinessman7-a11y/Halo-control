@@ -9,6 +9,7 @@ declare global {
 }
 
 const PAGE_PATH = "/api/admin/migration";
+const OLD_SITE = "https://halo-control.uzbusinessman7.chatgpt.site/";
 
 function database(): D1Like {
   if (!globalThis.__HALO_CONTROL_DB__) throw new Error("Baza ulanmagan.");
@@ -97,11 +98,17 @@ table{width:100%;border-collapse:collapse;font-size:14px;margin-top:12px}th,td{t
 <section><h1>Tizimni ko'chirish</h1>
 <p>${isNewSite ? "Bu — <b>yangi sayt</b> (o'z Cloudflare akkauntingiz)." : "Bu — <b>eski sayt</b>. Bu yerda faqat yuklab olish mumkin, hech narsa o'zgartirilmaydi."}</p>
 <span class="badge">${isNewSite ? "YANGI SAYT" : "ESKI SAYT"}</span></section>
-<section><h2>1. To'liq ma'lumotni yuklab olish</h2>
-<p>Barcha filiallar, savdo, ombor, qarzlar, maosh, xodim loginlari va sozlamalar bitta faylga yig'iladi. Har bir jadval uchun nazorat yig'indisi yoziladi.</p>
-<p><b>Diqqat:</b> faylda Telegram bot tokeni va xodimlar ma'lumoti bor — uni hech kimga yubormang.</p>
-<a class="btn" href="${PAGE_PATH}?download=1">↓ Faylni yuklab olish</a></section>
-${isNewSite ? `<section><h2>2. Yangi saytga yuklash</h2>
+${isNewSite ? `<section><h2>1. Eski saytdan fayl olish</h2>
+<p>Eski saytda bu sahifa yo'q — fayl eski saytning o'z tugmasi orqali olinadi:</p>
+<ol style="margin:0 0 12px;padding-left:20px;color:var(--muted)">
+<li><a href="${OLD_SITE}" target="_blank" rel="noopener">Eski saytni</a> oching va rahbar sifatida kiring.</li>
+<li>Menyudan <b>“API va ulanishlar”</b> bo'limiga o'ting.</li>
+<li><b>“↓ To'liq ma'lumotni yuklash”</b> tugmasini bosing — <code>halo-control-…-backup-….json</code> fayli tushadi.</li>
+<li>Tepada <b>filialni almashtiring</b> va 3-qadamni ikkinchi filial uchun takrorlang.</li>
+</ol>
+<p>Natija: har bir filial uchun bittadan fayl. Ikkalasini pastda <b>birga</b> tanlang.</p>
+<p><b>Faylga kirmaydi:</b> xodim loginlari va Telegram sozlamasi — ular ko'chirishdan keyin ⋯ → Sozlamalar va ⋯ → Ulanishlar'da qaytadan kiritiladi.</p></section>
+` : ""}${isNewSite ? `<section><h2>2. Yangi saytga yuklash</h2>
 <p>Ikki xil fayl qabul qilinadi: <b>to'liq ko'chirish fayli</b> yoki eski saytdagi <b>"To'liq ma'lumotni yuklash"</b> fayllari (har bir filial uchun bittadan — hammasini birga tanlang).</p>
 <p>Avval <b>Tekshirish</b> — hech narsa yozilmaydi. Keyin <b>Ko'chirish</b>. Ko'chirish bitta tranzaksiyada bajariladi: yo hammasi, yo hech narsa.</p>
 <input type="file" id="file" accept="application/json,.json" multiple>
@@ -109,6 +116,10 @@ ${isNewSite ? `<section><h2>2. Yangi saytga yuklash</h2>
 <label><input type="checkbox" id="resetJ" checked> Yangi tizim jurnallarini toza boshlash — sinov paytidagi yozuvlar o'chadi, jurnallar ko'chirilgan ma'lumotdan qaytadan quriladi (oy yakuni sanog'i saqlanadi)</label>
 <div class="row"><button id="check" class="secondary" disabled>Tekshirish</button><button id="run" disabled>Ko'chirish</button></div>
 <div id="out"></div></section>` : ""}
+<section><h2>${isNewSite ? "Shu saytning zaxira nusxasi (ixtiyoriy)" : "1. To'liq ma'lumotni yuklab olish"}</h2>
+<p>Barcha filiallar, savdo, ombor, qarzlar, maosh, xodim loginlari va sozlamalar bitta faylga yig'iladi. Har bir jadval uchun nazorat yig'indisi yoziladi.</p>
+<p><b>Diqqat:</b> faylda Telegram bot tokeni va xodimlar ma'lumoti bor — uni hech kimga yubormang.</p>
+<a class="btn${isNewSite ? " secondary" : ""}" href="${PAGE_PATH}?download=1">↓ Faylni yuklab olish</a></section>
 </main>
 ${isNewSite ? `<script>
 const file=document.getElementById('file'),check=document.getElementById('check'),run=document.getElementById('run'),out=document.getElementById('out'),replace=document.getElementById('replace');

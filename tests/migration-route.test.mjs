@@ -115,6 +115,8 @@ test('yangi sayt sahifasidagi skript sintaktik jihatdan to‘g‘ri', async () =
   use(newSite(), true);
   const html = await (await GET(new Request(site, { headers: asOwner }))).text();
   assert.match(html, /YANGI SAYT/);
+  assert.match(html, /API va ulanishlar/);
+  assert.match(html, /halo-control.uzbusinessman7.chatgpt.site/);
   const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
   assert.doesNotThrow(() => new vm.Script(script));
   assert.match(script, /HA_ALMASHTIR/);
