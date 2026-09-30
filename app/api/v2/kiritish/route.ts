@@ -7,6 +7,7 @@ import { DELIVERY_PLATFORMS } from "../../../lib/delivery-sales";
 import { readDeductionRules } from "../../../core/deductions";
 import { selectActiveFinancialEntries } from "../../../lib/daily-report";
 import { warehouseDocuments } from "../../../lib/warehouse-records";
+import { CHICKEN_OIL_CAN_LITERS, isOilLedgerEntry } from "../../../lib/oil-accounting";
 import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
 import { ensureRecurring, RecurringError, recurringList, saveRecurring, stopRecurring } from "../../../core/recurring";
 import { shell } from "../../../core/ui-shell";
@@ -72,6 +73,18 @@ function monthExpenses(state: Row, today: string) {
     .filter((entry) => entry.type === "expense" && String(entry.date || "").startsWith(month) && !entry.voided && !entry.cancelledAt)
     .map((entry) => ({ id: String(entry.id), date: String(entry.date), category: String(entry.category || "Boshqa"), amount: Number(entry.amount) || 0, note: String(entry.note || ""), account: accounts.get(String(entry.accountId)) || "", recurring: Boolean(entry.recurringExpenseId || entry.fixedExpenseId), payroll: Boolean(entry.payrollPaymentId), by: String(entry.createdByName || "") }))
     .sort((left, right) => right.date.localeCompare(left.date));
+}
+
+/** Shu oy chicken moyi: xarid (xarajat) va ishlatilgan moy sotuvi (daromad). */
+function monthOil(state: Row, today: string) {
+  const month = today.slice(0, 7);
+  const accounts = new Map(moneyAccounts(state).map((account) => [account.id, account.name]));
+  const entries = selectActiveFinancialEntries(Array.isArray(state.financialEntries) ? state.financialEntries as Array<Row & { id?: string }> : [])
+    .filter((entry) => isOilLedgerEntry(entry as never) && String(entry.date || "").startsWith(month) && !entry.cancelledAt)
+    .map((entry) => ({ id: String(entry.id), date: String(entry.date), type: String(entry.oilFlowType), cans: Number(entry.oilCanCount) || 0, amount: Number(entry.amount) || 0, account: accounts.get(String(entry.accountId)) || "", note: String(entry.note || "") }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const sum = (type: string, key: "cans" | "amount") => entries.filter((entry) => entry.type === type).reduce((total, entry) => total + entry[key], 0);
+  return { canLiters: CHICKEN_OIL_CAN_LITERS, entries, bought: { cans: sum("purchase", "cans"), amount: sum("purchase", "amount") }, sold: { cans: sum("resale", "cans"), amount: sum("resale", "amount") } };
 }
 
 /** Shu oy ombor kirimlari (xato bo'lsa olib tashlash uchun). Sabzavot/sous alohida belgilanadi. */
@@ -145,7 +158,7 @@ export async function POST(request: Request) {
     return json({
       recurring: recurringList(state as Row),
       ok: true, today, inventory: inventoryChoices(state as Row, today), platforms: DELIVERY_PLATFORMS, rules: readDeductionRules(state as Row),
-      accounts: moneyAccounts(state as Row), categories: EXPENSE_CATEGORIES, expenses: monthExpenses(state as Row, today), receipts: monthReceipts(state as Row, today),
+      accounts: moneyAccounts(state as Row), categories: EXPENSE_CATEGORIES, expenses: monthExpenses(state as Row, today), receipts: monthReceipts(state as Row, today), oil: monthOil(state as Row, today),
       posImportDates: [...new Set((Array.isArray((state as Row).sales) ? (state as Row).sales as Row[] : []).filter((sale) => sale.posImport && !sale.cancelledAt && !sale.voided).map((sale) => String(sale.date)))].slice(-120),
     });
   } catch (error) {
@@ -335,7 +348,7 @@ function renderExpense(){
     +'<label class="field"><span>Qaysi hisobdan to‘landi</span><select id="xAcc">'+d.accounts.map(function(a){return '<option value="'+esc(a.id)+'"'+(a.id===EXP.acc?' selected':'')+'>'+esc(a.name)+'</option>'}).join('')+'</select></label>'
     +'<label class="field"><span>Izoh (ixtiyoriy)</span><input id="xNote" maxlength="300"></label>'
     +'<button class="block" id="xSave">Saqlash</button><div id="xMsg"></div></section>'
-    +recurringCard(d)
+    +recurringCard(d)+oilCard(d)
     +'<section class="card"><h2>Shu oy xarajatlari · '+won(total)+'</h2>'
     +(Object.keys(byCat).length?'<div class="grid" style="margin-bottom:12px">'+Object.keys(byCat).sort(function(a,b){return byCat[b]-byCat[a]}).map(function(c){return '<div class="kpi"><small>'+esc(c)+'</small><b>'+won(byCat[c])+'</b></div>'}).join('')+'</div>':'')
     +(d.expenses.length?d.expenses.slice(0,60).map(function(e){return '<div class="list-row"><div><b>'+esc(e.category)+'</b>'+(e.recurring?' <span class="tag warn">avtomatik</span>':'')+'<br><small style="color:var(--muted)">'+esc(e.date)+(e.account?' · '+esc(e.account):'')+(e.note?' · '+esc(e.note):'')+(e.by?' · '+esc(e.by):'')+'</small></div><div style="text-align:right"><b>'+won(e.amount)+'</b>'+'<br><button class="ghost" data-xc="'+esc(e.id)+'" style="min-height:30px;padding:2px 10px;margin-top:4px">Olib tashlash</button></div></div>'}).join(''):'<p class="hint">Bu oyda xarajat yo‘q.</p>')+'</section>';
@@ -344,10 +357,32 @@ function renderExpense(){
   document.getElementById('xAcc').addEventListener('change',function(){EXP.acc=this.value});
   document.getElementById('xSave').addEventListener('click',function(){saveExpense()});
   document.getElementById('reNew').addEventListener('click',function(){recurringForm(null)});
+  bindOil();
   pane.querySelectorAll('[data-re]').forEach(function(b){b.addEventListener('click',function(){recurringForm((DATA.recurring||[]).find(function(r){return r.id===b.dataset.re}))})});
   pane.querySelectorAll('[data-xc]').forEach(function(b){b.addEventListener('click',function(){var e=d.expenses.find(function(x){return x.id===b.dataset.xc});
     haloRemove({kind:'finance',id:b.dataset.xc,branch:sel.value,label:e?e.category+' · '+won(e.amount)+' · '+e.date:'',done:function(){load()}})})});
 }
+/* ---------- Chicken moyi ---------- */
+var OILT='purchase';
+function oilCard(d){var o=d.oil||{entries:[],bought:{cans:0,amount:0},sold:{cans:0,amount:0},canLiters:18};
+  return '<section class="card"><h2>🛢 Chicken moyi · shu oy</h2><div class="grid" style="margin-bottom:12px"><div class="kpi"><small>Sotib olindi</small><b>'+o.bought.cans+' kanistr</b><span class="hint">'+won(o.bought.amount)+'</span></div><div class="kpi"><small>Ishlatilgani sotildi</small><b>'+o.sold.cans+' kanistr</b><span class="hint">'+won(o.sold.amount)+'</span></div></div>'
+    +'<div class="pay" style="grid-template-columns:1fr 1fr;margin-bottom:12px"><button class="'+(OILT==='purchase'?'':'ghost')+'" data-oil="purchase">Yangi moy xaridi</button><button class="'+(OILT==='resale'?'':'ghost')+'" data-oil="resale">Ishlatilganini sotish</button></div>'
+    +'<div class="row"><label class="field" style="flex:1"><span>Kanistr soni ('+o.canLiters+' L)</span><input id="oC" inputmode="numeric" placeholder="1"></label><label class="field" style="flex:1"><span>1 kanistr narxi (₩)</span><input id="oP" inputmode="numeric" placeholder="0"></label></div>'
+    +'<label class="field"><span>'+(OILT==='purchase'?'Qaysi hisobdan to‘landi':'Pul qaysi hisobga tushdi')+'</span><select id="oA">'+d.accounts.map(function(a){return '<option value="'+esc(a.id)+'">'+esc(a.name)+'</option>'}).join('')+'</select></label>'
+    +'<div class="row" style="justify-content:space-between"><b id="oT">0 ₩</b><button id="oS">Saqlash</button></div><div id="oMsg"></div>'
+    +(o.entries.length?'<div style="margin-top:12px">'+o.entries.map(function(e){return '<div class="list-row"><div><b>'+(e.type==='purchase'?'Xarid':'Sotuv')+' · '+e.cans+' kanistr</b><br><small style="color:var(--muted)">'+esc(e.date)+(e.account?' · '+esc(e.account):'')+'</small></div><div style="text-align:right"><b>'+won(e.amount)+'</b><br><button class="ghost" data-orm="'+esc(e.id)+'" style="min-height:30px;padding:2px 10px;margin-top:4px">Olib tashlash</button></div></div>'}).join('')+'</div>':'')+'</section>'}
+function bindOil(){var c=document.getElementById('oC'),pr=document.getElementById('oP');if(!c)return;
+  var tot=function(){var n=digits(c.value)*digits(pr.value);document.getElementById('oT').textContent=won(n);return n};
+  pr.addEventListener('input',function(){var v=digits(pr.value);pr.value=v?v.toLocaleString('en-US'):'';tot()});c.addEventListener('input',tot);
+  document.querySelectorAll('[data-oil]').forEach(function(b){b.addEventListener('click',function(){OILT=b.dataset.oil;renderExpense()})});
+  document.getElementById('oS').addEventListener('click',function(){var n=tot(),btn=this,msg=document.getElementById('oMsg');if(!digits(c.value)||!digits(pr.value)){msg.innerHTML='<div class="msg bad">Kanistr soni va narxini yozing.</div>';return}
+    if(!confirm((OILT==='purchase'?'Moy xaridi':'Ishlatilgan moy sotuvi')+': '+digits(c.value)+' kanistr · '+won(n)+' · '+dt.value+'. Saqlansinmi?'))return;btn.disabled=true;
+    post('/api/oil-records?branch='+encodeURIComponent(sel.value),{operationId:uuid(),flowType:OILT,accountId:document.getElementById('oA').value,date:dt.value,note:'',canCount:digits(c.value),unitAmount:digits(pr.value)}).then(function(x){btn.disabled=false;
+      if(x.body.error||x.body.ok===false){msg.innerHTML='<div class="msg bad">'+esc(x.body.error||'Saqlanmadi.')+'</div>';return}
+      post(location.pathname,{branchId:sel.value}).then(function(y){if(y.body.ok){DATA.oil=y.body.oil;DATA.expenses=y.body.expenses;renderExpense();document.getElementById('oMsg').innerHTML='<div class="msg ok">✓ Saqlandi</div>'}})})});
+  document.querySelectorAll('[data-orm]').forEach(function(b){b.addEventListener('click',function(){haloRemove({kind:'finance',id:b.dataset.orm,branch:sel.value,label:'Chicken moyi · '+b.closest('.list-row').querySelector('b').textContent,done:function(){load()}})})});
+}
+
 /* ---------- Har oy avtomatik xarajatlar ---------- */
 var REC=null;
 function recurringCard(d){var list=d.recurring||[],act=list.filter(function(r){return r.active});

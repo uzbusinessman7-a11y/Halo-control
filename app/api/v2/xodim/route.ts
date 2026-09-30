@@ -81,7 +81,7 @@ export async function GET() {
 </style>`,
     script: `
 var T={
- uz:{install:'Telefonga ilova qilib o‘rnatish',hello:'Salom',login:'Kirish',branch:'Filial',user:'Login',pin:'PIN',start:'ISHNI BOSHLADIM',finish:'ISHNI TUGATDIM',working:'Ishdasiz',month:'Mening hisobim — bu oy',days:'kun',hours:'soat',earned:'Hisoblangan',logout:'Chiqish',notLinked:'Rahbar akkauntingizni xodim profiliga bog‘lamagan. Davomat uchun rahbarga ayting.',sureOut:'Ishni tugatasizmi?',off:'Bugun sizga dam belgilangan',err:'Xatolik. Qayta urinib ko‘ring.',net:'Internet aloqasini tekshiring.',back:'← Orqaga',
+ uz:{check:'Nazorat ro‘yxati',install:'Telefonga ilova qilib o‘rnatish',hello:'Salom',login:'Kirish',branch:'Filial',user:'Login',pin:'PIN',start:'ISHNI BOSHLADIM',finish:'ISHNI TUGATDIM',working:'Ishdasiz',month:'Mening hisobim — bu oy',days:'kun',hours:'soat',earned:'Hisoblangan',logout:'Chiqish',notLinked:'Rahbar akkauntingizni xodim profiliga bog‘lamagan. Davomat uchun rahbarga ayting.',sureOut:'Ishni tugatasizmi?',off:'Bugun sizga dam belgilangan',err:'Xatolik. Qayta urinib ko‘ring.',net:'Internet aloqasini tekshiring.',back:'← Orqaga',
   actions:'Nima kiritmoqchisiz?',tasks:'Rahbardan vazifalar',noTasks:'Yangi vazifa yo‘q',taskStart:'Boshladim',taskDone:'✓ Bajarildi',due:'Muddat',
   aHisob:'HALO HISOB',aHisobD:'Naqd, hisob-raqam, delivery, oshxona',aPos:'POS hisobot',aPosD:'Kunlik POS Excel faylini yuklash',aIn:'Mahsulot kirimi',aInD:'Miqdor va narx · qarz yozilmaydi',aExp:'Xarajat',aExpD:'Bugungi xarajatni yozish',aWaste:'Minus tavar',aWasteD:'Buzilgan yoki yo‘qolgan mahsulot',aCount:'Kassani sanash',aCountD:'Kun oxiri, summa ko‘rinmaydi',locked:'Rahbar ruxsat bermagan',allDays:'Hamma kunlar'},
  ru:{install:'Установить как приложение',hello:'Привет',login:'Войти',branch:'Филиал',user:'Логин',pin:'PIN',start:'НАЧАЛ РАБОТУ',finish:'ЗАКОНЧИЛ РАБОТУ',working:'Вы на работе',month:'Мой учёт — этот месяц',days:'дн.',hours:'ч',earned:'Начислено',logout:'Выйти',notLinked:'Руководитель не привязал ваш аккаунт к профилю сотрудника.',sureOut:'Закончить работу?',off:'Сегодня у вас выходной',err:'Ошибка. Попробуйте ещё раз.',net:'Проверьте интернет.',back:'← Назад',
@@ -122,6 +122,15 @@ function loginForm(branches){
 }
 function tile(id,icon,title,desc,href,locked){var inner='<span class="i">'+icon+'</span><b>'+title+'</b><small>'+(locked?t('locked'):desc)+'</small>';
   return href&&!locked?'<a class="tile" href="'+href+'">'+inner+'</a>':'<button class="tile'+(locked?' locked':'')+'" data-act="'+id+'"'+(locked?' disabled':'')+'>'+inner+'</button>'}
+/* Ochilish/yopilish nazorati — smenada belgilanadi (/api/operations, faqat bugun). */
+function loadChecklist(){var box=document.getElementById('chk');if(!box)return;
+  req('/api/operations?scope=worker','GET').then(function(r){if(r.status>=400||!r.body.checklist){box.remove();return}var c=r.body.checklist;
+    box.innerHTML='<h2>✅ '+t('check')+' · '+c.completed+'/'+c.total+'</h2>'+c.phases.map(function(p){return '<p class="hint" style="margin:10px 0 4px"><b>'+esc(p.title)+'</b> · '+p.completed+'/'+p.total+'</p>'
+      +p.items.map(function(i){var mine=!i.completion||!i.completion.completedByWorkerId||i.completion.completedByWorkerId===SESSION.userId;var dis=i.id==='closing-cash'||(i.completed&&!mine);
+        return '<label class="list-row" style="cursor:pointer"><div style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" data-ck="'+esc(i.id)+'" style="width:24px;height:24px;min-height:auto;margin-top:2px"'+(i.completed?' checked':'')+(dis?' disabled':'')+'><div><b>'+esc(i.title)+'</b><br><small style="color:var(--muted)">'+esc(i.detail)+'</small>'+(i.completed&&i.completion?'<br><small style="color:var(--ok)">✓ '+esc(i.completion.completedBy)+'</small>':'')+'</div></div><span></span></label>'}).join('')}).join('');
+    box.querySelectorAll('[data-ck]').forEach(function(cb){cb.addEventListener('change',function(){cb.disabled=true;
+      req('/api/operations','POST',{scope:'worker',date:c.date,itemId:cb.dataset.ck,completed:cb.checked}).then(function(x){if(x.status>=400)toast(x.body.error||t('err'),true);loadChecklist()})})});
+  })}
 function home(){
   clearInterval(TIMER);app.innerHTML=langBar()+'<section class="card">'+haloLoading(3)+'</section>';bindLang();
   Promise.all([req('/api/attendance','GET'),req('/api/worker-tasks','GET')]).then(function(res){
@@ -147,12 +156,14 @@ function home(){
     var e=a.earnings||{},days=(e.days||[]);
     var acc=a.linked?'<section class="card"><h2>'+t('month')+'</h2><div class="grid"><div class="kpi"><small>'+t('days')+'</small><b>'+(e.workedDays||0)+'</b></div><div class="kpi"><small>'+t('hours')+'</small><b>'+Math.floor((e.workedMinutes||0)/60)+':'+String((e.workedMinutes||0)%60).padStart(2,'0')+'</b></div><div class="kpi"><small>'+t('earned')+'</small><b>'+won(e.totalEarned)+'</b></div></div>'
       +'<div id="dl">'+days.slice(0,7).map(dayRow).join('')+'</div>'+(days.length>7?'<button class="ghost block" id="more" style="margin-top:8px">'+t('allDays')+' ('+days.length+')</button>':'')+'</section>':'';
-    app.innerHTML=langBar()+head+att+tk+acts+acc+(window.haloStandalone()?'':'<a href="/api/v2/ornatish?app=xodim"><button class="ghost block">📲 '+t('install')+'</button></a>')+'<button class="ghost block" id="out">'+t('logout')+'</button>';
+    var chk=a.linked&&a.openShift?'<section class="card" id="chk"><h2>✅ '+t('check')+'</h2>'+haloLoading(2)+'</section>':'';
+    app.innerHTML=langBar()+head+att+chk+tk+acts+acc+(window.haloStandalone()?'':'<a href="/api/v2/ornatish?app=xodim"><button class="ghost block">📲 '+t('install')+'</button></a>')+'<button class="ghost block" id="out">'+t('logout')+'</button>';
     bindLang();
     document.getElementById('out').addEventListener('click',function(){req('/api/worker-auth','POST',{action:'logout'}).then(start)});
     var more=document.getElementById('more');if(more)more.addEventListener('click',function(){document.getElementById('dl').innerHTML=days.map(dayRow).join('');more.remove()});
     app.querySelectorAll('[data-ts]').forEach(function(b){b.addEventListener('click',function(){b.disabled=true;req('/api/worker-tasks','PATCH',{taskId:b.dataset.ts,status:b.dataset.to}).then(function(x){if(x.status>=400){toast(x.body.error||t('err'),true);b.disabled=false;return}toast('✓');home()})})});
     app.querySelectorAll('[data-act]').forEach(function(b){b.addEventListener('click',function(){if(b.dataset.act==='pos')posScreen();else if(b.dataset.act==='in')intakeScreen();else if(b.dataset.act==='exp')expenseScreen()})});
+    if(chk)loadChecklist();
     if(a.linked){var open2=a.openShift;
       if(open2){var tick=function(){var ms=Date.now()-Date.parse(open2.clockIn),h=Math.floor(ms/3600000),m=Math.floor(ms%3600000/60000);var el=document.getElementById('el');if(el)el.textContent=h+':'+String(m).padStart(2,'0')};tick();TIMER=setInterval(tick,30000)}
       document.getElementById('att').addEventListener('click',function(){if(open2&&!confirm(t('sureOut')))return;var btn=this;btn.disabled=true;
