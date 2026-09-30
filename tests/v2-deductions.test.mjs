@@ -11,7 +11,6 @@ const { homeReport } = await import('../app/core/home.ts');
 const route = await import('../app/api/v2/ushlanmalar/route.ts');
 const pos = await import('../app/api/pos-terminal/route.ts');
 const kiritish = await import('../app/api/v2/kiritish/route.ts');
-const posRoute = await import('../app/api/v2/pos/route.ts');
 
 function d1(sqlite) {
   const make = (query, params = []) => ({
@@ -94,12 +93,11 @@ test('to‘liq oqim: sahifada saqlash → karta/naqd/delivery savdo → jurnal v
   assert.equal(saved.ok, true);
   assert.equal(saved.rules.taxPct, 10);
 
-  const posUrl = base + '/api/v2/pos';
-  const posCall = async (body) => (await posRoute.POST(new Request(posUrl, { method: 'POST', headers: owner, body: JSON.stringify({ branchId: 'main', operationId: crypto.randomUUID().replace(/-/g, ''), ...body }) }))).json();
-  const card = await posCall({ action: 'sale', paymentType: 'card', items: [{ recipeId: 'd', quantity: 1 }] });
+  const posCall = async (body) => { const r = await pos.POST(new Request(base + '/api/pos-terminal', { method: 'POST', headers: owner, body: JSON.stringify({ branchId: 'main', date: today, mode: 'sale', operationId: crypto.randomUUID().replace(/-/g, ''), ...body }) })); const j = await r.json(); j.ok = r.status === 200; return j; };
+  const card = await posCall({ paymentType: 'card', items: [{ recipeId: 'd', quantity: 1 }] });
   assert.equal(card.ok, true, 'karta savdosi ombor 0 bo‘lsa ham saqlanadi: ' + JSON.stringify(card.error));
-  assert.equal((await posCall({ action: 'sale', paymentType: 'cash', items: [{ recipeId: 'd', quantity: 1 }] })).ok, true);
-  assert.equal((await posCall({ action: 'sale', paymentType: 'delivery', deliveryPlatform: 'coupang', expectedTotal: 12000, items: [{ recipeId: 'd', quantity: 1 }] })).ok, true);
+  assert.equal((await posCall({ paymentType: 'cash', salesChannel: 'pos', items: [{ recipeId: 'd', quantity: 1 }] })).ok, true);
+  assert.equal((await posCall({ paymentType: 'delivery', deliveryPlatform: 'coupang', expectedTotal: 12000, items: [{ recipeId: 'd', quantity: 1 }] })).ok, true);
   // HALO hisob (Kiritish): naqd — soliqsiz.
   const halo = await pos.POST(new Request(base + '/api/pos-terminal', { method: 'POST', headers: owner, body: JSON.stringify({ operationId: crypto.randomUUID().replace(/-/g, ''), date: today, mode: 'sale', paymentType: 'cash', branchId: 'main', items: [{ recipeId: 'd', quantity: 1 }] }) }));
   assert.equal(halo.status, 200);

@@ -24,6 +24,8 @@ export function channelOf(sale: Row, accountType: string): SalesChannel {
   if (sale.salesChannel === "pos" || sale.salesChannel === "delivery" || sale.salesChannel === "halo") return sale.salesChannel;
   if (accountType === "delivery" || sale.source === "delivery") return "delivery";
   if (accountType === "card") return "pos";
+  // POS apparati hisobotidan import qilingan savdo (HALO HISOB oynasidan emas).
+  if (sale.source === "pos" && !String(sale.id || "").startsWith("pos-terminal-sale:")) return "pos";
   return "halo";
 }
 

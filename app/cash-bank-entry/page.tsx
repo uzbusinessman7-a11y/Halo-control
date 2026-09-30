@@ -9,9 +9,9 @@ export default function CashBankEntryPage() {
     initialMode="sale"
     initialPaymentType="cash"
     salePaymentOptions={["cash", "bank"]}
-    inventoryReasons={["Oshxonada yeyilgan ovqat"]}
-    inventoryModeTitle="OSHXONADA YEYILGAN OVQAT"
+    inventoryReasons={["Oshxonada yeyilgan ovqat", "Isrof / buzilgan"]}
+    inventoryModeTitle="OSHXONADA YEYILGAN / CHIQIT"
     inventoryModeHelp="Daromadsiz, faqat ombordan minus"
-    terminalSubtitle="Naqd, hisob-raqam, delivery va oshxona ovqati"
+    terminalSubtitle="Naqd, hisob-raqam, delivery, oshxona ovqati va chiqit"
   />;
 }

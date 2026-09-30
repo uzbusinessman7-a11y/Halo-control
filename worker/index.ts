@@ -68,7 +68,8 @@ const worker = {
     if (globalThis.__HALO_SELF_HOSTED__ && request.method === "GET" && !url.searchParams.has("eski")) {
       if (url.pathname === "/") return Response.redirect(new URL("/api/v2/bosh", url).toString(), 302);
       if (url.pathname === "/xodim") return Response.redirect(new URL("/api/v2/xodim", url).toString(), 302);
-      if (url.pathname === "/pos" || url.pathname === "/kassa") return Response.redirect(new URL("/api/v2/pos", url).toString(), 302);
+      // HALO HISOB oynasi (naqd/hisob-raqam, delivery, oshxona, chiqit). Eski ko'rinish: /hisob?eski=1.
+      if (url.pathname === "/pos" || url.pathname === "/kassa" || url.pathname === "/hisob") return Response.redirect(new URL("/api/v2/pos", url).toString(), 302);
     }
     const response = await handler.fetch(auth.request, env, ctx);
     const secured = new Response(response.body, response);
