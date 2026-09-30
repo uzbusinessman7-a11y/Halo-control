@@ -8,6 +8,7 @@ import { seoulBusinessDate } from "../../../lib/business-time";
 import { readDeductionRules } from "../../../core/deductions";
 import { posDayReport } from "../../../core/pos-report";
 import { shell } from "../../../core/ui-shell";
+import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
 
 declare global {
   var __HALO_SELF_HOSTED__: boolean | undefined;
@@ -63,7 +64,7 @@ function view(state: Row, date: string, role: User["role"]) {
     rules: { taxPct: rules.taxPct, platforms: rules.platforms },
     // Summalar va tannarx — faqat rahbarga; xodim bugungi yozuvlar ro'yxatini ko'radi; loginsiz — hech narsa.
     report: role === "owner" ? report
-      : role === "worker" ? { date: report.date, entries: report.entries.map((entry) => ({ ...entry, cost: undefined })) }
+      : role === "worker" ? { date: report.date, entries: report.entries.map((entry) => ({ ...entry, cost: undefined, amount: 0 })) }
         : { date: report.date, entries: [] },
   };
 }
@@ -78,15 +79,16 @@ export async function POST(request: Request) {
     const branchId = user.role === "owner" ? clean(body.branchId, 80) || allowed[0]?.id || "main" : user.branchId;
     if (!allowed.some((branch) => branch.id === branchId)) throw new PosPageError("Filial topilmadi.", 404);
     const today = seoulBusinessDate(new Date());
-    const date = clean(body.date, 10) || today;
+    // Xodim va do'kon planshetida sana har doim — bugun (tunda ochiq qolgan sahifa ham yangi kunga yozadi).
+    const date = user.role === "owner" ? clean(body.date, 10) || today : today;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today) throw new PosPageError("Sanani tekshiring.");
-    if (user.role !== "owner" && date !== today) throw new PosPageError("Faqat bugungi kunga yoziladi.", 403);
     const actor = { id: POS_ACTOR_ID, name: user.name };
     const action = String(body.action || "load");
     const createdAt = new Date().toISOString();
     let saved: unknown = null;
 
     if (action === "sale") {
+      await assertV2DayOpen(branchId, date);
       const paymentType = String(body.paymentType || "");
       if (!["cash", "bank", "delivery"].includes(paymentType)) throw new PosPageError("Naqd, hisob-raqam yoki delivery savdosini tanlang.");
       const input: PosOrderInput = {
@@ -129,7 +131,9 @@ export async function POST(request: Request) {
       const id = clean(body.id, 160);
       await mutateHaloState((state) => {
         if (id.startsWith("pos-order:")) return { state: cancelPosOrder(state as Row, id).state, result: null };
-        return { state: deleteWorkerConsumption(state as Row, id, actor).state, result: null };
+        // Rahbar istalgan oshxona/chiqit yozuvini bekor qiladi (eski xodim dasturida kiritilganini ham).
+        const entry = (Array.isArray((state as Row).workerConsumptions) ? (state as Row).workerConsumptions as Row[] : []).find((item) => item.id === id);
+        return { state: deleteWorkerConsumption(state as Row, id, { id: String(entry?.workerId || actor.id), name: actor.name }).state, result: null };
       }, 5, branchId, user.name, "HALO HISOB: yozuv bekor qilindi", "HALO HISOB (yangi)");
       saved = { kind: "cancel" };
     } else if (action !== "load") {
@@ -145,6 +149,7 @@ export async function POST(request: Request) {
     if (error instanceof PosPageError || error instanceof PosTerminalError || error instanceof WorkerConsumptionError) {
       return json({ error: error.message }, (error as { status?: number }).status || 400);
     }
+    if (error instanceof ClosedDayError) return json({ error: error.message }, 409);
     if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     return json({ error: error instanceof Error && /filial|oy/i.test(error.message) ? error.message : "Xatolik yuz berdi." }, 500);
   }
@@ -193,7 +198,7 @@ function hm(iso){var d=new Date(iso);return isNaN(d)?'':d.toLocaleTimeString('en
 function post(body){return fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){j._status=r.status;return j})}).catch(function(){return {error:'Internet aloqasini tekshiring.'}})}
 function toast(text,bad){var t=document.createElement('div');t.className='toast'+(bad?' bad':'');t.textContent=text;document.body.appendChild(t);setTimeout(function(){t.remove()},bad?4200:2000)}
 var savedBranch='';try{savedBranch=localStorage.getItem('halo-pos-branch')||''}catch(e){}
-function load(){var d=S.data;return post({action:'load',branchId:d?d.branchId:savedBranch,date:d?d.date:''}).then(function(x){
+function load(){var d=S.data;return post({action:'load',branchId:d?d.branchId:savedBranch,date:S.picked||''}).then(function(x){
   if(x.error){app.innerHTML='<section class="card"><div class="msg bad">'+esc(x.error)+'</div></section>';return}
   S.data=x;try{localStorage.setItem('halo-pos-branch',x.branchId)}catch(e){}if(!S.plat)S.plat=(x.platforms[0]||{}).id;render()})}
 function loginForm(){
@@ -216,7 +221,7 @@ function render(){
     +(d.date!==d.today?'<div class="msg">'+esc(d.date)+' sanasiga yozilmoqda.</div>':'')
     +'<div class="modes">'+modes.map(function(m){return '<button class="'+(S.mode===m[0]?'':'ghost')+'" data-mode="'+m[0]+'"><span style="font-size:20px">'+m[1]+'</span><b>'+m[2]+'</b><small>'+m[3]+'</small></button>'}).join('')+'</div><div id="pane"></div>';
   var br=document.getElementById('br');if(br)br.addEventListener('change',function(){S.cart={};d.branchId=br.value;load()});
-  var dt=document.getElementById('dt');if(dt)dt.addEventListener('change',function(){d.date=dt.value;load()});
+  var dt=document.getElementById('dt');if(dt)dt.addEventListener('change',function(){S.picked=dt.value===d.today?'':dt.value;load()});
   var lg=document.getElementById('login');if(lg)lg.addEventListener('click',loginForm);
   app.querySelectorAll('[data-mode]').forEach(function(b){b.addEventListener('click',function(){S.mode=b.dataset.mode;S.cart={};S.op=uid();S.q='';render()})});
   if(S.mode==='report')renderReport();else if(S.mode==='waste')renderWaste();else renderMenu(document.getElementById('pane'));
@@ -268,7 +273,7 @@ function paintDishClear(el){el.classList.remove('on');var s=el.querySelector('.q
 function refreshDish(id){var el=document.querySelector('[data-add="'+id+'"]');if(el)paintDish(el)}
 function saveCart(total){
   var btn=document.getElementById('save');btn.disabled=true;var items=cartItems().map(function(i){return {recipeId:i.id,quantity:i.q}});
-  var body={branchId:S.data.branchId,date:S.data.date,operationId:S.op,items:items};
+  var body={branchId:S.data.branchId,date:S.picked||'',operationId:S.op,items:items};
   if(S.mode==='sale'){body.action='sale';body.paymentType=S.pay}
   else if(S.mode==='delivery'){body.action='sale';body.paymentType='delivery';body.deliveryPlatform=S.plat;body.expectedTotal=total;var o=document.getElementById('ordNo');body.deliveryOrderNumber=o?o.value.trim():''}
   else if(S.mode==='meal')body.action='meal';
@@ -292,7 +297,7 @@ function renderWaste(){
   function units(){var it=d.inventory.find(function(i){return i.id===sel.value});unit.innerHTML=(it?it.units:[]).map(function(u){return '<option>'+esc(u)+'</option>'}).join('')}
   q.addEventListener('input',function(){fill();units()});sel.addEventListener('change',units);fill();
   document.getElementById('wsave').addEventListener('click',function(){var btn=this;if(!sel.value){toast('Mahsulotni tanlang.',true);return}
-    btn.disabled=true;post({action:'waste',mode:'product',branchId:d.branchId,date:d.date,operationId:S.op,inventoryId:sel.value,quantity:Number(String(document.getElementById('wn').value).replace(',','.')),unit:unit.value,reason:document.getElementById('wr').value,note:document.getElementById('wno').value}).then(function(x){btn.disabled=false;
+    btn.disabled=true;post({action:'waste',mode:'product',branchId:d.branchId,date:S.picked||'',operationId:S.op,inventoryId:sel.value,quantity:Number(String(document.getElementById('wn').value).replace(',','.')),unit:unit.value,reason:document.getElementById('wr').value,note:document.getElementById('wno').value}).then(function(x){btn.disabled=false;
       if(x.error){toast(x.error,true);return}S.data=x;S.op=uid();toast('✓ Chiqit saqlandi');render()})});
 }
 function kpi(t,v,s){return '<div class="kpi"><small>'+t+'</small><b>'+v+'</b>'+(s?'<i>'+s+'</i>':'')+'</div>'}
@@ -312,7 +317,7 @@ function renderReport(){
       +(d.role==='owner'?'<br><button class="ghost" data-cancel="'+esc(e.id)+'" style="min-height:30px;padding:2px 10px;margin-top:6px">Bekor qilish</button>':'')+'</div></div>'}).join(''):'<p class="hint">Hali yozuv yo‘q.</p>')+'</section>';
   pane.innerHTML=h;
   pane.querySelectorAll('[data-cancel]').forEach(function(b){b.addEventListener('click',function(){if(!confirm('Bu yozuv bekor qilinsinmi? Ombor qoldig‘i qaytariladi.'))return;b.disabled=true;
-    post({action:'cancel',branchId:d.branchId,date:d.date,id:b.dataset.cancel}).then(function(x){if(x.error){toast(x.error,true);b.disabled=false;return}S.data=x;toast('✓ Bekor qilindi');render()})})});
+    post({action:'cancel',branchId:d.branchId,date:S.picked||'',id:b.dataset.cancel}).then(function(x){if(x.error){toast(x.error,true);b.disabled=false;return}S.data=x;toast('✓ Bekor qilindi');render()})})});
 }
 load();
 `,

@@ -79,8 +79,9 @@ export async function runStockBridge(db: D1Like, scope: LedgerScope, state: Row,
     const current = live.get(base);
     if (!current || current.version < version) live.set(base, { ...row, version });
   }
-  const reversalOf = (row: { id: string; item_id: string; quantity_milli: number }, memo: string): StockMoveInput => ({
-    operationId: `bridge:mrev:${row.id}`.slice(0, 120), itemId: row.item_id, date: today, kind: "reversal",
+  // Teskari harakat asl sanaga: bekor qilingan savdo/kirim o'sha kunning hisobotidan chiqadi.
+  const reversalOf = (row: { id: string; item_id: string; quantity_milli: number; date: string }, memo: string): StockMoveInput => ({
+    operationId: `bridge:mrev:${row.id}`.slice(0, 120), itemId: row.item_id, date: row.date || today, kind: "reversal",
     quantityMilli: -Number(row.quantity_milli), theoreticalMilli: 0, actor: "Ko'prik", reversesId: row.id, memo,
   });
 

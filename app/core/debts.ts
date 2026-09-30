@@ -155,7 +155,9 @@ export async function statement(db: D1Like, scope: LedgerScope, partyId: string,
   const lines = rows.results.map((row) => {
     const amount = Number(row.amount);
     balance += amount;
-    if (amount > 0) purchases += amount; else payments += -amount;
+    // Teskari yozuv o'z turini kamaytiradi: bekor qilingan xarid "jami xarid"dan, bekor qilingan to'lov "jami to'lov"dan ayriladi.
+    if (row.kind === "reversal") { if (amount < 0) purchases += amount; else payments -= amount; }
+    else if (amount > 0) purchases += amount; else payments += -amount;
     return { date: row.date, kind: row.kind, amount, balance, memo: row.memo };
   });
   return { party, from, to, opening, lines, closing: balance, purchases, payments };

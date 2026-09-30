@@ -493,7 +493,8 @@ export async function resetBranchesToBase(
     statements.push(db.prepare(
       "INSERT INTO halo_state_backups (id, branch_id, revision, payload, actor, action, section, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     ).bind(crypto.randomUUID(), p.row.id, p.row.updated_at, p.row.payload, "Ko'chirish", "Noldan boshlashdan oldingi holat", "Tizim", now));
-    statements.push(db.prepare("UPDATE app_state SET payload = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify(p.state), p.updatedAt, p.row.id));
+    // Shu orada boshqa joydan yozilgan bo'lsa (masalan, do'kon planshetidan savdo) — ustidan yozilmaydi; tekshiruv "farq" deydi.
+    statements.push(db.prepare("UPDATE app_state SET payload = ?, updated_at = ? WHERE id = ? AND updated_at = ?").bind(JSON.stringify(p.state), p.updatedAt, p.row.id, p.row.updated_at));
   }
   await db.batch(statements);
   const branches: BranchReport[] = [];

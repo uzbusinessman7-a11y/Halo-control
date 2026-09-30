@@ -6,6 +6,7 @@ import { runPayrollBridge } from "../../../core/payroll-bridge";
 import { isMonth, payslip, payslipText } from "../../../core/payroll-ledger";
 import type { D1Like } from "../../../lib/full-migration";
 import { shell } from "../../../core/ui-shell";
+import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
 
 declare global {
   var __HALO_CONTROL_DB__: D1Database | undefined;
@@ -48,6 +49,7 @@ export async function POST(request: Request) {
       pay: [(st) => payStaff(st, body, today), body.kind === "advance" ? "Avans berildi" : "Oylik to‘landi"],
     };
     const action = String(body.action || "");
+    if (action === "pay") await assertV2DayOpen(branchId, String(body.date || today));
     if (action === "staff" || mutations[action]) {
       let st: Record<string, unknown>;
       if (mutations[action]) {
@@ -79,6 +81,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof StaffError) return json({ error: error.message }, error.status);
+    if (error instanceof ClosedDayError) return json({ error: error.message }, 409);
     if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     if (error instanceof LedgerError || (error instanceof Error && /filial/i.test(error.message))) return json({ error: error.message }, 400);
     return json({ error: "Xatolik yuz berdi." }, 500);
@@ -209,7 +212,7 @@ function staffForm(m){
     api(body).then(function(x){btn.disabled=false;if(!x.ok){document.getElementById('fMsg').innerHTML='<div class="msg bad">'+esc(x.error)+'</div>';return}STAFF=x.staff;drawStaff();load()});
   });
 }
-sel.addEventListener('change',load);mon.addEventListener('change',load);load();
+sel.addEventListener('change',function(){STAFF=null;ACC=null;load()});mon.addEventListener('change',load);load();
 `,
   });
 }

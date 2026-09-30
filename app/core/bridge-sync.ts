@@ -92,8 +92,11 @@ export async function runBridge(db: D1Like, scope: LedgerScope, state: Row, toda
   let alreadyPosted = 0;
   let corrected = 0;
   const wanted = new Set<string>();
-  const reversalOfLive = (item: { id: string; key: string[] }, memo: string): EntryInput => ({
-    operationId: `bridge:rev:${item.id}`.slice(0, 120), date: today, kind: "reversal", actor: "Ko'prik", memo, reversesId: item.id,
+  // Teskari yozuv asl yozuv sanasiga qo'yiladi (bekor qilingan savdo o'sha kundan chiqadi, bugungi hisobotni buzmaydi).
+  // Asl kun V2 da yopilgan bo'lsa — bugungi sanaga; bugun ham yopilgan bo'lsa — yozilmaydi (to'xtatiladi).
+  const reversalDate = (item: { date: string }) => (!isClosed(item.date) ? item.date : !isClosed(today) ? today : "");
+  const reversalOfLive = (item: { id: string; key: string[]; date: string }, memo: string): EntryInput => ({
+    operationId: `bridge:rev:${item.id}`.slice(0, 120), date: reversalDate(item), kind: "reversal", actor: "Ko'prik", memo, reversesId: item.id,
     lines: item.key.map((pair) => { const at = pair.lastIndexOf(":"); return { accountId: pair.slice(0, at), amount: -Number(pair.slice(at + 1)) }; }),
   });
   for (const bridgeEntry of plan.entries) {
@@ -109,7 +112,7 @@ export async function runBridge(db: D1Like, scope: LedgerScope, state: Row, toda
       const key = entry.lines.map((line) => `${line.accountId}:${line.amount}`).sort().join("|");
       if (previous.key.slice().sort().join("|") === key && previous.date === entry.date) { alreadyPosted += 1; continue; }
       changed.push(bridgeEntry.source);
-      if (isClosed(previous.date) || isClosed(entry.date) || isClosed(today)) {
+      if (isClosed(entry.date) || !reversalDate(previous)) {
         blocked.push(`${bridgeEntry.source}: yopilgan kunga tegishli — avtomatik tuzatilmadi`);
         continue;
       }
@@ -136,6 +139,7 @@ export async function runBridge(db: D1Like, scope: LedgerScope, state: Row, toda
   // 4) Eski tizimda bekor qilingan yozuvlar → teskari yozuv (o'chirilmaydi).
   for (const [base, item] of live) {
     if (wanted.has(base)) continue;
+    if (!reversalDate(item)) { blocked.push(`${base}: bekor qilingan, lekin kun yopilgan — ertaga avtomatik yoziladi`); continue; }
     toPost.push(reversalOfLive(item, "Bekor qilindi: eski tizimda bu yozuv bekor qilingan yoki o'chirilgan"));
   }
   const reversed = toPost.filter((entry) => entry.kind === "reversal").length;
@@ -160,14 +164,20 @@ export async function runBridge(db: D1Like, scope: LedgerScope, state: Row, toda
 
   // 6) Solishtirish: eski tizim qoldig'i va jurnal qoldig'i, har bir pul hisobi bo'yicha.
   const oldBalances = calculateAccountBalances(state, "9999-12-31").balances;
-  const ledger = await rawBalances(db, scope);
+  // Solishtirish faqat ko'prik yozuvlari bo'yicha: V2 ning o'z yozuvlari (karta puli bankka tushishi,
+  // kassa farqi) eski tizimda yo'q — ular solishtirishni buzmasligi kerak.
+  const ledger = new Map((await db.prepare(
+    `SELECT l.account_id AS account_id, SUM(l.amount) AS total FROM v2_ledger_lines l JOIN v2_ledger_entries e ON e.id = l.entry_id
+     WHERE l.tenant_id = ? AND l.branch_id = ? AND e.operation_id LIKE 'bridge:%' GROUP BY l.account_id`,
+  ).bind(scope.tenantId, scope.branchId).all<{ account_id: string; total: number }>()).results.map((row) => [row.account_id, Number(row.total)]));
+  const allLedger = await rawBalances(db, scope);
   const comparison = plan.moneyAccounts.map((account) => {
     // Eski tizim qoldig'i avtomatik komissiyani ayirmaydi — solishtirishda ayiriladi.
     const oldBalance = (oldBalances.get(account.oldId) || 0) - (plan.feeByOldAccount.get(account.oldId) || 0);
     const ledgerBalance = ledger.get(idByCode.get(account.code)!) || 0;
     return { oldId: account.oldId, name: account.name, oldBalance, ledgerBalance, difference: ledgerBalance - oldBalance };
   });
-  const grand = [...ledger.values()].reduce((sum, value) => sum + value, 0);
+  const grand = [...allLedger.values()].reduce((sum, value) => sum + value, 0);
   return {
     posted: toPost.length - reversed, alreadyPosted, reversed, corrected, changed, blocked, invalid, unmatched: plan.unmatched, zeroAmount: plan.zeroAmount,
     comparison, ok: comparison.every((row) => row.difference === 0) && !blocked.length && !invalid.length, ledgerBalanced: grand === 0,
