@@ -136,6 +136,8 @@ const MORE_MENU = [
   ["/api/v2/tarix", "↺", "O‘zgarishlar tarixi", "Nima o‘chirildi, o‘zgartirildi"],
   ["/api/v2/kochish", "🚀", "To‘liq o‘tish", "Tekshiruv ro‘yxati"],
   ["/api/v2/xodim", "👷", "Xodim ilovasi", "Xodimlar telefoni uchun"],
+  ["/api/admin/migration", "⇪", "Ma’lumot ko‘chirish", "Eski saytdan yakuniy ko‘chirish"],
+  ["/?eski=1", "🗂", "Eski ko‘rinish (zaxira)", "Hamma eski oynalar"],
   ["/signout-with-chatgpt", "⎋", "Chiqish", ""],
 ].map(([href, icon, label, hint]) => `<a class="more-item" href="${href}"><span class="ico">${icon}</span><span><b>${label}</b>${hint ? `<small>${hint}</small>` : ""}</span></a>`).join("");
 const MORE_UI = `<button class="more-btn" id="moreBtn" aria-label="Yana" aria-expanded="false">⋯</button>

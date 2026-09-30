@@ -223,7 +223,7 @@ function drawRecent(){
   var list=(MENU.orders||[]).filter(function(o){return o.date===day});
   var L={cash:'Naqd',bank:'Hisob-raqam',card:'Karta',delivery:'Delivery'};
   box.innerHTML=list.length?list.map(function(o){return '<div class="list-row"><div><b>'+esc(L[o.paymentType]||o.paymentType||'Savdo')+(o.deliveryPlatform?' · '+esc(o.deliveryPlatform):'')+'</b><br><small style="color:var(--muted)">'+(o.items||[]).map(function(i){return esc(i.name||'')+' ×'+i.quantity}).join(', ')+'</small></div><b>'+won(o.total)+'</b></div>'}).join('')
-    +'<p class="hint" style="margin-top:10px">Jami: '+won(list.reduce(function(s,o){return s+Number(o.total||0)},0))+' · Xato bo‘lsa, eski oynada tahrirlanadi.</p>':'<p class="hint">Bu sanada kiritilgan savdo yo‘q.</p>';
+    +'<p class="hint" style="margin-top:10px">Jami: '+won(list.reduce(function(s,o){return s+Number(o.total||0)},0))+' · Xato bo‘lsa, <a href="/?eski=1">eski oynada</a> tahrirlanadi.</p>':'<p class="hint">Bu sanada kiritilgan savdo yo‘q.</p>';
 }
 
 /* ---------- Ombor kirimi / sabzavot ---------- */

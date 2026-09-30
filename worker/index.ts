@@ -64,6 +64,11 @@ const worker = {
       page.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
       return page;
     }
+    // Asosiy manzil yangi tizimni ochadi. Eski ko'rinish kerak bo'lsa: /?eski=1 yoki /xodim?eski=1.
+    if (globalThis.__HALO_SELF_HOSTED__ && request.method === "GET" && !url.searchParams.has("eski")) {
+      if (url.pathname === "/") return Response.redirect(new URL("/api/v2/bosh", url).toString(), 302);
+      if (url.pathname === "/xodim") return Response.redirect(new URL("/api/v2/xodim", url).toString(), 302);
+    }
     const response = await handler.fetch(auth.request, env, ctx);
     const secured = new Response(response.body, response);
     secured.headers.set("X-Content-Type-Options", "nosniff");
