@@ -88,7 +88,7 @@ export async function POST(request: Request) {
     const { branchId, owner, actor } = await authorizePosRequest(request, body.branchId);
     const createdAt = new Date().toISOString();
     const mutation = await mutateHaloState(
-      (state) => applyPosOrder(state, body, actor, createdAt),
+      (state) => applyPosOrder(state, body, actor, createdAt, { ownerEntry: owner }),
       5,
       branchId,
       actor.name,

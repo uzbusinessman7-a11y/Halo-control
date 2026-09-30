@@ -25,6 +25,8 @@ export interface HomeReport {
   today: string; yesterday: string; monthStart: string;
   sales: { today: number; yesterday: number; weekAgo: number; monthToDate: number; lastMonthSamePeriod: number; days: Array<{ date: string; amount: number }> };
   expenses: { monthToDate: number };
+  /** Avtomatik ushlanmalar (oy boshidan): karta/delivery komissiyasi va POS soliq zaxirasi. */
+  deductions: { commission: number; tax: number; taxReserve: number };
   prime: {
     theoreticalFood: number; waste: number; countLoss: number; food: number; labor: number; total: number;
     foodPercent: number | null; laborPercent: number | null; primePercent: number | null;
@@ -100,7 +102,10 @@ export async function homeReport(db: D1Like, scope: LedgerScope, state: Row, tod
   const daily = await salesByDay(db, scope, shift(today, -13), today);
   const salesMtd = -(await accountSum(db, scope, ["savdo"], monthStart, today));
   const salesLast = -(await accountSum(db, scope, ["savdo"], lastMonthStart, lastMonthTo));
-  const expensesMtd = await accountSum(db, scope, ["xarajat", "komissiya", "kassa-farqi"], monthStart, today);
+  const expensesMtd = await accountSum(db, scope, ["xarajat", "komissiya", "kassa-farqi", "soliq"], monthStart, today);
+  const commissionMtd = await accountSum(db, scope, ["komissiya"], monthStart, today);
+  const taxMtd = await accountSum(db, scope, ["soliq"], monthStart, today);
+  const taxReserve = -(await accountSum(db, scope, ["soliq-zaxira"], "0000-01-01", today));
 
   const food = await foodCostTotals(db, scope, monthStart, today);
   const labor = pay.employees.reduce((sum, employee) => {
@@ -142,6 +147,7 @@ export async function homeReport(db: D1Like, scope: LedgerScope, state: Row, tod
       days: Array.from({ length: 14 }, (_, index) => { const date = shift(today, index - 13); return { date, amount: daily.get(date) || 0 }; }),
     },
     expenses: { monthToDate: expensesMtd },
+    deductions: { commission: commissionMtd, tax: taxMtd, taxReserve },
     prime: {
       theoreticalFood: food.theoretical, waste: food.waste, countLoss: food.countLoss, food: food.food, labor, total: prime,
       foodPercent: pct(food.food, salesMtd), laborPercent: pct(labor, salesMtd), primePercent: pct(prime, salesMtd),
@@ -168,6 +174,7 @@ export function flashText(report: HomeReport, branchName = "HALO"): string {
     `Oy boshidan: ${wonText(report.sales.monthToDate)}${change(report.sales.monthToDate, report.sales.lastMonthSamePeriod)} — o'tgan oy shu davrga nisbatan`,
     "",
     `Prime cost: ${p.primePercent == null ? "—" : `${p.primePercent}%`} (oziq-ovqat ${p.foodPercent ?? "—"}% + ish haqi ${p.laborPercent ?? "—"}%)`,
+    ...(report.deductions.commission || report.deductions.tax ? [`Avtomatik ushlanma (oy): komissiya ${wonText(report.deductions.commission)} · soliq ${wonText(report.deductions.tax)}`] : []),
     `Pul: kassa ${wonText(report.money.cash)} · bank ${wonText(report.money.bank)} · kutilmoqda ${wonText(report.money.receivable)}`,
     `Qarz: ${wonText(report.debts.total)}${report.debts.overdueCount ? ` (30+ kun: ${wonText(report.debts.overdue)})` : ""}`,
   ];

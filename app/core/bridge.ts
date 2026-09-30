@@ -15,6 +15,7 @@
 import { selectActiveFinancialEntries } from "../lib/daily-report";
 import type { AccountInput } from "./ledger-store";
 import type { EntryInput } from "./ledger";
+import { saleDeductions } from "./deductions";
 
 type Row = Record<string, unknown>;
 const rows = (value: unknown): Row[] => Array.isArray(value)
@@ -30,6 +31,8 @@ export const BRIDGE_ACCOUNTS: AccountInput[] = [
   { code: "kapital-qarz", name: "Qarz yoki egasi pulini kiritish (foydaga ta'sirsiz)", kind: "equity" },
   { code: "kassa-farqi", name: "Kassa farqi (kamomad / ortiqcha)", kind: "expense" },
   { code: "komissiya", name: "Karta va delivery komissiyasi", kind: "expense" },
+  { code: "soliq", name: "Soliq (POS savdosidan avtomatik)", kind: "expense" },
+  { code: "soliq-zaxira", name: "To'lanadigan soliq zaxirasi", kind: "liability" },
   { code: "ochilish", name: "Ochilish qoldig'i", kind: "equity" },
 ];
 
@@ -61,6 +64,9 @@ export interface BridgePlan {
   unmatched: string[];
   /** Summasi 0 bo'lgani uchun jurnalga kirmaydigan yozuvlar (pulga ta'siri yo'q). */
   zeroAmount: number;
+  /** Avtomatik ushlanmalar (karta/delivery komissiyasi) — eski hisob ID → kutilayotgan pulni kamaytirgan summa.
+   *  Eski tizim qoldig'i bilan solishtirishda hisobga olinadi. */
+  feeByOldAccount: Map<string, number>;
 }
 
 export function buildBridgePlan(state: Row, today: string): BridgePlan {
@@ -79,19 +85,41 @@ export function buildBridgePlan(state: Row, today: string): BridgePlan {
   let zeroAmount = 0;
   const dates: string[] = [];
 
+  const accountTypeById = new Map(accounts.map((account) => [String(account.id), String(account.type || "")]));
+  const feeByOldAccount = new Map<string, number>();
   const sales = rows(state.sales).filter((sale) => !sale.cancelledAt && !sale.voided && !["cancelled", "voided"].includes(String(sale.status)));
   for (const sale of sales) {
-    const accountCode = codeByOldId.get(String(sale.accountId ?? "account-card"));
+    const oldAccountId = String(sale.accountId ?? "account-card");
+    const accountCode = codeByOldId.get(oldAccountId);
     if (!accountCode) { unmatched.push(`savdo:${String(sale.id || "?")}`); continue; }
     const amount = won(sale.totalRevenue);
     if (!amount) { zeroAmount += 1; continue; }
     const date = String(sale.date || "");
     dates.push(date);
+    const label = `${String(sale.recipeId || sale.name || "").slice(0, 60)} · ${won(sale.quantity)} ta`;
     entries.push({
       operationId: bridgeOperationId("s", String(sale.id)), date, kind: "sale", actor: "Ko'prik",
-      memo: `Savdo · ${String(sale.recipeId || sale.name || "").slice(0, 60)} · ${won(sale.quantity)} ta`.slice(0, 300),
+      memo: `Savdo · ${label}`.slice(0, 300),
       lines: [{ code: accountCode, amount }, { code: "savdo", amount: -amount }], source: `savdo:${String(sale.id)}`,
     });
+    // Avtomatik ushlanmalar — alohida yozuvlar (savdo yozuvi o'zgarmaydi).
+    const cut = saleDeductions(sale, state, accountTypeById);
+    const fee = cut.card + cut.delivery;
+    if (fee > 0) {
+      feeByOldAccount.set(oldAccountId, (feeByOldAccount.get(oldAccountId) || 0) + fee);
+      entries.push({
+        operationId: bridgeOperationId("k", String(sale.id)), date, kind: "expense", actor: "Ko'prik",
+        memo: `${cut.card ? "Karta komissiyasi" : "Delivery ushlanmasi"} (avtomatik) · ${label}`.slice(0, 300),
+        lines: [{ code: "komissiya", amount: fee }, { code: accountCode, amount: -fee }], source: `komissiya:${String(sale.id)}`,
+      });
+    }
+    if (cut.tax > 0) {
+      entries.push({
+        operationId: bridgeOperationId("t", String(sale.id)), date, kind: "expense", actor: "Ko'prik",
+        memo: `Soliq zaxirasi (avtomatik) · ${label}`.slice(0, 300),
+        lines: [{ code: "soliq", amount: cut.tax }, { code: "soliq-zaxira", amount: -cut.tax }], source: `soliq:${String(sale.id)}`,
+      });
+    }
   }
 
   for (const entry of selectActiveFinancialEntries(rows(state.financialEntries) as Array<Row & { id?: string }>)) {
@@ -104,7 +132,9 @@ export function buildBridgePlan(state: Row, today: string): BridgePlan {
     const date = String(entry.date || "");
     dates.push(date);
     const settles = entry.affectsProfit === false;
-    const other = entry.type === "income" ? (settles ? "kapital-qarz" : "boshqa-kirim") : settles ? "hisob-yopilishi" : "xarajat";
+    // Soliqni to'lash: avtomatik zaxiradan yopiladi (foydaga ikkinchi marta tushmaydi).
+    const paysTaxReserve = entry.type === "expense" && settles && String(entry.category || "") === "Soliq";
+    const other = entry.type === "income" ? (settles ? "kapital-qarz" : "boshqa-kirim") : paysTaxReserve ? "soliq-zaxira" : settles ? "hisob-yopilishi" : "xarajat";
     const lines = entry.type === "transfer"
       ? [{ code: to!, amount }, { code: from, amount: -amount }]
       : entry.type === "income"
@@ -128,5 +158,5 @@ export function buildBridgePlan(state: Row, today: string): BridgePlan {
       lines: [{ code: codeByOldId.get(String(account.id))!, amount }, { code: "ochilish", amount: -amount }], source: `ochilish:${String(account.id)}`,
     });
   }
-  return { moneyAccounts, entries, unmatched, zeroAmount };
+  return { moneyAccounts, entries, unmatched, zeroAmount, feeByOldAccount };
 }
