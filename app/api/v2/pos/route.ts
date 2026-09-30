@@ -152,7 +152,7 @@ export async function POST(request: Request) {
 
 function page(): string {
   return shell({
-    title: "HALO HISOB", active: null, app: "hisob",
+    title: "HALO HISOB", active: null, app: "hisob", back: "history",
     body: `<div id="app"><section class="card"><div class="skeleton"></div></section></div>
 <style>
 #app{min-width:0;max-width:100%;display:grid;gap:14px}

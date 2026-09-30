@@ -118,6 +118,7 @@ table{width:100%;border-collapse:collapse;font-size:14px;margin-top:12px}th,td{t
 .ok{color:var(--ok);font-weight:700}.bad{color:var(--bad);font-weight:700}.msg{padding:10px 12px;border-radius:10px;border:1px solid var(--line);margin-top:12px;white-space:pre-wrap}
 .msg.bad{border-color:var(--bad)}.msg.ok{border-color:var(--ok)}.row{display:flex;gap:10px;flex-wrap:wrap}
 </style></head><body><main>
+<div><a href="/api/v2/bosh" onclick="if(document.referrer&&history.length>1){history.back();return false}" style="display:inline-block;padding:9px 14px;border:1px solid var(--line);border-radius:12px;color:var(--text);text-decoration:none;font-weight:700">‹ Orqaga</a></div>
 <section><h1>Tizimni ko'chirish</h1>
 <p>${isNewSite ? "Bu — <b>yangi sayt</b> (o'z Cloudflare akkauntingiz)." : "Bu — <b>eski sayt</b>. Bu yerda faqat yuklab olish mumkin, hech narsa o'zgartirilmaydi."}</p>
 <span class="badge">${isNewSite ? "YANGI SAYT" : "ESKI SAYT"}</span></section>
