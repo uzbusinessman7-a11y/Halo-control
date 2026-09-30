@@ -2,7 +2,8 @@
  * HALO V2 — ombor mahsulotlari katalogi: ro'yxat (qoldiq, minimum, qiymat) va mahsulot yaratish/tahrirlash.
  * Ma'lumot hozircha filial holatida (app_state) saqlanadi; bu yerda server tomonda qat'iy tekshiriladi.
  */
-import { expenseOnlyOnDate } from "../lib/vegetable-expenses";
+import { configureExpenseOnly, expenseOnlyOnDate } from "../lib/vegetable-expenses";
+import { setInventoryCatalogArchived } from "../lib/inventory-catalog-archive";
 
 type Row = Record<string, unknown>;
 export const STOCK_UNITS = ["g", "ml", "dona", "kg", "litr"] as const;
@@ -15,7 +16,7 @@ const nameKey = (value: unknown) => clean(value, 100).toLocaleLowerCase().replac
 
 export interface ProductRow {
   id: string; name: string; unit: string; stock: number; minStock: number; unitCost: number; value: number;
-  packageName: string; unitsPerPackage: number; vegetable: boolean; low: boolean; lastReceipt: string | null; movements: number;
+  packageName: string; unitsPerPackage: number; vegetable: boolean; low: boolean; lastReceipt: string | null; movements: number; supplierId: string;
 }
 
 export function productList(state: Row, today: string): ProductRow[] {
@@ -39,7 +40,7 @@ export function productList(state: Row, today: string): ProductRow[] {
         value: vegetable ? 0 : Math.round(Math.max(0, stock) * unitCost),
         packageName: String(item.packageName || ""), unitsPerPackage: Number(item.unitsPerPackage) || 0,
         vegetable, low: !vegetable && minStock > 0 && stock <= minStock,
-        lastReceipt: lastReceipt.get(String(item.id)) || null, movements: count.get(String(item.id)) || 0,
+        lastReceipt: lastReceipt.get(String(item.id)) || null, movements: count.get(String(item.id)) || 0, supplierId: String(item.supplierId || ""),
       };
     })
     .sort((left, right) => Number(right.low) - Number(left.low) || left.name.localeCompare(right.name));
@@ -66,14 +67,19 @@ export function saveProduct(state: Row, body: Row) {
   if (packageName && (!Number.isFinite(unitsPerPackage) || unitsPerPackage <= 0 || unitsPerPackage > 1e7)) throw new CatalogError("Qadoqda nechta birlik borligini yozing.");
   const twin = inventory.find((item) => item.id !== id && item.catalogArchived !== true && nameKey(item.name) === nameKey(name));
   if (twin) throw new CatalogError(`«${String(twin.name)}» nomli mahsulot allaqachon bor.`, 409);
-  const fields = { name, minStock, packageName, unitsPerPackage: packageName ? unitsPerPackage : 0 };
+  const supplierId = clean(body.supplierId, 100);
+  if (supplierId && !rows(state.suppliers).some((supplier) => supplier.id === supplierId)) throw new CatalogError("Yetkazib beruvchi topilmadi.");
+  const fields = { name, minStock, packageName, unitsPerPackage: packageName ? unitsPerPackage : 0, ...(body.supplierId !== undefined ? { supplierId } : {}) };
+  // Sabzavot/sous: sanalmaydi, xaridi xarajat bo'lib yoziladi. O'zgarish tarixi bilan (eski hisobotlar buzilmaydi).
+  const withVeg = (next: Row, productId: string) => (body.vegetable === undefined ? next
+    : configureExpenseOnly(next, productId, body.vegetable === true));
   if (id) {
     const current = inventory.find((item) => item.id === id);
     if (!current) throw new CatalogError("Mahsulot topilmadi. Sahifani yangilang.", 404);
     const used = rows(state.stockMovements).some((move) => move.inventoryId === id);
     if (current.unit !== unit && used) throw new CatalogError("Bu mahsulotning harakatlari bor — birligini o'zgartirib bo'lmaydi. Yangi mahsulot yarating.", 409);
     const updated = { ...current, ...fields, unit, updatedAt: new Date().toISOString() };
-    return { state: { ...state, inventory: inventory.map((item) => (item.id === id ? updated : item)) }, result: { product: updated, created: false } };
+    return { state: withVeg({ ...state, inventory: inventory.map((item) => (item.id === id ? updated : item)) }, id), result: { product: updated, created: false } };
   }
   const operationId = clean(body.operationId, 36);
   if (!/^[a-f0-9-]{36}$/.test(operationId)) throw new CatalogError("Oynani yangilang.");
@@ -81,5 +87,25 @@ export function saveProduct(state: Row, body: Row) {
   const existing = inventory.find((item) => item.id === newId);
   if (existing) return { state, result: { product: existing, created: false } };
   const product = { id: newId, ...fields, unit, stock: 0, unitCost: 0, packageCost: 0, gramsPerUnit: unit === "g" ? 1 : 0, supplierId: "", categoryId: "", createdAt: new Date().toISOString() };
-  return { state: { ...state, inventory: [product, ...inventory] }, result: { product, created: true } };
+  return { state: withVeg({ ...state, inventory: [product, ...inventory] }, newId), result: { product, created: true } };
+}
+
+/** Ro'yxatdan olib tashlangan (arxiv) mahsulotlar — tiklash uchun. */
+export function archivedProducts(state: Row) {
+  return rows(state.inventory).filter((item) => item.catalogArchived === true)
+    .map((item) => ({ id: String(item.id), name: String(item.name || item.id), unit: String(item.unit || ""), stock: Number(item.stock) || 0, reason: String(item.catalogArchiveReason || ""), at: String(item.catalogArchivedAt || "") }))
+    .sort((a, b) => b.at.localeCompare(a.at));
+}
+
+/** Mahsulotni ro'yxatdan olib tashlash yoki tiklash. Qoldiq, tarix va retseptlar o'zgarmaydi. */
+export function archiveProduct(state: Row, body: Row, archived: boolean) {
+  const id = clean(body.id, 100);
+  if (archived) {
+    const reason = clean(body.reason, 300);
+    if (reason.length < 3) throw new CatalogError("Sababini yozing.");
+    const used = rows(state.recipes).filter((recipe) => recipe.archived !== true && rows(recipe.ingredients).some((line) => line.inventoryId === id));
+    if (used.length && body.force !== true) throw new CatalogError(`Bu mahsulot ${used.length} ta taom retseptida bor: ${used.slice(0, 3).map((r) => String(r.name)).join(", ")}. Avval retseptdan almashtiring.`, 409);
+  }
+  const out = setInventoryCatalogArchived(state, id, archived, clean(body.reason, 300));
+  return { state: out.state as Row, result: { alreadySaved: out.result.alreadySaved } };
 }

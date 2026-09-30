@@ -1,5 +1,6 @@
 import { isAdminRequest } from "../../../lib/integration-store";
-import { listHaloBranches, readHaloState } from "../../../lib/halo-store";
+import { HaloStateConflictError, listHaloBranches, mutateHaloState, readHaloState } from "../../../lib/halo-store";
+import { closeMonth, monthCloseStatus, MonthEndError } from "../../../core/month-close";
 import { LedgerError } from "../../../core/ledger";
 import { countSheet, saveCounts, type CountInput } from "../../../core/period-count";
 import type { D1Like } from "../../../lib/full-migration";
@@ -39,6 +40,14 @@ export async function POST(request: Request) {
     const date = String(body.date || today);
     const { state } = await readHaloState(branchId);
     const data = state as Record<string, unknown>;
+    if (body.action === "monthStatus") return json({ ok: true, status: monthCloseStatus(data, today) });
+    if (body.action === "closeMonth") {
+      const month = String(body.month || "");
+      if (!monthCloseStatus(data, today).options.some((option) => option.month === month && option.canClose)) return json({ error: "Bu oyni hozir yopib bo‘lmaydi." }, 409);
+      const mutation = await mutateHaloState((current) => closeMonth(current as Record<string, unknown>, month), 3, branchId, "Rahbar", `Oy yakunlandi · ${month}`, "Oy yakuni");
+      const { state: after } = await readHaloState(branchId);
+      return json({ ok: true, result: mutation.result, status: monthCloseStatus(after as Record<string, unknown>, today) });
+    }
     if (body.action === "save") {
       const result = await saveCounts(database(), scope, data, today, {
         date, operationId: String(body.operationId || ""), actor: "Rahbar", counts: (Array.isArray(body.counts) ? body.counts : []) as CountInput[],
@@ -47,6 +56,8 @@ export async function POST(request: Request) {
     }
     return json({ ok: true, today, sheet: await countSheet(database(), scope, data, today, date) });
   } catch (error) {
+    if (error instanceof MonthEndError) return json({ error: error.message }, 409);
+    if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     if (error instanceof LedgerError || (error instanceof Error && /filial/i.test(error.message))) return json({ error: error.message }, 400);
     return json({ error: "Xatolik yuz berdi." }, 500);
   }
@@ -63,7 +74,8 @@ function page(branches: Array<{ id: string; name: string }>): string {
 <div class="row" style="margin-top:12px" id="tabs"></div></section>
 <section class="card"><div id="tools"></div><div id="lines"></div>
 <div class="row" style="margin-top:16px"><button id="save" class="block">Kiritilganlarni saqlash</button></div><div id="msg"></div></section>
-<section class="card"><h2>Natija: farqlar</h2><div id="result"><p class="hint">Saqlangandan keyin tizim bilan farq shu yerda chiqadi.</p></div></section>`,
+<section class="card"><h2>Natija: farqlar</h2><div id="result"><p class="hint">Saqlangandan keyin tizim bilan farq shu yerda chiqadi.</p></div></section>
+<section class="card" id="oy"><h2>🔒 Oyni yopish</h2><p class="hint">Oy hisoboti (savdo, xarajat, foyda, maosh, ombor qiymati) muzlatiladi — keyin o‘sha oyga yozuv qo‘shilmaydi va o‘zgarmaydi. Ombor qoldig‘i keyingi oyga o‘tadi. Oyning oxirgi kuni, ish tugagach va sanoqdan keyin yoping.</p><div id="mc"><p class="hint">Yuklanmoqda…</p></div></section>`,
     script: `
 var BRANCHES=${boot},SHEET=null,TAB='money',OP='';
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -126,7 +138,15 @@ document.getElementById('save').addEventListener('click',function(){
   });
 });
 show.addEventListener('change',function(){drawLines((document.getElementById('q')||{}).value)});
-sel.addEventListener('change',load);dt.addEventListener('change',load);load();
+function drawMonth(st){var box=document.getElementById('mc');
+  var L=st.last?'<div class="grid" style="margin-bottom:12px"><div class="kpi"><small>'+esc(st.last.month)+' savdo</small><b>'+won(st.last.revenue)+'</b></div><div class="kpi"><small>Xarajat</small><b>'+won(st.last.expenses)+'</b></div><div class="kpi"><small>Sof foyda</small><b>'+won(st.last.netProfit)+'</b></div><div class="kpi"><small>Maosh (hisoblangan)</small><b>'+won(st.last.payrollGross)+'</b></div></div><p class="hint">Oxirgi yopilgan oy: '+esc(st.last.month)+' · ombor qiymati '+won(st.last.inventoryValue)+'</p>':'';
+  box.innerHTML=L+st.options.map(function(o){return '<div class="list-row"><div><b>'+esc(o.month)+'</b>'+(o.closed?' <span class="tag ok">yopilgan</span>':'')+(o.reason&&!o.closed?'<br><small style="color:var(--muted)">'+esc(o.reason)+'</small>':'')+'</div>'+(o.canClose?'<button data-close="'+esc(o.month)+'">Oyni yopish</button>':'<span></span>')+'</div>'}).join('');
+  box.querySelectorAll('[data-close]').forEach(function(b){b.addEventListener('click',function(){var m=b.dataset.close;
+    if(!confirm(m+' oyini yopasizmi?\\n\\n• Oy savdosi, xarajati, foydasi va maoshi muzlatiladi\\n• Ombor qoldig‘i keyingi oyga o‘tadi\\n• Yopilgan oyga keyin yozuv qo‘shib yoki o‘zgartirib bo‘lmaydi'))return;b.disabled=true;
+    api({action:'closeMonth',branchId:sel.value,month:m}).then(function(x){if(!x.ok){b.disabled=false;alert(x.error||'Bo‘lmadi.');return}drawMonth(x.status);box.insertAdjacentHTML('afterbegin','<div class="msg ok" style="margin-bottom:10px">✓ '+esc(m)+' yopildi. Sof foyda: '+won(x.result.netProfit)+'</div>')})})});
+}
+function loadMonth(){api({action:'monthStatus',branchId:sel.value}).then(function(x){if(x.ok)drawMonth(x.status);else document.getElementById('mc').innerHTML='<div class="msg bad">'+esc(x.error)+'</div>'})}
+sel.addEventListener('change',function(){load();loadMonth()});dt.addEventListener('change',load);load();loadMonth();
 `,
   });
 }

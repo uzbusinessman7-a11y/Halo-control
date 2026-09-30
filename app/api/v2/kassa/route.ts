@@ -6,6 +6,7 @@ import { LedgerError } from "../../../core/ledger";
 import { ownerClose, ownerReview, ownerSettle, ownerSummary, staffCount, staffView } from "../../../core/kassa-service";
 import type { D1Like } from "../../../lib/full-migration";
 import { shell } from "../../../core/ui-shell";
+import { ensureRecurring } from "../../../core/recurring";
 
 declare global {
   var __HALO_CONTROL_DB__: D1Database | undefined;
@@ -56,6 +57,7 @@ export async function POST(request: Request) {
   const scope = { tenantId: TENANT_ID, branchId };
   const today = seoulToday();
   try {
+    if (user.role !== "staff") await ensureRecurring(branchId, today);
     const { state } = await readHaloState(branchId);
     const db = database();
     const data = state as Record<string, unknown>;

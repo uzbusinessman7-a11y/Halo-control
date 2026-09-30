@@ -176,7 +176,8 @@ function posScreen(){
   function draw(){var p=P.preview,box=document.getElementById('pv');
     var label={new:'yangi',saved:'oldin saqlangan',changed:'yangilanadi',unmatched:'bog‘lang',duplicate:'takror'};
     box.innerHTML='<section class="card"><h2>'+esc(p.date)+' · '+won(p.totals.revenue)+'</h2><p class="hint" style="margin:0">'+p.totals.quantity+' ta taom · '+p.products.length+' xil'+(p.counts.saved?' · '+p.counts.saved+' xil oldin saqlangan':'')+'</p>'
-      +(p.errors.length?'<div class="msg bad" style="margin-top:10px">'+p.errors.map(esc).join('<br>')+'</div>':'')+'</section>'
+      +(p.errors.length?'<div class="msg bad" style="margin-top:10px">'+p.errors.map(esc).join('<br>')+'</div>':'')
+      +(p.manualPos&&p.manualPos.count?'<div class="msg warn" style="margin-top:10px">⚠ Bu kunga POS savdosi qo‘lda ham kiritilgan. Tasdiqlashdan oldin rahbarga ayting — ikki marta hisoblanmasin.</div>':'')+'</section>'
       +'<section class="card"><h2>Taomlar</h2>'+p.products.map(function(x){
         return '<div class="line"><div style="min-width:0"><b>'+esc(x.recipeName||x.product)+'</b><br><small style="color:var(--muted)">'+esc(x.productCode?x.productCode+' · ':'')+esc(x.product)+' · '+x.quantity+' ta · '+won(x.revenue)+'</small>'
           +(x.status==='unmatched'?'<select data-link="'+esc(x.key)+'" style="margin-top:6px;width:100%"><option value="">— menyudagi taomni tanlang —</option>'+p.recipes.map(function(rc){return '<option value="'+esc(rc.id)+'"'+(P.links[x.key]===rc.id?' selected':'')+'>'+esc(rc.name)+'</option>'}).join('')+'</select>':'')

@@ -15,13 +15,14 @@ import { runPayrollBridge } from "./payroll-bridge";
 import { outflowSplit } from "./pos-report";
 import { assertScope, isIsoDate, LedgerError, type LedgerScope } from "./ledger";
 import type { D1Like } from "../lib/full-migration";
+import { isAccountingMonthClosed } from "../lib/month-end";
 
 type Row = Record<string, unknown>;
 const DAY = 86_400_000;
 const shift = (date: string, days: number) => new Date(Date.parse(`${date}T00:00:00Z`) + days * DAY).toISOString().slice(0, 10);
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : null);
 
-export interface HomeAlert { level: "bad" | "warn"; text: string; page: "kassa" | "ombor" | "qarz" | "maosh" }
+export interface HomeAlert { level: "bad" | "warn"; text: string; page: "kassa" | "ombor" | "qarz" | "maosh" | "sanoq#oy" }
 export interface HomeReport {
   today: string; yesterday: string; monthStart: string;
   sales: { today: number; yesterday: number; weekAgo: number; monthToDate: number; lastMonthSamePeriod: number; days: Array<{ date: string; amount: number }> };
@@ -142,6 +143,11 @@ export async function homeReport(db: D1Like, scope: LedgerScope, state: Row, tod
   if (unpaidPast > 0) alerts.push({ level: "warn", page: "maosh", text: `O'tgan oylardan to'lanmagan maosh: ${w(unpaidPast)}` });
   if (pay.advancesWithoutCash) alerts.push({ level: "warn", page: "maosh", text: `${pay.advancesWithoutCash} ta avans kassadan chiqmagan holda yozilgan` });
   if (pay.mismatched) alerts.push({ level: "bad", page: "maosh", text: `${pay.mismatched} ta oyda maosh eski hisob bilan mos emas` });
+  // Oy oxiri eslatmasi: bugun oyning oxirgi kuni va oy hali yopilmagan.
+  const nextMonth = shift(`${today.slice(0, 7)}-01`, 40).slice(0, 7);
+  if (shift(today, 1).slice(0, 7) === nextMonth && !isAccountingMonthClosed(state.monthlyCloses, today)) {
+    alerts.push({ level: "warn", page: "sanoq#oy", text: "Bugun oy oxiri — ish tugagach sanoq qilib, oyni yoping" });
+  }
   alerts.sort((left, right) => (left.level === right.level ? 0 : left.level === "bad" ? -1 : 1));
 
   return {

@@ -3,6 +3,7 @@ import { listHaloBranches, readHaloState } from "../../../lib/halo-store";
 import { readSettings, telegramCall } from "../../../lib/telegram-service";
 import { LedgerError } from "../../../core/ledger";
 import { flashText, homeReport } from "../../../core/home";
+import { ensureRecurring } from "../../../core/recurring";
 import type { D1Like } from "../../../lib/full-migration";
 import { shell } from "../../../core/ui-shell";
 
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
       }
       return json({ ok: true, branches: rows });
     }
+    await ensureRecurring(branchId, seoulToday());
     const { state } = await readHaloState(branchId);
     const report = await homeReport(database(), { tenantId: TENANT_ID, branchId }, state as Record<string, unknown>, seoulToday());
     const text = flashText(report, `HALO ${branch.name}`);

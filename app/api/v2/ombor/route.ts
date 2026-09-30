@@ -1,6 +1,8 @@
 import { isAdminRequest } from "../../../lib/integration-store";
 import { HaloStateConflictError, listHaloBranches, mutateHaloState, readHaloState } from "../../../lib/halo-store";
-import { CatalogError, productList, saveProduct } from "../../../core/catalog";
+import { archivedProducts, archiveProduct, CatalogError, productList, saveProduct } from "../../../core/catalog";
+import { InventoryCatalogError } from "../../../lib/inventory-catalog-archive";
+import { VegetableExpenseError } from "../../../lib/vegetable-expenses";
 import { InventoryCountingError, saveAccountingCount } from "../../../lib/inventory-counting";
 import { LedgerError } from "../../../core/ledger";
 import { runStockBridge } from "../../../core/stock-bridge";
@@ -39,14 +41,24 @@ export async function POST(request: Request) {
     const body = await request.json() as Record<string, unknown>;
     const branchId = String(body.branchId || "main");
     const today = seoulToday();
+    const extra = (st: Record<string, unknown>) => ({
+      archived: archivedProducts(st),
+      suppliers: (Array.isArray(st.suppliers) ? st.suppliers as Array<Record<string, unknown>> : []).map((s) => ({ id: String(s.id), name: String(s.name || s.id) })).sort((a, b) => a.name.localeCompare(b.name)),
+    });
     if (body.action === "products") {
       const { state } = await readHaloState(branchId);
-      return json({ ok: true, today, products: productList(state as Record<string, unknown>, today) });
+      return json({ ok: true, today, products: productList(state as Record<string, unknown>, today), ...extra(state as Record<string, unknown>) });
+    }
+    if (body.action === "archiveProduct" || body.action === "restoreProduct") {
+      const archived = body.action === "archiveProduct";
+      const mutation = await mutateHaloState((state) => archiveProduct(state as Record<string, unknown>, body, archived), 5, branchId, "Rahbar",
+        archived ? `Mahsulot ro‘yxatdan olib tashlandi · Sabab: ${String(body.reason || "").slice(0, 60)}` : "Mahsulot ro‘yxatga qaytarildi", "Ombor (yangi)");
+      return json({ ok: true, today, products: productList(mutation.state as Record<string, unknown>, today), ...extra(mutation.state as Record<string, unknown>) });
     }
     if (body.action === "saveProduct") {
       const mutation = await mutateHaloState((state) => saveProduct(state as Record<string, unknown>, body), 5, branchId, "Rahbar",
         `Ombor mahsuloti saqlandi · ${String(body.name || "").slice(0, 60)}`, "Ombor (yangi)");
-      return json({ ok: true, today, ...mutation.result, products: productList(mutation.state as Record<string, unknown>, today) });
+      return json({ ok: true, today, ...mutation.result, products: productList(mutation.state as Record<string, unknown>, today), ...extra(mutation.state as Record<string, unknown>) });
     }
     if (body.action === "count") {
       const mutation = await mutateHaloState((state) => saveAccountingCount(state as Record<string, unknown>, { counts: body.counts, date: today, operationId: body.operationId }, { id: "owner", name: "Rahbar" }),
@@ -61,7 +73,7 @@ export async function POST(request: Request) {
     const avt = await avtReport(database(), scope, from, to);
     return json({ ok: true, from, to, bridge, avt });
   } catch (error) {
-    if (error instanceof CatalogError || error instanceof InventoryCountingError) return json({ error: error.message }, (error as { status?: number }).status || 400);
+    if (error instanceof CatalogError || error instanceof InventoryCountingError || error instanceof InventoryCatalogError || error instanceof VegetableExpenseError) return json({ error: error.message }, (error as { status?: number }).status || 400);
     if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     if (error instanceof LedgerError || (error instanceof Error && /filial/i.test(error.message))) return json({ error: error.message }, 400);
     return json({ error: "Xatolik yuz berdi." }, 500);
@@ -112,24 +124,29 @@ function load(){
 }
 document.getElementById('go').addEventListener('click',load);sel.addEventListener('change',load);load();
 /* ---------- Mahsulotlar va sanoq ---------- */
-var PRODUCTS=[],OTAB='list',Q='',CNT={},OPID='';
+var PRODUCTS=[],ARCH=[],SUPS=[],OTAB='list',Q='',CNT={},OPID='';
 function uuid(){return crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16)})}
 function post(b){return fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json().then(function(j){return {status:r.status,body:j}})}).catch(function(){return {status:0,body:{error:'Internet aloqasini tekshiring.'}}})}
 function showTab(t){OTAB=t;document.querySelectorAll('[data-o]').forEach(function(b){b.className=b.dataset.o===t?'':'ghost'});
   document.getElementById('oList').style.display=t==='list'?'grid':'none';document.getElementById('oCount').style.display=t==='count'?'grid':'none';document.getElementById('oAvt').style.display=t==='avt'?'grid':'none';
   if(t==='list')drawList();if(t==='count'){OPID=uuid();CNT={};drawCount()}}
 document.querySelectorAll('[data-o]').forEach(function(b){b.addEventListener('click',function(){showTab(b.dataset.o)})});
-function loadProducts(){post({action:'products',branchId:sel.value}).then(function(x){if(!x.body.ok){document.getElementById('oList').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}PRODUCTS=x.body.products;if(OTAB==='list')drawList();if(OTAB==='count')drawCount()})}
+function loadProducts(){post({action:'products',branchId:sel.value}).then(function(x){if(!x.body.ok){document.getElementById('oList').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}PRODUCTS=x.body.products;ARCH=x.body.archived||[];SUPS=x.body.suppliers||[];if(OTAB==='list')drawList();if(OTAB==='count')drawCount()})}
 function drawList(){
   var box=document.getElementById('oList'),stock=PRODUCTS.filter(function(p){return !p.vegetable});
   var low=stock.filter(function(p){return p.low}),value=stock.reduce(function(s,p){return s+p.value},0);
   var f=Q.toLowerCase(),list=PRODUCTS.filter(function(p){return !f||p.name.toLowerCase().indexOf(f)>=0});
   box.innerHTML='<section class="card"><div class="grid"><div class="kpi"><small>Ombordagi mahsulot qiymati</small><b>'+won(value)+'</b></div><div class="kpi"><small>Mahsulot turlari</small><b>'+stock.length+' ta</b></div><div class="kpi"><small>Kam qolgan</small><b style="color:var(--'+(low.length?'bad':'ok')+')">'+low.length+' ta</b></div></div></section>'
+    +(low.length?'<section class="card"><h2>🛒 Kam qolganlar — xarid ro‘yxati</h2>'+low.map(function(p){return '<div class="list-row"><div><b>'+esc(p.name)+'</b><br><small style="color:var(--muted)">bor: '+qty(p.stock,p.unit)+' · minimum: '+qty(p.minStock,p.unit)+'</small></div><span class="tag bad">kam</span></div>'}).join('')+'<button class="ghost block" id="buyCopy" style="margin-top:10px">📋 Ro‘yxatni nusxalash (yetkazib beruvchiga yuborish uchun)</button><div id="buyMsg"></div></section>':'')
     +'<section class="card"><div class="row" style="margin-bottom:10px"><input id="pq" placeholder="🔍 Qidirish" value="'+esc(Q)+'" style="flex:1"><button id="pNew">+ Yangi mahsulot</button></div><div id="pForm"></div>'
     +(list.length?list.map(function(p){return '<div class="item" data-edit="'+esc(p.id)+'" style="cursor:pointer"><b>'+esc(p.name)+(p.low?'<span class="tag bad">kam qoldi</span>':'')+(p.vegetable?'<span class="tag warn">xarajat sifatida</span>':'')+'</b><span class="v'+(p.low?' bad':'')+'">'+(p.vegetable?'—':qty(p.stock,p.unit))+'</span>'
       +'<small>'+(p.vegetable?'Sanalmaydi, xaridi xarajatga yoziladi':'Minimum: '+qty(p.minStock,p.unit)+' · narx: '+(p.unitCost?won(Math.round(p.unitCost*(p.unit==='g'||p.unit==='ml'?1000:1)))+' / '+(p.unit==='g'?'kg':p.unit==='ml'?'litr':esc(p.unit)):'—')+' · qiymati '+won(p.value))+(p.lastReceipt?' · oxirgi kirim '+esc(p.lastReceipt):'')+'</small></div>'}).join(''):'<p class="hint">Mahsulot topilmadi.</p>')+'</section>';
   var pq=document.getElementById('pq');pq.addEventListener('input',function(){Q=pq.value;var pos=pq.selectionStart;drawList();var n=document.getElementById('pq');n.focus();n.setSelectionRange(pos,pos)});
   document.getElementById('pNew').addEventListener('click',function(){productForm(null)});
+  var bc=document.getElementById('buyCopy');if(bc)bc.addEventListener('click',function(){var t='Xarid ro‘yxati ('+new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'})+'):\\n'+low.map(function(p){return '• '+p.name+' — bor '+qty(p.stock,p.unit).replace(/&amp;/g,'&')}).join('\\n');
+    var ok=function(){document.getElementById('buyMsg').innerHTML='<div class="msg ok" style="margin-top:8px">✓ Nusxa olindi</div>'};if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(ok,function(){prompt('Nusxalang:',t)});else prompt('Nusxalang:',t)});
+  if(ARCH.length)box.insertAdjacentHTML('beforeend','<section class="card"><details><summary>Ro‘yxatdan olib tashlanganlar ('+ARCH.length+')</summary>'+ARCH.map(function(a){return '<div class="list-row"><div><b>'+esc(a.name)+'</b><br><small style="color:var(--muted)">'+esc(a.reason)+(a.stock?' · qoldiq '+qty(a.stock,a.unit):'')+'</small></div><button class="ghost" data-restore="'+esc(a.id)+'" style="min-height:32px;padding:2px 10px">Tiklash</button></div>'}).join('')+'</details></section>');
+  box.querySelectorAll('[data-restore]').forEach(function(b){b.addEventListener('click',function(){b.disabled=true;post({action:'restoreProduct',branchId:sel.value,id:b.dataset.restore}).then(function(x){if(!x.body.ok){alert(x.body.error);b.disabled=false;return}PRODUCTS=x.body.products;ARCH=x.body.archived||[];drawList()})})});
   box.querySelectorAll('[data-edit]').forEach(function(el){el.addEventListener('click',function(){productForm(PRODUCTS.find(function(p){return p.id===el.dataset.edit}))})});
 }
 function productForm(p){
@@ -141,13 +158,17 @@ function productForm(p){
     +'<label class="field" style="flex:1"><span>Minimum qoldiq</span><input id="fMin" inputmode="decimal" value="'+esc(p?p.minStock:'')+'" placeholder="0"></label></div>'
     +'<div class="row"><label class="field" style="flex:1"><span>Qadoq nomi (ixtiyoriy)</span><input id="fPack" maxlength="30" value="'+esc(p?p.packageName:'')+'" placeholder="quti, qop, banka…"></label>'
     +'<label class="field" style="flex:1"><span>Qadoqda nechta birlik</span><input id="fPer" inputmode="decimal" value="'+esc(p&&p.unitsPerPackage?p.unitsPerPackage:'')+'" placeholder="masalan 1000"></label></div>'
+    +'<label class="field"><span>Asosiy yetkazib beruvchi (ixtiyoriy)</span><select id="fSup"><option value="">—</option>'+SUPS.map(function(s2){return '<option value="'+esc(s2.id)+'"'+(p&&p.supplierId===s2.id?' selected':'')+'>'+esc(s2.name)+'</option>'}).join('')+'</select></label>'
+    +'<label class="row" style="gap:8px;margin-bottom:12px"><input type="checkbox" id="fVeg" style="width:18px;height:18px;min-height:auto"'+(p&&p.vegetable?' checked':'')+'> Sabzavot / sous — sanalmaydi, xaridi xarajat bo‘lib yoziladi</label>'
     +(p&&p.movements?'<p class="hint">Harakatlari bor — birlikni o‘zgartirib bo‘lmaydi.</p>':'')
-    +'<div class="row"><button id="fSave">Saqlash</button><button class="ghost" id="fCancel">Bekor</button></div><div id="fMsg"></div></div>';
+    +'<div class="row"><button id="fSave">Saqlash</button><button class="ghost" id="fCancel">Bekor</button>'+(p?'<button class="ghost" id="fArch" style="color:var(--bad)">Ro‘yxatdan olib tashlash</button>':'')+'</div><div id="fMsg"></div></div>';
   box.scrollIntoView({behavior:'smooth',block:'start'});
   document.getElementById('fCancel').addEventListener('click',function(){box.innerHTML=''});
+  var fa=document.getElementById('fArch');if(fa)fa.addEventListener('click',function(){var why=prompt(p.name+' ro‘yxatdan olib tashlansinmi? Qoldiq va tarix saqlanadi, keyin tiklash mumkin.\\nSababi:');if(!why||why.trim().length<3)return;fa.disabled=true;
+    post({action:'archiveProduct',branchId:sel.value,id:p.id,reason:why.trim()}).then(function(x){fa.disabled=false;if(!x.body.ok){document.getElementById('fMsg').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}PRODUCTS=x.body.products;ARCH=x.body.archived||[];drawList();document.getElementById('pForm').innerHTML='<div class="msg ok" style="margin-bottom:10px">✓ Ro‘yxatdan olib tashlandi</div>'})});
   document.getElementById('fSave').addEventListener('click',function(){
     var btn=this;btn.disabled=true;
-    post({action:'saveProduct',branchId:sel.value,id:p?p.id:'',operationId:op,name:document.getElementById('fName').value,unit:document.getElementById('fUnit').value,minStock:Number(document.getElementById('fMin').value.replace(',','.')||0),packageName:document.getElementById('fPack').value,unitsPerPackage:Number(document.getElementById('fPer').value.replace(',','.')||0)}).then(function(x){btn.disabled=false;
+    post({action:'saveProduct',branchId:sel.value,id:p?p.id:'',operationId:op,name:document.getElementById('fName').value,unit:document.getElementById('fUnit').value,minStock:Number(document.getElementById('fMin').value.replace(',','.')||0),packageName:document.getElementById('fPack').value,unitsPerPackage:Number(document.getElementById('fPer').value.replace(',','.')||0),supplierId:document.getElementById('fSup').value,vegetable:document.getElementById('fVeg').checked}).then(function(x){btn.disabled=false;
       if(!x.body.ok){document.getElementById('fMsg').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}
       PRODUCTS=x.body.products;drawList();document.getElementById('pForm').innerHTML='<div class="msg ok" style="margin-bottom:10px">✓ '+(x.body.created?'Mahsulot qo‘shildi':'Saqlandi')+'</div>'});
   });

@@ -23,3 +23,13 @@ test('all rows share batch and fees allocated once; owner corrections reflected 
  assert.equal(new Set(out.sales.map(s=>s.deliveryBatchId)).size,1);assert.equal(out.sales.reduce((sum,s)=>sum+s.deliveryCommissionAmount,0),8848);
  const corrected={...out,sales:out.sales.map((s,i)=>i? s:{...s,totalRevenue:15000,unitPrice:15000})};assert.equal(buildPosTerminalView(corrected).orders[0].total,28900);assert.equal(buildPosTerminalView({...out,sales:[]}).orders.length,0);
 });
+
+test('rahbar delivery buyurtmasida platforma ushlagan haqiqiy summani yozadi; xodim yoza olmaydi',()=>{
+ const s=seed();
+ assert.throws(()=>applyPosOrder(s,{...input(),deliveryFeeOverrideWon:5000},actor,when),/faqat rahbar/);
+ assert.throws(()=>applyPosOrder(s,{...input(),deliveryFeeOverrideWon:99999},actor,when,{ownerEntry:true}),/oralig/);
+ const a=applyPosOrder(s,{...input(),deliveryFeeOverrideWon:'5,000'},actor,when,{ownerEntry:true}).state;
+ assert.equal(a.sales.reduce((n,x)=>n+x.deliveryCommissionAmount,0),5000);
+ const b=applyPosOrder(s,input(),actor,when,{ownerEntry:true}).state;
+ assert.notEqual(b.sales.reduce((n,x)=>n+x.deliveryCommissionAmount,0),5000);
+});
