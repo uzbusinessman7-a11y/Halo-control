@@ -2,37 +2,76 @@
   "id": "/",
   "name": "HALO Control",
   "short_name": "HALO",
-  "description": "HALO ombori, savdosi, retseptlari va foydasini boshqarish ilovasi.",
+  "description": "HALO — savdo, ombor, retsept, qarz, maosh va pulni boshqarish (rahbar).",
   "lang": "uz",
-  "start_url": "/",
+  "dir": "ltr",
+  "start_url": "/api/v2/bosh",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone"],
-  "background_color": "#0b0d0f",
-  "theme_color": "#0b0d0f",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone"
+  ],
+  "background_color": "#0b0b0c",
+  "theme_color": "#0b0b0c",
   "orientation": "any",
-  "categories": ["business", "food", "productivity"],
+  "categories": [
+    "business",
+    "food",
+    "productivity"
+  ],
   "shortcuts": [
     {
-      "name": "POS savdo",
-      "short_name": "POS",
-      "description": "POS savdoni kiritish",
-      "url": "/pos-terminal",
-      "icons": [{ "src": "/icons/halo-192.png", "sizes": "192x192", "type": "image/png" }]
+      "name": "Kiritish",
+      "short_name": "Kiritish",
+      "description": "Savdo, xarajat, kirim, POS hisobot",
+      "url": "/api/v2/kiritish",
+      "icons": [
+        {
+          "src": "/icons/halo-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     },
     {
-      "name": "Naqd / hisob savdosi",
-      "short_name": "Naqd / hisob",
-      "description": "Naqd yoki hisob raqam savdosini kiritish",
-      "url": "/hisob",
-      "icons": [{ "src": "/icons/halo-192.png", "sizes": "192x192", "type": "image/png" }]
+      "name": "HALO HISOB",
+      "short_name": "HISOB",
+      "description": "Naqd, hisob-raqam, delivery, oshxona, chiqit",
+      "url": "/api/v2/pos",
+      "icons": [
+        {
+          "src": "/icons/halo-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     },
     {
-      "name": "Kunlik nazorat",
-      "short_name": "Nazorat",
-      "description": "Ochilish va yopilish nazoratini ochish",
-      "url": "/nazorat",
-      "icons": [{ "src": "/icons/halo-192.png", "sizes": "192x192", "type": "image/png" }]
+      "name": "Kassa",
+      "short_name": "Kassa",
+      "description": "Pul qoldig'i va kunni yopish",
+      "url": "/api/v2/kassa",
+      "icons": [
+        {
+          "src": "/icons/halo-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Ombor",
+      "short_name": "Ombor",
+      "description": "Mahsulotlar va sanoq",
+      "url": "/api/v2/ombor",
+      "icons": [
+        {
+          "src": "/icons/halo-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
   ],
   "icons": [
@@ -46,7 +85,13 @@
       "src": "/icons/halo-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/halo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

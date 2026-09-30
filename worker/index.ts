@@ -69,6 +69,7 @@ const worker = {
       if (url.pathname === "/") return Response.redirect(new URL("/api/v2/bosh", url).toString(), 302);
       if (url.pathname === "/xodim") return Response.redirect(new URL("/api/v2/xodim", url).toString(), 302);
       // HALO HISOB oynasi (naqd/hisob-raqam, delivery, oshxona, chiqit). Eski ko'rinish: /hisob?eski=1.
+      if (url.pathname === "/ornatish" || url.pathname === "/app" || url.pathname === "/install") return Response.redirect(new URL(`/api/v2/ornatish${url.search}`, url).toString(), 302);
       if (url.pathname === "/pos" || url.pathname === "/kassa" || url.pathname === "/hisob") return Response.redirect(new URL("/api/v2/pos", url).toString(), 302);
     }
     const response = await handler.fetch(auth.request, env, ctx);

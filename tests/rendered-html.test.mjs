@@ -2406,8 +2406,9 @@ test("HALO Xodim installs as a separate iPhone home-screen app", () => {
   const appleIcon = readFileSync(new URL("../public/icons/halo-xodim-180.png", import.meta.url));
 
   assert.equal(manifest.id, "/xodim");
-  assert.equal(manifest.start_url, "/xodim");
-  assert.equal(manifest.scope, "/xodim");
+  // Yangi tizim: xodim ilovasi V2 sahifasidan ochiladi (HALO HISOB va kassa ham shu ilova ichida).
+  assert.equal(manifest.start_url, "/api/v2/xodim");
+  assert.equal(manifest.scope, "/api/v2/");
   assert.equal(manifest.display, "standalone");
   assert.ok(manifest.icons.every((icon) => icon.src.includes("halo-xodim-")), "employee app uses its own green icon");
   assert.match(layoutSource, /halo-xodim-180\.png/);
@@ -2424,9 +2425,11 @@ test("HALO Control installs as a Windows desktop app", () => {
   const manifest = JSON.parse(readFileSync(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"));
   const shellSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.equal(manifest.display, "standalone");
-  assert.deepEqual(manifest.display_override, ["standalone"]);
+  assert.ok(manifest.display_override.includes("standalone"));
   assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512"));
-  assert.deepEqual(manifest.shortcuts.map((entry) => entry.url), ["/pos-terminal", "/hisob", "/nazorat"]);
+  // Yangi tizim: rahbar ilovasi V2 bosh ekranidan ochiladi, tezkor havolalar V2 bo'limlariga.
+  assert.equal(manifest.start_url, "/api/v2/bosh");
+  assert.deepEqual(manifest.shortcuts.map((entry) => entry.url), ["/api/v2/kiritish", "/api/v2/pos", "/api/v2/kassa", "/api/v2/ombor"]);
   assert.match(installerSource, /beforeinstallprompt/);
   assert.match(installerSource, /appinstalled/);
   assert.match(installerSource, /Windows’ga o‘rnatish/);

@@ -56,7 +56,7 @@ export async function POST(request: Request) {
 export async function GET() {
   if (globalThis.__HALO_SELF_HOSTED__ !== true) return new Response("V2 faqat yangi saytda.", { status: 403 });
   return new Response(shell({
-    title: "Xodim", active: null,
+    title: "Xodim", active: null, app: "xodim",
     body: `<div id="app" style="display:grid;gap:16px"><section class="card"><div class="skeleton"></div></section></div>
 <style>
 .huge{width:100%;min-height:110px;font-size:24px;font-weight:900;letter-spacing:.02em;border-radius:22px}.huge.out{background:#dc2626;color:#fff}
@@ -81,16 +81,16 @@ export async function GET() {
 </style>`,
     script: `
 var T={
- uz:{hello:'Salom',login:'Kirish',branch:'Filial',user:'Login',pin:'PIN',start:'ISHNI BOSHLADIM',finish:'ISHNI TUGATDIM',working:'Ishdasiz',month:'Mening hisobim — bu oy',days:'kun',hours:'soat',earned:'Hisoblangan',logout:'Chiqish',notLinked:'Rahbar akkauntingizni xodim profiliga bog‘lamagan. Davomat uchun rahbarga ayting.',sureOut:'Ishni tugatasizmi?',off:'Bugun sizga dam belgilangan',err:'Xatolik. Qayta urinib ko‘ring.',net:'Internet aloqasini tekshiring.',back:'← Orqaga',
+ uz:{install:'Telefonga ilova qilib o‘rnatish',hello:'Salom',login:'Kirish',branch:'Filial',user:'Login',pin:'PIN',start:'ISHNI BOSHLADIM',finish:'ISHNI TUGATDIM',working:'Ishdasiz',month:'Mening hisobim — bu oy',days:'kun',hours:'soat',earned:'Hisoblangan',logout:'Chiqish',notLinked:'Rahbar akkauntingizni xodim profiliga bog‘lamagan. Davomat uchun rahbarga ayting.',sureOut:'Ishni tugatasizmi?',off:'Bugun sizga dam belgilangan',err:'Xatolik. Qayta urinib ko‘ring.',net:'Internet aloqasini tekshiring.',back:'← Orqaga',
   actions:'Nima kiritmoqchisiz?',tasks:'Rahbardan vazifalar',noTasks:'Yangi vazifa yo‘q',taskStart:'Boshladim',taskDone:'✓ Bajarildi',due:'Muddat',
   aHisob:'HALO HISOB',aHisobD:'Naqd, hisob-raqam, delivery, oshxona',aPos:'POS hisobot',aPosD:'Kunlik POS Excel faylini yuklash',aIn:'Mahsulot kirimi',aInD:'Miqdor va narx · qarz yozilmaydi',aExp:'Xarajat',aExpD:'Bugungi xarajatni yozish',aWaste:'Minus tavar',aWasteD:'Buzilgan yoki yo‘qolgan mahsulot',aCount:'Kassani sanash',aCountD:'Kun oxiri, summa ko‘rinmaydi',locked:'Rahbar ruxsat bermagan',allDays:'Hamma kunlar'},
- ru:{hello:'Привет',login:'Войти',branch:'Филиал',user:'Логин',pin:'PIN',start:'НАЧАЛ РАБОТУ',finish:'ЗАКОНЧИЛ РАБОТУ',working:'Вы на работе',month:'Мой учёт — этот месяц',days:'дн.',hours:'ч',earned:'Начислено',logout:'Выйти',notLinked:'Руководитель не привязал ваш аккаунт к профилю сотрудника.',sureOut:'Закончить работу?',off:'Сегодня у вас выходной',err:'Ошибка. Попробуйте ещё раз.',net:'Проверьте интернет.',back:'← Назад',
+ ru:{install:'Установить как приложение',hello:'Привет',login:'Войти',branch:'Филиал',user:'Логин',pin:'PIN',start:'НАЧАЛ РАБОТУ',finish:'ЗАКОНЧИЛ РАБОТУ',working:'Вы на работе',month:'Мой учёт — этот месяц',days:'дн.',hours:'ч',earned:'Начислено',logout:'Выйти',notLinked:'Руководитель не привязал ваш аккаунт к профилю сотрудника.',sureOut:'Закончить работу?',off:'Сегодня у вас выходной',err:'Ошибка. Попробуйте ещё раз.',net:'Проверьте интернет.',back:'← Назад',
   actions:'Что вводим?',tasks:'Задачи от руководителя',noTasks:'Новых задач нет',taskStart:'Начал',taskDone:'✓ Готово',due:'Срок',
   aHisob:'HALO HISOB',aHisobD:'Наличные, счёт, доставка, кухня',aPos:'POS отчёт',aPosD:'Загрузить дневной Excel с POS',aIn:'Приход товара',aInD:'Количество и цена',aExp:'Расход',aExpD:'Внести расход',aWaste:'Списание',aWasteD:'Испорченный или потерянный товар',aCount:'Пересчёт кассы',aCountD:'В конце дня',locked:'Нет разрешения',allDays:'Все дни'},
- en:{hello:'Hi',login:'Log in',branch:'Branch',user:'Login',pin:'PIN',start:'STARTED WORK',finish:'FINISHED WORK',working:'You are at work',month:'My account — this month',days:'days',hours:'h',earned:'Earned',logout:'Log out',notLinked:'The manager has not linked your account to a staff profile.',sureOut:'Finish work?',off:'Today is your day off',err:'Error. Please try again.',net:'Check your internet.',back:'← Back',
+ en:{install:'Install as an app',hello:'Hi',login:'Log in',branch:'Branch',user:'Login',pin:'PIN',start:'STARTED WORK',finish:'FINISHED WORK',working:'You are at work',month:'My account — this month',days:'days',hours:'h',earned:'Earned',logout:'Log out',notLinked:'The manager has not linked your account to a staff profile.',sureOut:'Finish work?',off:'Today is your day off',err:'Error. Please try again.',net:'Check your internet.',back:'← Back',
   actions:'What do you want to enter?',tasks:'Tasks from the manager',noTasks:'No new tasks',taskStart:'Started',taskDone:'✓ Done',due:'Due',
   aHisob:'HALO HISOB',aHisobD:'Cash, transfer, delivery, kitchen',aPos:'POS report',aPosD:'Upload the daily POS Excel',aIn:'Goods receipt',aInD:'Quantity and price',aExp:'Expense',aExpD:'Enter an expense',aWaste:'Stock deduction',aWasteD:'Damaged or missing product',aCount:'Count the cash',aCountD:'End of day',locked:'Not permitted',allDays:'All days'},
- ko:{hello:'안녕하세요',login:'로그인',branch:'지점',user:'아이디',pin:'PIN',start:'업무 시작',finish:'업무 종료',working:'근무 중',month:'내 근무 — 이번 달',days:'일',hours:'시간',earned:'누적 급여',logout:'로그아웃',notLinked:'관리자가 계정을 직원 프로필에 연결하지 않았습니다.',sureOut:'업무를 종료할까요?',off:'오늘은 휴무입니다',err:'오류가 발생했습니다.',net:'인터넷을 확인하세요.',back:'← 뒤로',
+ ko:{install:'앱으로 설치',hello:'안녕하세요',login:'로그인',branch:'지점',user:'아이디',pin:'PIN',start:'업무 시작',finish:'업무 종료',working:'근무 중',month:'내 근무 — 이번 달',days:'일',hours:'시간',earned:'누적 급여',logout:'로그아웃',notLinked:'관리자가 계정을 직원 프로필에 연결하지 않았습니다.',sureOut:'업무를 종료할까요?',off:'오늘은 휴무입니다',err:'오류가 발생했습니다.',net:'인터넷을 확인하세요.',back:'← 뒤로',
   actions:'무엇을 입력할까요?',tasks:'관리자 업무',noTasks:'새 업무 없음',taskStart:'시작',taskDone:'✓ 완료',due:'마감',
   aHisob:'HALO HISOB',aHisobD:'현금, 계좌, 배달, 주방',aPos:'POS 보고서',aPosD:'일일 POS 엑셀 업로드',aIn:'상품 입고',aInD:'수량과 금액',aExp:'지출',aExpD:'지출 입력',aWaste:'재고 차감',aWasteD:'파손 또는 분실',aCount:'현금 세기',aCountD:'마감 시',locked:'권한 없음',allDays:'전체'}};
 var L='uz';try{L=localStorage.getItem('halo-lang')||'uz'}catch(e){}if(!T[L])L='uz';
@@ -147,7 +147,7 @@ function home(){
     var e=a.earnings||{},days=(e.days||[]);
     var acc=a.linked?'<section class="card"><h2>'+t('month')+'</h2><div class="grid"><div class="kpi"><small>'+t('days')+'</small><b>'+(e.workedDays||0)+'</b></div><div class="kpi"><small>'+t('hours')+'</small><b>'+Math.floor((e.workedMinutes||0)/60)+':'+String((e.workedMinutes||0)%60).padStart(2,'0')+'</b></div><div class="kpi"><small>'+t('earned')+'</small><b>'+won(e.totalEarned)+'</b></div></div>'
       +'<div id="dl">'+days.slice(0,7).map(dayRow).join('')+'</div>'+(days.length>7?'<button class="ghost block" id="more" style="margin-top:8px">'+t('allDays')+' ('+days.length+')</button>':'')+'</section>':'';
-    app.innerHTML=langBar()+head+att+tk+acts+acc+'<button class="ghost block" id="out">'+t('logout')+'</button>';
+    app.innerHTML=langBar()+head+att+tk+acts+acc+(window.haloStandalone()?'':'<a href="/api/v2/ornatish?app=xodim"><button class="ghost block">📲 '+t('install')+'</button></a>')+'<button class="ghost block" id="out">'+t('logout')+'</button>';
     bindLang();
     document.getElementById('out').addEventListener('click',function(){req('/api/worker-auth','POST',{action:'logout'}).then(start)});
     var more=document.getElementById('more');if(more)more.addEventListener('click',function(){document.getElementById('dl').innerHTML=days.map(dayRow).join('');more.remove()});

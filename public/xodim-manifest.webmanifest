@@ -2,16 +2,39 @@
   "id": "/xodim",
   "name": "HALO Xodim",
   "short_name": "HALO Xodim",
-  "description": "HALO xodimlari uchun alohida ish dasturi.",
+  "description": "HALO xodimlari uchun: davomat, vazifalar, POS hisobot, kirim, xarajat.",
   "lang": "uz",
-  "start_url": "/xodim",
-  "scope": "/xodim",
+  "dir": "ltr",
+  "start_url": "/api/v2/xodim",
+  "scope": "/api/v2/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
-  "background_color": "#0b0d0f",
-  "theme_color": "#0b0d0f",
-  "orientation": "any",
-  "categories": ["business", "food", "productivity"],
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "background_color": "#0b0b0c",
+  "theme_color": "#0b0b0c",
+  "orientation": "portrait",
+  "categories": [
+    "business",
+    "food",
+    "productivity"
+  ],
+  "shortcuts": [
+    {
+      "name": "HALO HISOB",
+      "short_name": "HISOB",
+      "description": "Savdo, delivery, oshxona, chiqit",
+      "url": "/api/v2/pos",
+      "icons": [
+        {
+          "src": "/icons/halo-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
   "icons": [
     {
       "src": "/icons/halo-xodim-192.png",
@@ -23,7 +46,13 @@
       "src": "/icons/halo-xodim-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/halo-xodim-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

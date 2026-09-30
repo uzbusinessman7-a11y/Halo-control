@@ -152,7 +152,7 @@ export async function POST(request: Request) {
 
 function page(): string {
   return shell({
-    title: "HALO HISOB", active: null,
+    title: "HALO HISOB", active: null, app: "hisob",
     body: `<div id="app"><section class="card"><div class="skeleton"></div></section></div>
 <style>
 #app{min-width:0;max-width:100%;display:grid;gap:14px}
@@ -212,7 +212,7 @@ function render(){
   app.innerHTML='<div class="head"><div><b style="font-size:21px">HALO HISOB</b><br><small style="color:var(--muted)">'+esc(d.role==='public'?'Do‘kon oynasi':d.name+(d.role==='owner'?' · rahbar':''))+'</small></div><div class="row" style="gap:8px">'
     +(d.branches.length>1?'<select id="br">'+d.branches.map(function(b){return '<option value="'+esc(b.id)+'"'+(b.id===d.branchId?' selected':'')+'>'+esc(b.name)+'</option>'}).join('')+'</select>':'<b>'+esc((d.branches[0]||{}).name||'')+'</b>')
     +(d.role==='owner'?'<input type="date" id="dt" value="'+esc(d.date)+'" max="'+esc(d.today)+'">':'')
-    +(d.role==='public'?'<button class="ghost" id="login" style="min-height:40px;padding:6px 12px">Kirish</button>':'')+'</div></div>'
+    +(d.role==='public'?'<button class="ghost" id="login" style="min-height:40px;padding:6px 12px">Kirish</button>':'')+(window.haloStandalone()?'':'<a href="/api/v2/ornatish?app=hisob" title="Ilova qilib o‘rnatish"><button class="ghost" style="min-height:40px;padding:6px 12px">📲</button></a>')+'</div></div>'
     +(d.date!==d.today?'<div class="msg">'+esc(d.date)+' sanasiga yozilmoqda.</div>':'')
     +'<div class="modes">'+modes.map(function(m){return '<button class="'+(S.mode===m[0]?'':'ghost')+'" data-mode="'+m[0]+'"><span style="font-size:20px">'+m[1]+'</span><b>'+m[2]+'</b><small>'+m[3]+'</small></button>'}).join('')+'</div><div id="pane"></div>';
   var br=document.getElementById('br');if(br)br.addEventListener('change',function(){S.cart={};d.branchId=br.value;load()});
