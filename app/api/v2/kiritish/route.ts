@@ -5,6 +5,8 @@ import { isAccountingMonthClosed } from "../../../lib/month-end";
 import { expenseOnlyOnDate } from "../../../lib/vegetable-expenses";
 import { DELIVERY_PLATFORMS } from "../../../lib/delivery-sales";
 import { readDeductionRules } from "../../../core/deductions";
+import { selectActiveFinancialEntries } from "../../../lib/daily-report";
+import { warehouseDocuments } from "../../../lib/warehouse-records";
 import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
 import { shell } from "../../../core/ui-shell";
 
@@ -64,10 +66,22 @@ function moneyAccounts(state: Row) {
 function monthExpenses(state: Row, today: string) {
   const month = today.slice(0, 7);
   const accounts = new Map(moneyAccounts(state).map((account) => [account.id, account.name]));
-  return (Array.isArray(state.financialEntries) ? state.financialEntries as Row[] : [])
-    .filter((entry) => entry.type === "expense" && String(entry.date || "").startsWith(month) && !entry.voided && !entry.cancelledAt && !entry.reversalOf)
-    .map((entry) => ({ id: String(entry.id), date: String(entry.date), category: String(entry.category || "Boshqa"), amount: Number(entry.amount) || 0, note: String(entry.note || ""), account: accounts.get(String(entry.accountId)) || "", recurring: Boolean(entry.recurringExpenseId) }))
+  // Bekor qilingan xarajat va uning teskari yozuvi ro'yxatda ko'rinmaydi (eski tizim qoidasi).
+  return selectActiveFinancialEntries(Array.isArray(state.financialEntries) ? state.financialEntries as Array<Row & { id?: string }> : [])
+    .filter((entry) => entry.type === "expense" && String(entry.date || "").startsWith(month) && !entry.voided && !entry.cancelledAt)
+    .map((entry) => ({ id: String(entry.id), date: String(entry.date), category: String(entry.category || "Boshqa"), amount: Number(entry.amount) || 0, note: String(entry.note || ""), account: accounts.get(String(entry.accountId)) || "", recurring: Boolean(entry.recurringExpenseId || entry.fixedExpenseId), payroll: Boolean(entry.payrollPaymentId), by: String(entry.createdByName || "") }))
     .sort((left, right) => right.date.localeCompare(left.date));
+}
+
+/** Shu oy ombor kirimlari (xato bo'lsa olib tashlash uchun). Sabzavot/sous alohida belgilanadi. */
+function monthReceipts(state: Row, today: string) {
+  const month = today.slice(0, 7);
+  const vegMovements = new Set((Array.isArray(state.vegetablePurchases) ? state.vegetablePurchases as Row[] : []).filter((p) => !p.cancelledAt).map((p) => String(p.movementId)));
+  return warehouseDocuments(state).filter((doc) => String(doc.date).startsWith(month)).slice(0, 120).map((doc) => ({
+    id: doc.id, date: doc.date, source: doc.source, amount: Math.round(Number(doc.amount) || 0),
+    veg: doc.movements.some((movement) => vegMovements.has(String(movement.id))),
+    lines: doc.lines.map((line) => `${String(line.name || "")} ${Number(line.quantity) || 0} ${String(line.unit || "")}`.trim()).join(", ").slice(0, 200),
+  }));
 }
 
 /** Xarajat yozuvi (eski tizim formatida, serverda tekshirib). Takroriy so'rov ikkinchi marta yozilmaydi. */
@@ -121,7 +135,7 @@ export async function POST(request: Request) {
     const { state } = await readHaloState(branchId);
     return json({
       ok: true, today, inventory: inventoryChoices(state as Row, today), platforms: DELIVERY_PLATFORMS, rules: readDeductionRules(state as Row),
-      accounts: moneyAccounts(state as Row), categories: EXPENSE_CATEGORIES, expenses: monthExpenses(state as Row, today),
+      accounts: moneyAccounts(state as Row), categories: EXPENSE_CATEGORIES, expenses: monthExpenses(state as Row, today), receipts: monthReceipts(state as Row, today),
     });
   } catch (error) {
     if (error instanceof EntryError) return json({ error: error.message, code: error.code }, error.status);
@@ -248,7 +262,12 @@ function renderLines(veg){
         +(it&&it.unitCost&&!veg?'<small style="color:var(--muted)">Oxirgi narx: '+won(Math.round(it.unitCost*(it.unit==='g'||it.unit==='ml'?1000:1)))+' / '+(it.unit==='g'?'kg':it.unit==='ml'?'litr':esc(it.unit))+'</small>':'')
         +(LINES.length>1?'<button class="ghost" data-del="'+idx+'" style="justify-self:start;min-height:34px;padding:4px 10px">Olib tashlash</button>':'')+'</div>'}).join('')
     +'<div class="row" style="margin-top:10px"><button class="ghost" id="addLine">+ Yana mahsulot</button></div></section>'
-    +'<section class="card sticky-total"><div class="row" style="justify-content:space-between"><span class="big" id="lTotal">0 ₩</span><button id="saveLines">Saqlash</button></div><div id="lMsg"></div></section>';
+    +'<section class="card sticky-total"><div class="row" style="justify-content:space-between"><span class="big" id="lTotal">0 ₩</span><button id="saveLines">Saqlash</button></div><div id="lMsg"></div></section>'
+    +(function(){var list=(DATA.receipts||[]).filter(function(r){return veg?r.veg:!r.veg});var t=list.reduce(function(s2,r){return s2+r.amount},0);
+      return '<section class="card"><h2>Shu oy '+(veg?'sabzavot va sous xaridlari':'ombor kirimlari')+' · '+won(t)+'</h2><p class="hint">Xato kiritilgan bo‘lsa “Olib tashlash” — ombor, qarz va pul qanday o‘zgarishini oldin ko‘rsatadi.</p>'
+      +(list.length?list.slice(0,60).map(function(r){return '<div class="list-row"><div><b>'+esc(r.lines||r.source)+'</b><br><small style="color:var(--muted)">'+esc(r.date)+' · '+esc(r.source)+'</small></div><div style="text-align:right"><b>'+won(r.amount)+'</b><br><button class="ghost" data-rm="'+esc(r.id)+'" style="min-height:30px;padding:2px 10px;margin-top:4px">Olib tashlash</button></div></div>'}).join(''):'<p class="hint">Bu oyda yozuv yo‘q.</p>')+'</section>'})();
+  pane.querySelectorAll('[data-rm]').forEach(function(b){b.addEventListener('click',function(){var r=(DATA.receipts||[]).find(function(x){return x.id===b.dataset.rm});
+    haloRemove({kind:'warehouse',id:b.dataset.rm,branch:sel.value,label:r?(r.lines||r.source)+' · '+won(r.amount)+' · '+r.date:'',done:function(){load()}})})});
   pane.querySelectorAll('[data-f]').forEach(function(el){el.addEventListener(el.tagName==='SELECT'?'change':'input',function(){var l=LINES[Number(el.dataset.i)],f=el.dataset.f;
     if(f==='a'){var d=digits(el.value);el.value=d?d.toLocaleString('en-US'):''}
     l[f]=el.value;if(f==='id'){var it=pool.find(function(i){return i.id===l.id});l.u=it?units(it,veg)[it.unit==='g'?1:0]||it.unit:'';renderLines(veg);return}lTotal()})});
@@ -267,7 +286,8 @@ function saveLines(veg,reason){
   if(!reason&&!confirm(lines.length+' ta mahsulot · jami '+won(total)+' · '+dt.value+'. Saqlansinmi?'))return;
   btn.disabled=true;
   post('/api/intake?branch='+encodeURIComponent(sel.value),{inventoryOnly:true,vegetableOnly:veg,operationId:OP,date:dt.value,duplicateReason:reason||undefined,lines:lines.map(function(l){return {inventoryId:l.id,quantity:dec(l.q),unit:l.u,amount:digits(l.a)}})}).then(function(x){btn.disabled=false;
-    if(x.body.ok){LINES=[];OP=uuid();renderLines(veg);document.getElementById('lMsg').innerHTML='<div class="msg ok">✓ Saqlandi'+(x.body.alreadySaved?' (oldin saqlangan edi)':'')+' · '+won(total)+'</div>';return}
+    if(x.body.ok){LINES=[];OP=uuid();var okMsg='<div class="msg ok">✓ Saqlandi'+(x.body.alreadySaved?' (oldin saqlangan edi)':'')+' · '+won(total)+'</div>';renderLines(veg);document.getElementById('lMsg').innerHTML=okMsg;
+      post(location.pathname,{branchId:sel.value}).then(function(y){if(y.body.ok){DATA.receipts=y.body.receipts;if(TAB==='veg'||TAB==='stock'){renderLines(veg);document.getElementById('lMsg').innerHTML=okMsg}}});return}
     if(x.body.code==='SIMILAR_PURCHASE'&&!reason){var why=prompt((x.body.error||'Shunga o‘xshash kirim bor.')+' Bu alohida xarid bo‘lsa, sababini yozing (kamida 5 harf):');if(why&&why.trim().length>=5)saveLines(veg,why.trim());return}
     msg.innerHTML='<div class="msg bad">'+esc(x.body.error||'Saqlanmadi.')+'</div>';
   });
@@ -290,11 +310,13 @@ function renderExpense(){
     +'<button class="block" id="xSave">Saqlash</button><div id="xMsg"></div></section>'
     +'<section class="card"><h2>Shu oy xarajatlari · '+won(total)+'</h2>'
     +(Object.keys(byCat).length?'<div class="grid" style="margin-bottom:12px">'+Object.keys(byCat).sort(function(a,b){return byCat[b]-byCat[a]}).map(function(c){return '<div class="kpi"><small>'+esc(c)+'</small><b>'+won(byCat[c])+'</b></div>'}).join('')+'</div>':'')
-    +(d.expenses.length?d.expenses.slice(0,60).map(function(e){return '<div class="list-row"><div><b>'+esc(e.category)+'</b>'+(e.recurring?' <span class="tag warn">avtomatik</span>':'')+'<br><small style="color:var(--muted)">'+esc(e.date)+(e.account?' · '+esc(e.account):'')+(e.note?' · '+esc(e.note):'')+'</small></div><b>'+won(e.amount)+'</b></div>'}).join(''):'<p class="hint">Bu oyda xarajat yo‘q.</p>')+'</section>';
+    +(d.expenses.length?d.expenses.slice(0,60).map(function(e){return '<div class="list-row"><div><b>'+esc(e.category)+'</b>'+(e.recurring?' <span class="tag warn">avtomatik</span>':'')+'<br><small style="color:var(--muted)">'+esc(e.date)+(e.account?' · '+esc(e.account):'')+(e.note?' · '+esc(e.note):'')+(e.by?' · '+esc(e.by):'')+'</small></div><div style="text-align:right"><b>'+won(e.amount)+'</b>'+'<br><button class="ghost" data-xc="'+esc(e.id)+'" style="min-height:30px;padding:2px 10px;margin-top:4px">Olib tashlash</button></div></div>'}).join(''):'<p class="hint">Bu oyda xarajat yo‘q.</p>')+'</section>';
   pane.querySelectorAll('[data-cat]').forEach(function(b){b.addEventListener('click',function(){EXP.cat=b.dataset.cat;var keep={n:document.getElementById('xName').value,a:document.getElementById('xAmt').value,o:document.getElementById('xNote').value};renderExpense();document.getElementById('xName').value=keep.n;document.getElementById('xAmt').value=keep.a;document.getElementById('xNote').value=keep.o})});
   var amt=document.getElementById('xAmt');amt.addEventListener('input',function(){var v=digits(amt.value);amt.value=v?v.toLocaleString('en-US'):''});
   document.getElementById('xAcc').addEventListener('change',function(){EXP.acc=this.value});
   document.getElementById('xSave').addEventListener('click',function(){saveExpense()});
+  pane.querySelectorAll('[data-xc]').forEach(function(b){b.addEventListener('click',function(){var e=d.expenses.find(function(x){return x.id===b.dataset.xc});
+    haloRemove({kind:'finance',id:b.dataset.xc,branch:sel.value,label:e?e.category+' · '+won(e.amount)+' · '+e.date:'',done:function(){load()}})})});
 }
 function saveExpense(reason){
   var msg=document.getElementById('xMsg'),btn=document.getElementById('xSave');

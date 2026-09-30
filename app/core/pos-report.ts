@@ -115,6 +115,20 @@ export function posDayReport(state: Row, date: string): PosDayReport {
     });
   }
 
+  // POS apparati hisobotidan yuklangan savdolar — har yuklash bitta yozuv (bekor qilish mumkin).
+  const imports = new Map<string, { amount: number; count: number; time: string; worker: string; file: string }>();
+  for (const sale of rows(state.sales)) {
+    const batch = sale.posImport && typeof sale.posImport === "object" ? String((sale.posImport as Row).batch || "") : "";
+    if (!batch || sale.date !== date || !active(sale)) continue;
+    const item = imports.get(batch) || { amount: 0, count: 0, time: String(sale.createdAt || ""), worker: String(sale.createdByName || ""), file: String((sale.posImport as Row).fileName || "") };
+    item.amount += won(sale.totalRevenue); item.count += 1;
+    imports.set(batch, item);
+  }
+  for (const [batch, item] of imports) {
+    report.entries.push({ id: `pos-import:${batch}`, kind: "sale", channel: "pos", payment: "import", time: item.time, worker: item.worker, summary: `POS hisobot · ${item.count} xil taom${item.file ? ` · ${item.file}` : ""}`.slice(0, 200), amount: item.amount });
+    report.pos.total.orders += 1;
+  }
+
   for (const entry of rows(state.workerConsumptions)) {
     if (entry.date !== date || !active(entry)) continue;
     const cost = Math.max(0, won(Number(entry.totalCost || 0) - Number(entry.expenseOnlyCost || 0)));
