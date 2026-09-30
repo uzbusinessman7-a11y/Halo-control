@@ -84,6 +84,7 @@ export function addShift(state: Row, body: Row, today: string) {
   const hours = (Date.parse(clockOut) - Date.parse(clockIn)) / 3_600_000;
   if (hours > 18) throw new StaffError("Smena 18 soatdan uzun bo'lmaydi.");
   const breakMinutes = Math.max(0, Math.min(240, Math.round(Number(body.breakMinutes || 0))));
+  if (breakMinutes >= hours * 60) throw new StaffError("Tanaffus smenadan uzun bo'lmaydi.");
   const shift = {
     id, staffId: member.id, date, clockIn, clockOut, breakMinutes,
     hourlyRateAtShift: Math.round(staffHourlyRate(member)), overtimeAfterHoursAtShift: member.overtimeAfterHours, overtimeMultiplierAtShift: member.overtimeMultiplier,
@@ -223,6 +224,7 @@ export function editShift(state: Row, body: Row) {
   if ((Date.parse(clockOut) - Date.parse(clockIn)) / 3_600_000 > 18) throw new StaffError("Smena 18 soatdan uzun bo'lmaydi.");
   if (Date.parse(clockOut) > Date.now() + 5 * 60_000) throw new StaffError("Ketgan vaqt hali kelmagan.");
   const breakMinutes = Math.max(0, Math.min(240, Math.round(Number(body.breakMinutes ?? shift.breakMinutes ?? 0))));
+  if (breakMinutes * 60_000 >= Date.parse(clockOut) - Date.parse(clockIn)) throw new StaffError("Tanaffus smenadan uzun bo'lmaydi.");
   const now = new Date().toISOString();
   const edits = rows(shift.edits);
   const updated = {
@@ -300,6 +302,7 @@ export function voidPayment(state: Row, body: Row, today: string) {
   const payments = rows(state.payrollPayments);
   const payment = findOne(payments, clean(body.id, 160), "To'lov");
   if (payment.voided === true) return { state, result: { alreadySaved: true } };
+  openMonth(state, String(payment.date));
   openMonth(state, today);
   const reason = reasonOf(body);
   const finances = rows(state.financialEntries);

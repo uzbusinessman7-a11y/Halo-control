@@ -45,3 +45,14 @@ test('takroriy faol xarajat, mahsulot xaridi va maosh rad etiladi; to‘xtatilga
   const again = saveRecurring(stopped, { id: s.fixedExpenses[0].id, name: 'Ijara', category: 'Ijara', amount: 1000, billingDay: 5, accountId: 'bank' }, '2027-01-10').state;
   assert.equal(again.fixedExpenses[0].nextDue, '2027-02-05');
 });
+
+test('to‘xtatilgan “Ijara” o‘rniga yangisi ochilsa, shu oyga ikkinchi marta yozilmaydi', () => {
+  let s = saveRecurring(base(), { name: 'Ijara', category: 'Ijara', amount: 1000, billingDay: 1, accountId: 'bank', includeThisMonth: true }, '2026-09-10').state;
+  s = materializeRecurring(s, '2026-09-10').state;
+  s = stopRecurring(s, { id: s.fixedExpenses[0].id }).state;
+  s = saveRecurring(s, { name: 'Ijara', category: 'Ijara', amount: 1200, billingDay: 25, accountId: 'bank' }, '2026-09-10').state;
+  assert.equal(s.fixedExpenses[1].nextDue, '2026-10-25');
+  const out = materializeRecurring(s, '2026-10-26');
+  assert.equal(out.created.length, 1);
+  assert.ok(validRecurringExpenseMetadata(out.state.fixedExpenses, out.state.financialEntries));
+});

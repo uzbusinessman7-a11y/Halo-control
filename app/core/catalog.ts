@@ -86,7 +86,7 @@ export function saveProduct(state: Row, body: Row) {
   const newId = `inv-${operationId.slice(0, 13)}`;
   const existing = inventory.find((item) => item.id === newId);
   if (existing) return { state, result: { product: existing, created: false } };
-  const product = { id: newId, ...fields, unit, stock: 0, unitCost: 0, packageCost: 0, gramsPerUnit: unit === "g" ? 1 : 0, supplierId: "", categoryId: "", createdAt: new Date().toISOString() };
+  const product = { id: newId, supplierId: "", ...fields, unit, stock: 0, unitCost: 0, packageCost: 0, gramsPerUnit: unit === "g" ? 1 : 0, categoryId: "", createdAt: new Date().toISOString() };
   return { state: withVeg({ ...state, inventory: [product, ...inventory] }, newId), result: { product, created: true } };
 }
 

@@ -15,9 +15,9 @@ import type { D1Like } from "./full-migration";
 const seoulToday = (now: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 
 export async function runScheduledJobs(now = new Date()) {
+  if (await isParallelMode()) return { skipped: "parallel-mode" as const, branches: [] };
   // Oylik avtomatik xarajatlar (ijara va h.k.) — sahifa ochilmasa ham o'z kunida yoziladi.
   for (const branch of await listHaloBranches()) await ensureRecurring(branch.id, seoulToday(now));
-  if (await isParallelMode()) return { skipped: "parallel-mode" as const, branches: [] };
   const results: Array<Record<string, unknown>> = [];
   for (const branch of await listHaloBranches()) {
     try {

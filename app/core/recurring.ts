@@ -6,7 +6,7 @@
  * (takrorlanmaydi, eski tizimning materializeRecurringExpenses qoidasi bilan bir xil).
  */
 import {
-  canAutomateRecurringExpenseCategory, materializeRecurringExpenses, validRecurringExpenseMetadata,
+  canAutomateRecurringExpenseCategory, materializeRecurringExpenses, recurringExpenseTemplateIdentity, validRecurringExpenseMetadata,
   type RecurringExpenseTemplate, type RecurringFinancialEntry,
 } from "../lib/recurring-expenses";
 import { mutateHaloState, readHaloState } from "../lib/halo-store";
@@ -107,6 +107,15 @@ export function saveRecurring(state: Row, body: Row, today: string) {
     nextDue = dayOf(startMonth, billingDay);
     if (nextDue < today && startMonth === month && body.includeThisMonth !== true) nextDue = dayOf(nextMonth(month), billingDay);
   }
+  // Shu nom/tur/hisob bilan bu oyga allaqachon yozilgan bo'lsa (masalan, to'xtatilgan eski shablondan) —
+  // ikkinchi marta yozilmasin: keyingi oydan boshlanadi (eski tizim tekshiruvi ham shuni talab qiladi).
+  const identity = recurringExpenseTemplateIdentity({ name, category, accountId: String(account.id) });
+  const identityOf = new Map(templates.map((entry) => [String(entry.id), recurringExpenseTemplateIdentity({ name: String(entry.name || ""), category: String(entry.category || ""), accountId: String(entry.accountId || "") })]));
+  const entries = rows(state.financialEntries);
+  const reversed = new Set(entries.map((entry) => String(entry.reversedEntryId || "")).filter(Boolean));
+  const usedMonths = new Set(entries.filter((entry) => entry.fixedExpenseId && !entry.reversedEntryId && !reversed.has(String(entry.id)) && identityOf.get(String(entry.fixedExpenseId)) === identity)
+    .map((entry) => String(entry.fixedExpenseDueDate || entry.date || "").slice(0, 7)));
+  for (let guard = 0; usedMonths.has(nextDue.slice(0, 7)) && guard < 24; guard += 1) nextDue = dayOf(nextMonth(nextDue.slice(0, 7)), billingDay);
   const saved: Row = {
     ...(current || {}),
     id: current ? String(current.id) : `v2-fixed-${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,

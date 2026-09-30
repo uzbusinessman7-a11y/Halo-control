@@ -9,6 +9,7 @@ import { readDeductionRules } from "../../../core/deductions";
 import { posDayReport } from "../../../core/pos-report";
 import { shell } from "../../../core/ui-shell";
 import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
+import { isAccountingMonthClosed } from "../../../lib/month-end";
 
 declare global {
   var __HALO_SELF_HOSTED__: boolean | undefined;
@@ -129,13 +130,16 @@ export async function POST(request: Request) {
     } else if (action === "cancel") {
       if (user.role !== "owner") throw new PosPageError("Bekor qilishni faqat rahbar qiladi.", 403);
       const id = clean(body.id, 160);
+      if (id.startsWith("pos-import:")) await assertV2DayOpen(branchId, date);
       await mutateHaloState((state) => {
         if (id.startsWith("pos-order:")) return { state: cancelPosOrder(state as Row, id).state, result: null };
         if (id.startsWith("pos-import:")) {
           // Butun POS hisobot yuklashini bekor qilish: savdolar olib tashlanadi, ombor qaytadi.
+          // Faqat tanlangan kun: bitta fayl bir necha kunni qamragan bo'lsa, boshqa kunlar tegilmaydi.
           const batch = id.slice("pos-import:".length);
+          if (isAccountingMonthClosed((state as Row).monthlyCloses, date)) throw new PosPageError(`${date.slice(0, 7)} oyi yopilgan.`, 409);
           const ids = new Set((Array.isArray((state as Row).sales) ? (state as Row).sales as Row[] : [])
-            .filter((sale) => sale.posImport && (sale.posImport as Row).batch === batch).map((sale) => String(sale.id)));
+            .filter((sale) => sale.posImport && (sale.posImport as Row).batch === batch && sale.date === date).map((sale) => String(sale.id)));
           if (!ids.size) throw new PosPageError("POS hisobot topilmadi.", 404);
           return { state: removeSalesById(state as Row, ids), result: null };
         }
