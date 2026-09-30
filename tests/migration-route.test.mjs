@@ -133,3 +133,54 @@ test('yangi sayt: eski saytdagi "To‘liq ma’lumotni yuklash" fayllari orqali 
   assert.equal(done.ok, true);
   assert.equal(target.prepare("SELECT payload FROM app_state WHERE id='main'").get().payload, JSON.stringify(files[0].state));
 });
+
+function stateTables(db) {
+  db.exec("CREATE TABLE IF NOT EXISTS app_state (id TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+  db.exec("CREATE TABLE IF NOT EXISTS halo_state_backups (id TEXT PRIMARY KEY NOT NULL, branch_id TEXT NOT NULL, revision TEXT NOT NULL, payload TEXT NOT NULL, actor TEXT, action TEXT, section TEXT, created_at TEXT)");
+  db.exec("CREATE TABLE IF NOT EXISTS halo_branches (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, address TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1)");
+  return db;
+}
+
+test('noldan boshlash: yangi saytdagi ma’lumotdan (fayl yo‘q) — tekshirish, tasdiq, zaxira', async () => {
+  const target = stateTables(newSite());
+  use(target, true);
+  const state = { inventory: [{ id: 'i1', name: 'Tovuq', stock: 9, unitCost: 8000 }], recipes: [{ id: 'r', name: 'Kabob', ingredients: [] }], suppliers: [{ id: 'p', name: 'Ali', balance: 50000 }], sales: [{ id: 's', totalRevenue: 7000 }] };
+  target.exec("CREATE TABLE IF NOT EXISTS app_state (id TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+  target.prepare("INSERT INTO app_state (id, payload, updated_at) VALUES ('main', ?, 'rev-0') ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at").run(JSON.stringify(state));
+  target.exec("CREATE TABLE v2_period_counts (id TEXT PRIMARY KEY)"); target.exec("INSERT INTO v2_period_counts VALUES ('x')");
+  const post = (body) => POST(new Request(site, { method: 'POST', headers: asOwner, body: JSON.stringify({ action: 'baseReset', startDate: '2026-10-01', ...body }) }));
+  const dry = await (await post({ dryRun: true })).json();
+  assert.equal(dry.ok, true);
+  assert.equal(dry.branchReport.branches[0].base.cleared.sales, 1);
+  assert.equal(JSON.parse(target.prepare("SELECT payload FROM app_state WHERE id='main'").get().payload).sales.length, 1, 'tekshirish hech narsa yozmaydi');
+  const noConfirm = await post({});
+  assert.equal(noConfirm.status, 400);
+  const done = await (await post({ confirm: 'NOLDAN_BOSHLA' })).json();
+  assert.equal(done.ok, true);
+  assert.equal(done.periodCountsCleared, 1);
+  const after = JSON.parse(target.prepare("SELECT payload FROM app_state WHERE id='main'").get().payload);
+  assert.equal(after.inventory[0].name, 'Tovuq'); assert.equal(after.inventory[0].stock, 0); assert.equal(after.inventory[0].unitCost, 8000);
+  assert.equal(after.suppliers[0].balance, 0); assert.deepEqual(after.sales, []);
+  const backup = target.prepare("SELECT payload FROM halo_state_backups WHERE branch_id='main' AND action LIKE 'Noldan%'").get();
+  assert.equal(JSON.parse(backup.payload).sales.length, 1, 'avvalgi holat zaxirada');
+});
+
+test('noldan boshlash: eski sayt fayllaridan faqat baza olinadi', async () => {
+  const target = stateTables(newSite());
+  use(target, true);
+  const files = [{ format: 'halo-control-api-export', branchId: 'main', exportedAt: '2026-09-30T06:00:00Z', updatedAt: 'rev-1', state: { inventory: [{ id: 'i', name: 'Non', stock: 40 }], sales: [{ id: 's', totalRevenue: 7000 }] } }];
+  const done = await (await POST(new Request(site, { method: 'POST', headers: asOwner, body: JSON.stringify({ files, baseOnly: true, replaceExisting: 'HA_ALMASHTIR', startDate: '2026-10-01' }) }))).json();
+  assert.equal(done.ok, true);
+  const after = JSON.parse(target.prepare("SELECT payload FROM app_state WHERE id='main'").get().payload);
+  assert.equal(after.inventory[0].stock, 0); assert.deepEqual(after.sales, []);
+});
+
+test('to‘liq o‘tishdan keyin noldan boshlash taqiqlangan', async () => {
+  const target = newSite();
+  use(target, true);
+  target.exec("CREATE TABLE IF NOT EXISTS halo_cutover (id TEXT PRIMARY KEY, completed_at TEXT NOT NULL, completed_by TEXT NOT NULL DEFAULT '')");
+  target.exec("INSERT INTO halo_cutover (id, completed_at) VALUES ('main', '2026-10-01')");
+  const res = await POST(new Request(site, { method: 'POST', headers: asOwner, body: JSON.stringify({ action: 'baseReset', dryRun: true }) }));
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /noldan boshlab bo'lmaydi/);
+});
