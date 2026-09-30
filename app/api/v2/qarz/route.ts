@@ -1,5 +1,7 @@
 import { isAdminRequest } from "../../../lib/integration-store";
-import { listHaloBranches, readHaloState } from "../../../lib/halo-store";
+import { HaloStateConflictError, listHaloBranches, mutateHaloState, readHaloState } from "../../../lib/halo-store";
+import { editSupplierBalance, SupplierBalanceEditError } from "../../../lib/supplier-balance-edit";
+import { isAccountingMonthClosed } from "../../../lib/month-end";
 import { LedgerError } from "../../../core/ledger";
 import { runDebtBridge } from "../../../core/debt-bridge";
 import { statement, statementText } from "../../../core/debts";
@@ -37,6 +39,30 @@ export async function POST(request: Request) {
     const branchId = String(body.branchId || "main");
     const scope = { tenantId: TENANT_ID, branchId };
     const today = seoulToday();
+    type Row = Record<string, unknown>;
+    const list = (value: unknown) => (Array.isArray(value) ? value as Row[] : []);
+    if (body.action === "records") {
+      // Yetkazib beruvchining asl yozuvlari (bekor qilish uchun) va ma'lumoti.
+      const { state } = await readHaloState(branchId);
+      const supplier = list((state as Row).suppliers).find((entry) => entry.id === body.supplierId);
+      if (!supplier) return json({ error: "Yetkazib beruvchi topilmadi." }, 404);
+      const records = list((state as Row).transactions).filter((tx) => tx.supplierId === supplier.id)
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+        .slice(0, 100)
+        .map((tx) => ({ id: String(tx.id), type: String(tx.type), amount: Number(tx.amount) || 0, date: String(tx.date), note: String(tx.note || tx.description || ""), closed: isAccountingMonthClosed((state as Row).monthlyCloses, String(tx.date)) }));
+      return json({ ok: true, supplier: { id: supplier.id, name: supplier.name, phone: supplier.phone || "", bankAccount: supplier.bankAccount || "", balance: Number(supplier.balance) || 0 }, records });
+    }
+    if (body.action === "editBalance") {
+      const reason = String(body.reason || "").trim();
+      await mutateHaloState((cur) => {
+        const st = cur as Row;
+        if (isAccountingMonthClosed(st.monthlyCloses, today)) throw new SupplierBalanceEditError("Bu oy yopilgan.");
+        const supplier = list(st.suppliers).find((entry) => entry.id === body.supplierId);
+        const out = editSupplierBalance(st, { supplierId: body.supplierId, balance: Number(body.balance), reason, id: `v2edit-${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`, expectedBalance: supplier?.balance, expectedOpeningBalance: Number(supplier?.openingBalance || 0) });
+        return { state: out.state as Row, result: null };
+      }, 5, branchId, "Rahbar", `Qarz qoldig‘i tuzatildi · Sabab: ${reason.slice(0, 80)}`, "Qarzlar (yangi)");
+      return json({ ok: true });
+    }
     const { state } = await readHaloState(branchId);
     const bridge = await runDebtBridge(database(), scope, state as Record<string, unknown>, today);
     if (body.action === "statement") {
@@ -48,6 +74,8 @@ export async function POST(request: Request) {
       .map((account) => ({ id: String(account.id), name: String(account.name || account.id), type: String(account.type) }));
     return json({ ok: true, today, bridge, accounts });
   } catch (error) {
+    if (error instanceof SupplierBalanceEditError) return json({ error: error.message }, 409);
+    if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     if (error instanceof LedgerError || (error instanceof Error && /filial/i.test(error.message))) return json({ error: error.message }, 400);
     return json({ error: "Xatolik yuz berdi." }, 500);
   }
@@ -98,17 +126,39 @@ function openStatement(partyId,from,to){
       +'<tr><td colspan="3"><b>'+esc(s.to)+' holatiga qarz</b></td><td class="n"><b>'+won(s.closing)+'</b></td></tr></table>'
       +'<p class="hint" style="margin-top:10px">Jami xarid: '+won(s.purchases)+' · Jami to‘lov: '+won(s.payments)+'</p>'
       +'<div class="row noprint" style="margin:14px 0 6px"><button id="addPur">+ Xarid (qarz oshadi)</button><button class="ghost" id="addPay">+ To‘lov qildim</button></div><div id="entry" class="noprint" style="margin-bottom:12px"></div>'
-      +'<div class="row noprint"><button id="copy">📋 Nusxa olish (xabar uchun)</button><button class="ghost" id="print">🖨 Chop etish / PDF</button></div><div id="cmsg" class="noprint"></div>';
+      +'<div class="row noprint"><button id="copy">📋 Nusxa olish (xabar uchun)</button><button class="ghost" id="print">🖨 Chop etish / PDF</button></div><div id="cmsg" class="noprint"></div>'
+      +'<div class="row noprint" style="margin-top:10px"><button class="ghost" id="recs">🧾 Yozuvlar / bekor qilish</button><button class="ghost" id="bal">⚖️ Qoldiqni tuzatish</button><button class="ghost" id="edit">✏️ Ma’lumotlari</button></div><div id="fix" class="noprint"></div>';
     document.getElementById('stGo').addEventListener('click',function(){openStatement(partyId,document.getElementById('stFrom').value,document.getElementById('stTo').value)});
     document.getElementById('print').addEventListener('click',function(){window.print()});
     document.getElementById('addPur').addEventListener('click',function(){entryForm(partyId,'purchase')});
     document.getElementById('addPay').addEventListener('click',function(){entryForm(partyId,'payment')});
+    document.getElementById('recs').addEventListener('click',function(){fixRecords(partyId,from,to)});
+    document.getElementById('bal').addEventListener('click',function(){fixBalance(partyId,from,to)});
+    document.getElementById('edit').addEventListener('click',function(){fixInfo(partyId)});
     document.getElementById('copy').addEventListener('click',function(){
       var done=function(){document.getElementById('cmsg').innerHTML='<div class="msg ok" style="margin-top:10px">✓ Nusxa olindi — Telegram yoki KakaoTalk’ga joylang</div>'};
       if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(res.text).then(done,function(){prompt('Matnni nusxalang:',res.text)})}else{prompt('Matnni nusxalang:',res.text)}
     });
   });
 }
+var TXK={purchase:'Xarid',payment:'To‘lov'};
+function fixRecords(partyId,from,to){var p=PARTIES[partyId],box=document.getElementById('fix');if(!p)return;box.innerHTML='<p class="hint">Yuklanmoqda…</p>';
+  api({action:'records',branchId:sel.value,supplierId:p.oldId}).then(function(r){if(!r.ok){box.innerHTML='<div class="msg bad">'+esc(r.error)+'</div>';return}
+    box.innerHTML='<div class="card" style="background:var(--card-2);margin-top:10px"><h2>Yozuvlar — '+esc(r.supplier.name)+'</h2><p class="hint">Xato yozuvni olib tashlasangiz, qarz, ombor va pul qanday o‘zgarishi oldin ko‘rsatiladi. Asl yozuv tarixda qoladi.</p>'
+      +(r.records.length?r.records.map(function(x){return '<div class="list-row"><div><b>'+esc(TXK[x.type]||x.type)+' · '+won(x.amount)+'</b><br><small style="color:var(--muted)">'+esc(x.date)+(x.note?' · '+esc(x.note):'')+(x.closed?' · oy yopilgan':'')+'</small></div>'+(x.closed?'':'<button class="ghost" data-cx="'+esc(x.id)+'" style="min-height:32px;padding:2px 10px">Olib tashlash</button>')+'</div>'}).join(''):'<p class="hint">Yozuv yo‘q.</p>')+'</div>';
+    box.querySelectorAll('[data-cx]').forEach(function(b){b.addEventListener('click',function(){var x=r.records.find(function(y){return y.id===b.dataset.cx});
+      haloRemove({kind:'transaction',id:b.dataset.cx,branch:sel.value,label:r.supplier.name+' · '+(x?(TXK[x.type]||x.type)+' '+won(x.amount)+' · '+x.date:''),done:function(){load();setTimeout(function(){openStatement(partyId,from,to)},400)}})})});
+  })}
+function fixBalance(partyId,from,to){var p=PARTIES[partyId],box=document.getElementById('fix');if(!p)return;
+  box.innerHTML='<div class="card" style="background:var(--card-2);margin-top:10px"><h2>Qoldiqni tuzatish</h2><p class="hint">Yetkazib beruvchi bilan kelishilgan haqiqiy qarzni yozing. Farq sababi bilan tarixda saqlanadi.</p>'
+    +'<label class="field"><span>To‘g‘ri qarz (₩)</span><input class="money" id="bAmt" inputmode="numeric" placeholder="0"></label><label class="field"><span>Sabab</span><input id="bWhy" maxlength="200" placeholder="Masalan: akt bo‘yicha kelishildi"></label><button id="bSave">Saqlash</button></div>';
+  var a=document.getElementById('bAmt');a.addEventListener('input',function(){var d=a.value.replace(/[^0-9]/g,'');a.value=d?Number(d).toLocaleString('en-US'):''});
+  document.getElementById('bSave').addEventListener('click',function(){var why=document.getElementById('bWhy').value.trim(),amt=Number(a.value.replace(/[^0-9]/g,''));if(!why){alert('Sababini yozing.');return}if(!confirm('Qarz '+won(amt)+' qilib belgilansinmi?'))return;
+    api({action:'editBalance',branchId:sel.value,supplierId:p.oldId,balance:amt,reason:why}).then(function(x){if(!x.ok){alert(x.error||'Bo‘lmadi');return}load();setTimeout(function(){openStatement(partyId,from,to)},400)})})}
+function fixInfo(partyId){var p=PARTIES[partyId],box=document.getElementById('fix');if(!p)return;box.innerHTML='<p class="hint">Yuklanmoqda…</p>';
+  api({action:'records',branchId:sel.value,supplierId:p.oldId}).then(function(r){if(!r.ok){box.innerHTML='<div class="msg bad">'+esc(r.error)+'</div>';return}var s2=r.supplier;
+    box.innerHTML='<div class="card" style="background:var(--card-2);margin-top:10px"><h2>Ma’lumotlari</h2><label class="field"><span>Nomi</span><input id="iN" maxlength="100" value="'+esc(s2.name)+'"></label><label class="field"><span>Telefon</span><input id="iP" maxlength="60" value="'+esc(s2.phone)+'"></label><label class="field"><span>Hisob raqami</span><input id="iB" maxlength="120" value="'+esc(s2.bankAccount)+'"></label><button id="iS">Saqlash</button></div>';
+    document.getElementById('iS').addEventListener('click',function(){fetch('/api/supplier-records?branch='+encodeURIComponent(sel.value),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveSupplier',branchId:sel.value,supplier:{id:s2.id,name:document.getElementById('iN').value,phone:document.getElementById('iP').value,bankAccount:document.getElementById('iB').value}})}).then(function(x){return x.json()}).then(function(x){if(x.error){alert(x.error);return}box.innerHTML='<div class="msg ok">✓ Saqlandi</div>';load()})})})}
 function uid(){return 'v2-'+(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2))}
 function entryForm(partyId,type){
   var p=PARTIES[partyId],box=document.getElementById('entry');if(!p)return;

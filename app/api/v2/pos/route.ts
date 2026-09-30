@@ -1,7 +1,7 @@
 import { isAdminRequest } from "../../../lib/integration-store";
 import { authenticateWorkerRequest } from "../../../lib/worker-auth";
 import { HaloStateConflictError, listHaloBranches, mutateHaloState, readHaloState } from "../../../lib/halo-store";
-import { applyPosOrder, buildPosTerminalView, cancelPosOrder, PosTerminalError, type PosOrderInput } from "../../../lib/pos-terminal";
+import { applyPosOrder, buildPosTerminalView, cancelPosOrder, PosTerminalError, removeSalesById, type PosOrderInput } from "../../../lib/pos-terminal";
 import { applyWorkerConsumption, compatibleInventoryInputUnits, deleteWorkerConsumption, inventoryQuantityFromInput, WorkerConsumptionError } from "../../../lib/worker-consumptions";
 import { DELIVERY_PLATFORMS } from "../../../lib/delivery-sales";
 import { seoulBusinessDate } from "../../../lib/business-time";
@@ -131,6 +131,14 @@ export async function POST(request: Request) {
       const id = clean(body.id, 160);
       await mutateHaloState((state) => {
         if (id.startsWith("pos-order:")) return { state: cancelPosOrder(state as Row, id).state, result: null };
+        if (id.startsWith("pos-import:")) {
+          // Butun POS hisobot yuklashini bekor qilish: savdolar olib tashlanadi, ombor qaytadi.
+          const batch = id.slice("pos-import:".length);
+          const ids = new Set((Array.isArray((state as Row).sales) ? (state as Row).sales as Row[] : [])
+            .filter((sale) => sale.posImport && (sale.posImport as Row).batch === batch).map((sale) => String(sale.id)));
+          if (!ids.size) throw new PosPageError("POS hisobot topilmadi.", 404);
+          return { state: removeSalesById(state as Row, ids), result: null };
+        }
         // Rahbar istalgan oshxona/chiqit yozuvini bekor qiladi (eski xodim dasturida kiritilganini ham).
         const entry = (Array.isArray((state as Row).workerConsumptions) ? (state as Row).workerConsumptions as Row[] : []).find((item) => item.id === id);
         return { state: deleteWorkerConsumption(state as Row, id, { id: String(entry?.workerId || actor.id), name: actor.name }).state, result: null };
@@ -312,7 +320,7 @@ function renderReport(){
       +(r.pos.total.gross?'<section class="card"><h2>POS apparati (hisobotdan)</h2><div class="kpis">'+kpi('POS savdo',won(r.pos.total.gross),'soliq '+won(r.pos.total.tax)+' · komissiya '+won(r.pos.total.commission))+'</div></section>':'');
   }
   h+='<section class="card"><h2>Bugungi yozuvlar</h2>'+(r.entries.length?r.entries.map(function(e){
-    var title=e.kind==='sale'?(e.channel==='delivery'?'🛵 '+esc((d.platforms.find(function(p){return p.id===e.platform})||{}).shortLabel||'Delivery'):e.channel==='pos'?'POS':(e.payment==='bank'?'🏦 Hisob-raqam':'💵 Naqd')):(e.kind==='meal'?'🍽 Oshxona':'🗑 Chiqit');
+    var title=e.kind==='sale'?(e.channel==='delivery'?'🛵 '+esc((d.platforms.find(function(p){return p.id===e.platform})||{}).shortLabel||'Delivery'):e.channel==='pos'?(e.payment==='import'?'📊 POS hisobot':'POS'):(e.payment==='bank'?'🏦 Hisob-raqam':'💵 Naqd')):(e.kind==='meal'?'🍽 Oshxona':'🗑 Chiqit');
     return '<div class="entry"><div><b>'+title+'</b> <small>'+hm(e.time)+(e.worker?' · '+esc(e.worker):'')+(e.orderNumber?' · #'+esc(e.orderNumber):'')+'</small><br><small>'+esc(e.summary)+'</small></div><div style="text-align:right">'+(e.amount?'<b>'+won(e.amount)+'</b>':(e.cost!=null?'<small>tannarx '+won(e.cost)+'</small>':''))
       +(d.role==='owner'?'<br><button class="ghost" data-cancel="'+esc(e.id)+'" style="min-height:30px;padding:2px 10px;margin-top:6px">Bekor qilish</button>':'')+'</div></div>'}).join(''):'<p class="hint">Hali yozuv yo‘q.</p>')+'</section>';
   pane.innerHTML=h;

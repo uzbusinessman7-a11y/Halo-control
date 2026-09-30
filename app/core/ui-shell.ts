@@ -102,6 +102,10 @@ pre{white-space:pre-wrap;font:14px/1.55 ui-monospace,Menlo,monospace;background:
 @keyframes sk{to{background-position:-200% 0}}
 details summary{cursor:pointer;color:var(--muted);font-size:14px}
 [hidden]{display:none!important}
+.sheet-bg{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center;padding:0}
+.sheet{background:var(--card);border:1px solid var(--line);border-radius:18px 18px 0 0;width:min(560px,100%);max-height:88dvh;overflow-y:auto;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
+.sheet h3{margin:0 0 6px;font-size:19px}.sheet .fx{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}.sheet .fx b{font-variant-numeric:tabular-nums;text-align:right}
+@media (min-width:640px){.sheet-bg{align-items:center}.sheet{border-radius:18px}}
 .more-btn{position:fixed;z-index:20;top:calc(10px + env(safe-area-inset-top));right:14px;width:44px;height:44px;min-height:44px;padding:0;border-radius:12px;background:var(--card);color:var(--text);border:1px solid var(--line);font-size:24px;line-height:1;font-weight:900}
 .more-panel{position:fixed;z-index:30;top:calc(62px + env(safe-area-inset-top));right:14px;width:min(340px,calc(100vw - 28px));max-height:calc(100dvh - 160px);overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:8px;box-shadow:0 20px 50px rgba(0,0,0,.5)}
 .more-head{display:flex;justify-content:space-between;align-items:center;padding:4px 8px 8px}.more-head button{min-height:34px;padding:4px 10px}
@@ -126,6 +130,27 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px}
 const COMMON_SCRIPT = `
 function haloBranch(sel){try{var v=localStorage.getItem('halo-branch');if(v&&[].some.call(sel.options,function(o){return o.value===v}))sel.value=v}catch(e){}
 sel.addEventListener('change',function(){try{localStorage.setItem('halo-branch',sel.value)}catch(e){}})}
+/* Xato yozuvni olib tashlash (eski tizimning xavfsiz dvigateli: /api/record-removals).
+   Avval ta'sirini ko'rsatadi (ombor, qarz, pul qanday o'zgaradi), sababini so'raydi, keyin bajaradi. Tarixda qoladi. */
+function haloRemove(o){var bg=document.createElement('div');bg.className='sheet-bg';var nf=function(v){return Number(v||0).toLocaleString('en-US')};
+var e=function(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
+var close=function(){bg.remove()};bg.addEventListener('click',function(ev){if(ev.target===bg)close()});
+bg.innerHTML='<div class="sheet" role="dialog" aria-modal="true"><h3>Olib tashlash</h3><p class="hint">'+e(o.label||'')+'</p><div id="rmBody">'+haloLoading(3)+'</div></div>';document.body.appendChild(bg);
+var url='/api/record-removals?branch='+encodeURIComponent(o.branch||'main'),body=bg.querySelector('#rmBody');
+var call=function(d){return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).catch(function(){return {ok:false,j:{error:'Internet yo‘q. Qayta urinib ko‘ring.'}}})};
+call({action:'preview',kind:o.kind,id:o.id}).then(function(p){
+ if(!p.ok){body.innerHTML='<div class="msg bad">'+e(p.j.error||'Bo‘lmadi.')+'</div><button class="ghost block" style="margin-top:12px" id="rmX">Yopish</button>';bg.querySelector('#rmX').onclick=close;return}
+ var fx=(p.j.effects||[]).map(function(c){return '<div class="fx"><span>'+e(c.label)+'</span><b>'+nf(c.before)+' → '+nf(c.after)+(c.unit&&c.unit!=='₩'?' '+e(c.unit):' ₩')+'</b></div>'}).join('');
+ body.innerHTML='<div class="msg warn">'+e(p.j.description||'')+'</div>'+(fx?'<p class="hint" style="margin:12px 0 4px">Nima o‘zgaradi:</p>'+fx:'')
+  +'<label class="field" style="margin-top:14px"><span>Sabab (majburiy)</span><input id="rmWhy" maxlength="300" placeholder="Masalan: ikki marta kiritilgan"></label>'
+  +'<div class="row"><button class="ghost" id="rmNo" style="flex:1">Bekor</button><button id="rmGo" style="flex:1;background:var(--bad);color:#fff">Olib tashlash</button></div><div id="rmMsg"></div>';
+ bg.querySelector('#rmNo').onclick=close;var why=bg.querySelector('#rmWhy');why.focus();
+ bg.querySelector('#rmGo').onclick=function(){var b=this,r=why.value.trim();if(r.length<3){bg.querySelector('#rmMsg').innerHTML='<div class="msg bad">Sababini yozing (kamida 3 belgi).</div>';return}b.disabled=true;
+  var op='v2rm-'+(crypto.randomUUID?crypto.randomUUID().replace(/-/g,''):String(Date.now())+Math.random().toString(16).slice(2)).slice(0,30);
+  call({action:'remove',kind:o.kind,id:o.id,label:o.label||'',reason:r,operationId:op,expected:p.j.expected}).then(function(x){
+   if(!x.ok||!x.j.ok){b.disabled=false;bg.querySelector('#rmMsg').innerHTML='<div class="msg bad">'+e(x.j.error||'Bo‘lmadi.')+'</div>';return}
+   close();if(o.done)o.done(x.j)})}
+})}
 function haloLoading(n){var s='';for(var i=0;i<(n||3);i++)s+='<div class="skeleton" style="margin:10px 0;width:'+(90-i*15)+'%"></div>';return s}
 `;
 

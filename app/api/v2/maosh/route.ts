@@ -1,6 +1,6 @@
 import { isAdminRequest } from "../../../lib/integration-store";
 import { HaloStateConflictError, listHaloBranches, mutateHaloState, readHaloState } from "../../../lib/halo-store";
-import { addAdjustment, addShift, payStaff, saveStaffMember, StaffError, staffList } from "../../../core/staff";
+import { addAdjustment, addShift, editShift, repairPaymentPaidAt, payStaff, saveStaffMember, setDayStatus, StaffError, staffList, staffRecords, voidAdjustment, voidDayStatus, voidPayment, voidShift } from "../../../core/staff";
 import { LedgerError } from "../../../core/ledger";
 import { runPayrollBridge } from "../../../core/payroll-bridge";
 import { isMonth, payslip, payslipText } from "../../../core/payroll-ledger";
@@ -47,14 +47,25 @@ export async function POST(request: Request) {
       shift: [(st) => addShift(st, body, today), "Smena qo‘lda kiritildi"],
       adjust: [(st) => addAdjustment(st, body, today), body.type === "bonus" ? "Bonus yozildi" : "Ushlanma yozildi"],
       pay: [(st) => payStaff(st, body, today), body.kind === "advance" ? "Avans berildi" : "Oylik to‘landi"],
+      editShift: [(st) => editShift(st, body), `Smena vaqti tuzatildi · Sabab: ${String(body.reason || "").slice(0, 80)}`],
+      voidShift: [(st) => voidShift(st, body), `Smena bekor qilindi · Sabab: ${String(body.reason || "").slice(0, 80)}`],
+      dayStatus: [(st) => setDayStatus(st, body, today), "Kun holati saqlandi"],
+      voidDay: [(st) => voidDayStatus(st, body), `Kun holati bekor qilindi · Sabab: ${String(body.reason || "").slice(0, 80)}`],
+      voidAdj: [(st) => voidAdjustment(st, body), `Bonus/ushlanma bekor qilindi · Sabab: ${String(body.reason || "").slice(0, 80)}`],
+      voidPay: [(st) => voidPayment(st, body, today), `Maosh to‘lovi bekor qilindi · Sabab: ${String(body.reason || "").slice(0, 80)}`],
     };
     const action = String(body.action || "");
     if (action === "pay") await assertV2DayOpen(branchId, String(body.date || today));
+    if (action === "voidPay") await assertV2DayOpen(branchId, today);
+    if (action === "records") {
+      const st = (await readHaloState(branchId)).state as Record<string, unknown>;
+      return json({ ok: true, today, records: staffRecords(st, String(body.staffId || ""), month) });
+    }
     if (action === "staff" || mutations[action]) {
       let st: Record<string, unknown>;
       if (mutations[action]) {
         const [fn, label] = mutations[action];
-        st = (await mutateHaloState((cur) => fn(cur as Record<string, unknown>), 5, branchId, "Rahbar", label, "Maosh (yangi)")).state as Record<string, unknown>;
+        st = (await mutateHaloState((cur) => fn(repairPaymentPaidAt(cur as Record<string, unknown>)), 5, branchId, "Rahbar", label, "Maosh (yangi)")).state as Record<string, unknown>;
       } else st = (await readHaloState(branchId)).state as Record<string, unknown>;
       return json({ ok: true, today, staff: staffList(st), accounts: accountsOf(st) });
     }
@@ -142,10 +153,10 @@ function openSlip(id){
       +'<tr class="sum"><td colspan="2">'+(p.remaining>=0?'To‘lanishi kerak':'Ortiqcha to‘langan')+'</td><td class="n">'+won(Math.abs(p.remaining))+'</td></tr></table>'
       +(p.earlierMonths?'<p class="hint" style="margin-top:10px">Oldingi oylardan '+(p.earlierMonths>0?'to‘lanmagan: ':'ortiqcha to‘langan: ')+won(Math.abs(p.earlierMonths))+'</p>':'')
       +(p.corrections.length?'<details class="noprint" style="margin-top:10px"><summary>'+p.corrections.length+' ta tuzatish tarixi</summary>'+p.corrections.map(function(c){return '<div class="hint">'+esc(c.date)+' · '+won(c.amount)+' · '+esc(c.memo)+'</div>'}).join('')+'</details>':'')
-      +'<div class="row noprint" style="margin-top:14px"><button class="ghost" data-act="shift">＋ Smena</button><button class="ghost" data-act="adjust">± Bonus / ushlanma</button><button class="ghost" data-act="pay">💸 To‘lash</button></div><div id="actBox" class="noprint"></div>'
+      +'<div class="row noprint" style="margin-top:14px"><button class="ghost" data-act="shift">＋ Smena</button><button class="ghost" data-act="adjust">± Bonus / ushlanma</button><button class="ghost" data-act="pay">💸 To‘lash</button><button class="ghost" data-act="day">📅 Dam / kasal / kelmadi</button><button class="ghost" data-act="recs">🧾 Yozuvlar / tuzatish</button></div><div id="actBox" class="noprint"></div>'
       +'<div class="row noprint" style="margin-top:12px"><button id="copy">📋 Xodimga yuborish uchun nusxa</button><button class="ghost" id="print">🖨 Chop etish / PDF</button></div><div id="cmsg" class="noprint"></div>';
     document.getElementById('print').addEventListener('click',function(){window.print()});
-    card.querySelectorAll('[data-act]').forEach(function(b){b.addEventListener('click',function(){actionForm(b.dataset.act,OLD[id],id,p.employee.name)})});
+    card.querySelectorAll('[data-act]').forEach(function(b){b.addEventListener('click',function(){if(b.dataset.act==='recs')recordsBox(OLD[id],id,p.employee.name);else actionForm(b.dataset.act,OLD[id],id,p.employee.name)})});
     document.getElementById('copy').addEventListener('click',function(){
       var done=function(){document.getElementById('cmsg').innerHTML='<div class="msg ok" style="margin-top:10px">✓ Nusxa olindi — Telegram yoki KakaoTalk’ga joylang</div>'};
       if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(res.text).then(done,function(){prompt('Matnni nusxalang:',res.text)})}else{prompt('Matnni nusxalang:',res.text)}
@@ -160,13 +171,15 @@ function ensureStaff(cb){if(STAFF)return cb();api({action:'staff',branchId:sel.v
 function actionForm(kind,staffId,employeeId,name){
   var box=document.getElementById('actBox'),op=uuid(),today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'});
   ensureStaff(function(){
-    var html='<div class="card" style="background:var(--card-2);margin-top:12px"><h2>'+esc(name)+' — '+(kind==='shift'?'smena kiritish':kind==='adjust'?'bonus yoki ushlanma':'to‘lash')+'</h2>';
+    var html='<div class="card" style="background:var(--card-2);margin-top:12px"><h2>'+esc(name)+' — '+(kind==='shift'?'smena kiritish':kind==='adjust'?'bonus yoki ushlanma':kind==='day'?'kun holati':'to‘lash')+'</h2>';
+    if(kind==='day')html+='<label class="field"><span>Sana</span><input type="date" id="aDate" value="'+today+'" max="'+today+'"></label><div class="row" style="margin-bottom:12px"><button data-st="off">Dam olish</button><button class="ghost" data-st="sick">Kasal</button><button class="ghost" data-st="absent">Kelmadi</button></div><label class="field"><span>Haq to‘lanadimi?</span><select id="aPm"><option value="unpaid">Yo‘q — to‘lanmaydi</option><option value="planned">Ha — reja bo‘yicha kunlik haq</option></select></label><label class="field"><span>Izoh</span><input id="aNote" maxlength="300"></label>';
     if(kind==='shift')html+='<label class="field"><span>Sana</span><input type="date" id="aDate" value="'+today+'" max="'+today+'"></label><div class="row"><label class="field" style="flex:1"><span>Boshladi</span><input type="time" id="aFrom" value="10:00"></label><label class="field" style="flex:1"><span>Tugatdi</span><input type="time" id="aTo" value="20:00"></label><label class="field" style="flex:1"><span>Tanaffus (daq)</span><input id="aBreak" inputmode="numeric" value="0"></label></div><label class="field"><span>Izoh</span><input id="aNote" maxlength="200" placeholder="Masalan: telefon o‘chib qolgan"></label>';
     if(kind==='adjust')html+='<div class="row" style="margin-bottom:12px"><button data-t="bonus">+ Bonus</button><button class="ghost" data-t="deduction">− Ushlanma</button></div><label class="field"><span>Summa</span><input class="money" id="aAmt" inputmode="numeric" placeholder="0"></label><label class="field"><span>Sana</span><input type="date" id="aDate" value="'+today+'" max="'+today+'"></label><label class="field"><span>Sababi (xodim varaqada ko‘radi)</span><input id="aNote" maxlength="300"></label><p class="hint">Avans bu yerda emas — “To‘lash” orqali, kassadan chiqqan pul sifatida.</p>';
     if(kind==='pay')html+='<div class="row" style="margin-bottom:12px"><button data-k="advance">Avans</button><button class="ghost" data-k="salary">Oylik</button></div><label class="field"><span>Summa</span><input class="money" id="aAmt" inputmode="numeric" placeholder="0"></label><label class="field"><span>Qaysi hisobdan berildi</span><select id="aAcc">'+ACC.map(function(a){return '<option value="'+esc(a.id)+'">'+esc(a.name)+'</option>'}).join('')+'</select></label><label class="field"><span>Qaysi oy uchun</span><input type="month" id="aMonth" value="'+esc(MONTH)+'"></label><label class="field"><span>Berilgan sana</span><input type="date" id="aDate" value="'+today+'" max="'+today+'"></label><label class="field"><span>Izoh (ixtiyoriy)</span><input id="aNote" maxlength="200"></label>';
     html+='<button class="block" id="aSave">Saqlash</button><div id="aMsg"></div></div>';
     box.innerHTML=html;
-    var type='bonus',pk='advance';
+    var type='bonus',pk='advance',st='off';
+    box.querySelectorAll('[data-st]').forEach(function(b){b.addEventListener('click',function(){st=b.dataset.st;box.querySelectorAll('[data-st]').forEach(function(x){x.className=x===b?'':'ghost'})})});
     box.querySelectorAll('[data-t]').forEach(function(b){b.addEventListener('click',function(){type=b.dataset.t;box.querySelectorAll('[data-t]').forEach(function(x){x.className=x===b?'':'ghost'})})});
     box.querySelectorAll('[data-k]').forEach(function(b){b.addEventListener('click',function(){pk=b.dataset.k;box.querySelectorAll('[data-k]').forEach(function(x){x.className=x===b?'':'ghost'})})});
     if(document.getElementById('aAmt'))moneyField('aAmt');
@@ -175,13 +188,39 @@ function actionForm(kind,staffId,employeeId,name){
       if(kind==='shift'){body.action='shift';body.from=document.getElementById('aFrom').value;body.to=document.getElementById('aTo').value;body.breakMinutes=digits(document.getElementById('aBreak').value)}
       if(kind==='adjust'){body.action='adjust';body.type=type;body.amount=digits(document.getElementById('aAmt').value)}
       if(kind==='pay'){body.action='pay';body.kind=pk;body.amount=digits(document.getElementById('aAmt').value);body.accountId=document.getElementById('aAcc').value;body.month=document.getElementById('aMonth').value}
-      if(kind!=='shift'&&!body.amount){document.getElementById('aMsg').innerHTML='<div class="msg bad">Summani yozing.</div>';return}
+      if(kind==='day'){body.action='dayStatus';body.status=st;body.payMode=document.getElementById('aPm').value}
+      if(kind!=='shift'&&kind!=='day'&&!body.amount){document.getElementById('aMsg').innerHTML='<div class="msg bad">Summani yozing.</div>';return}
       if(kind==='pay'&&!confirm(name+' uchun '+won(body.amount)+' '+(pk==='advance'?'avans':'oylik')+' berilsinmi?'))return;
       var btn=this;btn.disabled=true;
       api(body).then(function(x){btn.disabled=false;
         if(!x.ok){document.getElementById('aMsg').innerHTML='<div class="msg bad">'+esc(x.error)+'</div>';return}
         STAFF=x.staff;load();setTimeout(function(){openSlip(employeeId)},700)});
     });
+  });
+}
+function hm(iso){if(!iso)return '—';try{return new Date(iso).toLocaleTimeString('en-GB',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit'})}catch(e){return '—'}}
+var DAYST={off:'Dam olish',sick:'Kasal',absent:'Kelmadi'},PAYK={advance:'Avans',salary:'Oylik'};
+function recordsBox(staffId,employeeId,name){
+  var box=document.getElementById('actBox');box.innerHTML='<p class="hint">Yuklanmoqda…</p>';
+  api({action:'records',branchId:sel.value,staffId:staffId,month:MONTH}).then(function(r){
+    if(!r.ok){box.innerHTML='<div class="msg bad">'+esc(r.error)+'</div>';return}var R=r.records;
+    var btn=function(a,id,t){return '<button class="ghost" data-fx="'+a+'" data-id="'+esc(id)+'" style="min-height:34px;padding:2px 9px;font-size:13.5px">'+t+'</button>'};
+    var off=function(x){return x?' <span class="tag bad">bekor</span>':''};
+    box.innerHTML='<div class="card" style="background:var(--card-2);margin-top:12px"><h2>'+esc(name)+' — '+esc(MONTH)+' yozuvlari</h2><p class="hint">Hech narsa o‘chirilmaydi: sababi bilan bekor qilinadi yoki tuzatiladi, varaqa qayta hisoblanadi.</p>'
+      +'<h3 style="font-size:15px;margin:12px 0 4px">Smenalar</h3>'+(R.shifts.length?R.shifts.map(function(x){var v=x.status==='void';return '<div class="list-row"><div style="min-width:0"><b style="font-size:15px">'+esc(x.date.slice(5))+' <span style="white-space:nowrap">'+hm(x.clockIn)+'–'+(x.clockOut?hm(x.clockOut):'<span class="tag warn">ishda</span>')+'</span></b>'+off(v)+'<br><small style="color:var(--muted)">'+(x.breakMinutes?'tanaffus '+x.breakMinutes+' daq · ':'')+esc(x.source==='owner'?'rahbar kiritgan':'xodim belgilagan')+(v&&x.voidReason?' · '+esc(x.voidReason):'')+'</small></div><div class="row" style="gap:6px;flex-wrap:nowrap">'+(v?'':btn('editShift',x.id,'✏️')+btn('voidShift',x.id,'Bekor'))+'</div></div>'}).join(''):'<p class="hint">Yo‘q</p>')
+      +'<h3 style="font-size:15px;margin:12px 0 4px">Dam / kasal / kelmadi</h3>'+(R.days.length?R.days.map(function(x){return '<div class="list-row"><div><b>'+esc(x.date.slice(5))+' · '+esc(DAYST[x.status]||x.status)+'</b>'+off(x.voided)+'<br><small style="color:var(--muted)">'+(x.payMode==='planned'?'haq to‘lanadi':'haq to‘lanmaydi')+(x.note?' · '+esc(x.note):'')+'</small></div>'+(x.voided?'<span></span>':btn('voidDay',x.id,'Bekor'))+'</div>'}).join(''):'<p class="hint">Yo‘q</p>')
+      +'<h3 style="font-size:15px;margin:12px 0 4px">Bonus va ushlanma</h3>'+(R.adjustments.length?R.adjustments.map(function(x){return '<div class="list-row"><div><b>'+esc(x.date.slice(5))+' · '+(x.type==='bonus'?'Bonus':x.type==='advance'?'Avans (eski)':'Ushlanma')+' '+won(x.amount)+'</b>'+off(x.voided)+'<br><small style="color:var(--muted)">'+esc(x.note)+'</small></div>'+(x.voided?'<span></span>':btn('voidAdj',x.id,'Bekor'))+'</div>'}).join(''):'<p class="hint">Yo‘q</p>')
+      +'<h3 style="font-size:15px;margin:12px 0 4px">To‘lovlar</h3>'+(R.payments.length?R.payments.map(function(x){return '<div class="list-row"><div><b>'+esc(x.date.slice(5))+' · '+esc(PAYK[x.kind]||x.kind)+' '+won(x.amount)+'</b>'+off(x.voided)+'<br><small style="color:var(--muted)">'+esc(x.month)+' uchun'+(x.account?' · '+esc(x.account):'')+(x.note?' · '+esc(x.note):'')+'</small></div>'+(x.voided?'<span></span>':btn('voidPay',x.id,'Bekor'))+'</div>'}).join(''):'<p class="hint">Yo‘q</p>')
+      +'<div id="fxBox"></div></div>';
+    box.querySelectorAll('[data-fx]').forEach(function(b){b.addEventListener('click',function(){
+      var a=b.dataset.fx,id=b.dataset.id,done=function(x){if(!x.ok){alert(x.error||'Bo‘lmadi.');return}STAFF=x.staff;load();setTimeout(function(){openSlip(employeeId);setTimeout(function(){recordsBox(staffId,employeeId,name)},600)},700)};
+      if(a==='editShift'){var s2=R.shifts.find(function(x){return x.id===id});var fb=document.getElementById('fxBox');
+        fb.innerHTML='<div class="card" style="margin-top:12px"><h2>Smenani tuzatish · '+esc(s2.date)+'</h2><div class="row"><label class="field" style="flex:1"><span>Keldi</span><input type="time" id="eFrom" value="'+hm(s2.clockIn)+'"></label><label class="field" style="flex:1"><span>Ketdi</span><input type="time" id="eTo" value="'+(s2.clockOut?hm(s2.clockOut):'')+'"></label><label class="field" style="flex:1"><span>Tanaffus (daq)</span><input id="eBr" inputmode="numeric" value="'+s2.breakMinutes+'"></label></div><label class="field"><span>Sabab</span><input id="eWhy" maxlength="300" placeholder="Masalan: ketishni belgilashni unutgan"></label><button class="block" id="eSave">Saqlash</button></div>';
+        fb.scrollIntoView({behavior:'smooth',block:'center'});
+        document.getElementById('eSave').addEventListener('click',function(){var why=document.getElementById('eWhy').value.trim();if(why.length<3){alert('Sababini yozing.');return}this.disabled=true;
+          api({action:'editShift',branchId:sel.value,id:id,from:document.getElementById('eFrom').value,to:document.getElementById('eTo').value,breakMinutes:digits(document.getElementById('eBr').value),reason:why}).then(done)});return}
+      var why=prompt(a==='voidPay'?'To‘lov bekor qilinadi, pul hisobga qaytadi (bugungi sana bilan). Sababi:':'Bekor qilish sababi:');if(!why||why.trim().length<3)return;b.disabled=true;
+      api({action:a,branchId:sel.value,id:id,reason:why.trim()}).then(function(x){b.disabled=false;done(x)})})});
   });
 }
 document.getElementById('manage').addEventListener('click',function(){STAFF=null;ensureStaff(drawStaff)});
