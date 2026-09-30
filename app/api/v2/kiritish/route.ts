@@ -8,6 +8,7 @@ import { readDeductionRules } from "../../../core/deductions";
 import { selectActiveFinancialEntries } from "../../../lib/daily-report";
 import { warehouseDocuments } from "../../../lib/warehouse-records";
 import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
+import { ensureRecurring, RecurringError, recurringList, saveRecurring, stopRecurring } from "../../../core/recurring";
 import { shell } from "../../../core/ui-shell";
 
 declare global {
@@ -126,19 +127,30 @@ export async function POST(request: Request) {
     const body = await request.json() as Row;
     const today = seoulToday();
     const branchId = String(body.branchId || "main");
+    if (body.action === "saveRecurring" || body.action === "stopRecurring") {
+      const mutation = await mutateHaloState((state) => { const out = body.action === "saveRecurring" ? saveRecurring(state, body, today) : stopRecurring(state, body); return { state: out.state as Row, result: null }; }, 5, branchId, "Rahbar",
+        body.action === "saveRecurring" ? `Oylik avtomatik xarajat saqlandi: ${clean(body.name, 60)}` : "Oylik avtomatik xarajat to‘xtatildi", "Kiritish (yangi)");
+      await ensureRecurring(branchId, today);
+      const { state } = await readHaloState(branchId);
+      return json({ ok: true, today, recurring: recurringList(state as Row), expenses: monthExpenses(state as Row, today), saved: mutation.result });
+    }
     if (body.action === "expense") {
       await assertV2DayOpen(branchId, clean(body.date, 10));
       const mutation = await mutateHaloState((state) => addExpense(state, body, today), 5, branchId, "Rahbar",
         `Xarajat: ${clean(body.name, 60)} · ₩${Number(body.amount || 0).toLocaleString("en-US")}`, "Kiritish (yangi)");
       return json({ ok: true, today, ...mutation.result, expenses: monthExpenses(mutation.state, today) });
     }
+    await ensureRecurring(branchId, today);
     const { state } = await readHaloState(branchId);
     return json({
+      recurring: recurringList(state as Row),
       ok: true, today, inventory: inventoryChoices(state as Row, today), platforms: DELIVERY_PLATFORMS, rules: readDeductionRules(state as Row),
       accounts: moneyAccounts(state as Row), categories: EXPENSE_CATEGORIES, expenses: monthExpenses(state as Row, today), receipts: monthReceipts(state as Row, today),
+      posImportDates: [...new Set((Array.isArray((state as Row).sales) ? (state as Row).sales as Row[] : []).filter((sale) => sale.posImport && !sale.cancelledAt && !sale.voided).map((sale) => String(sale.date)))].slice(-120),
     });
   } catch (error) {
     if (error instanceof EntryError) return json({ error: error.message, code: error.code }, error.status);
+    if (error instanceof RecurringError) return json({ error: error.message }, error.status);
     if (error instanceof ClosedDayError) return json({ error: error.message }, 409);
     if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     return json({ error: error instanceof Error && /filial/i.test(error.message) ? error.message : "Xatolik yuz berdi." }, 500);
@@ -198,16 +210,21 @@ function renderSale(){
   var items=MENU.catalog||[];
   var groups=cats.map(function(c){return {name:c.name,items:items.filter(function(i){return i.categoryId===c.id})}}).filter(function(g){return g.items.length});
   var rest=items.filter(function(i){return !cats.some(function(c){return c.id===i.categoryId})});if(rest.length)groups.push({name:groups.length?'Boshqa':'Menyu',items:rest});
-  if(PAY!=='cash'&&PAY!=='bank'&&PAY!=='delivery')PAY='cash';
-  pane.innerHTML='<section class="card"><h2>To‘lov turi</h2><p class="hint" style="margin:0 0 10px">Naqd va hisob-raqam — soliqsiz. Delivery — platforma ushlanmasi va soliq avtomatik. Xodimlar shu savdoni <a href="/pos"><b>HALO HISOB</b></a> oynasida kiritadi.</p><div class="pay">'
+  if(['cash','bank','delivery','pcard','pcash'].indexOf(PAY)<0)PAY='cash';
+  var posDay=(DATA.posImportDates||[]).indexOf(dt.value||DATA.today)>=0;
+  pane.innerHTML='<section class="card"><h2>To‘lov turi</h2><p class="hint" style="margin:0 0 6px"><b>HALO hisob</b> — soliqsiz (xodimlar <a href="/pos">HALO HISOB</a> oynasida kiritadi):</p><div class="pay">'
     +[['cash','💵 Naqd'],['bank','🏦 Hisob-raqam'],['delivery','🛵 Delivery']].map(function(p){return '<button class="'+(PAY===p[0]?'':'ghost')+'" data-pay="'+p[0]+'">'+p[1]+'</button>'}).join('')+'</div>'
-    +(PAY==='delivery'?'<div class="row" style="margin-top:12px"><select id="plat" style="flex:1">'+DATA.platforms.map(function(p){return '<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>'}).join('')+'</select><input id="ordNo" maxlength="64" placeholder="Buyurtma raqami (ixtiyoriy)" style="flex:1"></div><p class="hint" style="margin:8px 0 0">Delivery narxi va platforma ushlanmalari avtomatik hisoblanadi.</p>':'')
+    +'<p class="hint" style="margin:12px 0 6px"><b>POS apparati</b> — soliq (kartada komissiya ham) avtomatik. Excel hisobot yuklamasangiz, shu yerda qo‘lda:</p><div class="pay" style="grid-template-columns:1fr 1fr">'
+    +[['pcard','💳 POS karta'],['pcash','🧾 POS naqd']].map(function(p){return '<button class="'+(PAY===p[0]?'':'ghost')+'" data-pay="'+p[0]+'">'+p[1]+'</button>'}).join('')+'</div>'
+    +((PAY==='pcard'||PAY==='pcash')&&posDay?'<div class="msg warn" style="margin-top:10px">Bu kun uchun POS Excel hisoboti yuklangan. Qo‘lda ham kiritsangiz savdo ikki marta hisoblanadi.</div>':'')
+    +(PAY==='delivery'?'<div class="row" style="margin-top:12px"><select id="plat" style="flex:1">'+DATA.platforms.map(function(p){return '<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>'}).join('')+'</select><input id="ordNo" maxlength="64" placeholder="Buyurtma raqami (ixtiyoriy)" style="flex:1"></div><label class="field" style="margin:10px 0 0"><span>Platforma ushlagan summa (ixtiyoriy, ₩)</span><input id="dFee" inputmode="numeric" placeholder="Bo‘sh qoldirsangiz — sozlamadagi foiz bo‘yicha"></label><p class="hint" style="margin:6px 0 0">Ilovadagi hisob-kitobda boshqa summa ko‘rinsa, shu yerga yozing — faqat shu buyurtma uchun.</p>':'')
     +'</section>'
     +groups.map(function(g){return '<section class="card"><h2>'+esc(g.name)+'</h2><div class="menu-grid">'+g.items.map(function(i){var q=CART[i.id]||0,p=price(i);
       return '<button class="dish'+(q?' on':'')+'" data-add="'+esc(i.id)+'"'+(p?'':' style="opacity:.45"')+'>'+(q?'<span class="q">'+q+'</span>':'')+'<b>'+esc(i.name)+'</b><small>'+(p?won(p):'narx yo‘q')+'</small></button>'}).join('')+'</div></section>'}).join('')
     +'<section class="card sticky-total" id="cart"></section>'
     +'<section class="card"><h2>Bugungi savdolar</h2><div id="recent"></div></section>';
   document.querySelectorAll('[data-pay]').forEach(function(b){b.addEventListener('click',function(){PAY=b.dataset.pay;OP=uuid();renderSale()})});
+  var df=document.getElementById('dFee');if(df)df.addEventListener('input',function(){var v=digits(df.value);df.value=v?v.toLocaleString('en-US'):'';drawCart()});
   var pl=document.getElementById('plat');if(pl){pl.addEventListener('change',function(){drawCart();document.querySelectorAll('.dish').forEach(function(el){var it=items.find(function(i){return i.id===el.dataset.add});el.querySelector('small').textContent=price(it)?won(price(it)):'narx yo‘q'})})}
   document.querySelectorAll('[data-add]').forEach(function(b){b.addEventListener('click',function(){var it=items.find(function(i){return i.id===b.dataset.add});if(!price(it))return;CART[it.id]=(CART[it.id]||0)+1;renderDish(b,it);drawCart()})});
   drawCart();drawRecent();
@@ -220,18 +237,26 @@ function drawCart(){
   if(!ids.length){box.innerHTML='<p class="hint" style="margin:0">Taomni bosing — savatga qo‘shiladi.</p>';return}
   box.innerHTML='<h2>Savat</h2>'+ids.map(function(k){var it=items.find(function(i){return i.id===k});
     return '<div class="cart-row"><span>'+esc(it.name)+'<br><small style="color:var(--muted)">'+won(price(it))+' × '+CART[k]+'</small></span><div class="stepper"><button class="ghost" data-m="'+esc(k)+'">−</button><b>'+CART[k]+'</b><button class="ghost" data-p="'+esc(k)+'">+</button></div></div>'}).join('')
-    +'<div class="row" style="justify-content:space-between;margin-top:10px"><span class="big">'+won(total)+'</span><button id="saveSale">Saqlash</button></div><div id="sMsg"></div>';
+    +'<div class="row" style="justify-content:space-between;margin-top:10px"><span class="big">'+won(total)+'</span><button id="saveSale">Saqlash</button></div>'+cutLine(total)+'<div id="sMsg"></div>';
   box.querySelectorAll('[data-m]').forEach(function(b){b.addEventListener('click',function(){CART[b.dataset.m]=Math.max(0,(CART[b.dataset.m]||0)-1);syncDishes();drawCart()})});
   box.querySelectorAll('[data-p]').forEach(function(b){b.addEventListener('click',function(){CART[b.dataset.p]=(CART[b.dataset.p]||0)+1;syncDishes();drawCart()})});
   document.getElementById('saveSale').addEventListener('click',function(){saveSale(total)});
 }
+/* Ushlanmalar oldindan ko'rinsin: soliq, karta komissiyasi, delivery ushlanmasi va qo'lga tegadigan summa. */
+function cutLine(total){var r=DATA.rules||{},tax=0,fee=0;
+  if(PAY==='pcard'||PAY==='pcash'||PAY==='delivery')tax=Math.round(total*(r.taxPct||0)/100);
+  if(PAY==='pcard')fee=Math.round(total*(r.cardPct||0)/100);
+  if(PAY==='delivery'){var el=document.getElementById('dFee'),pid=(document.getElementById('plat')||{}).value,pf=(r.platforms||[]).find(function(x){return x.id===pid})||{pct:0,feeWon:0};fee=el&&digits(el.value)?digits(el.value):Math.min(total,Math.round(total*pf.pct/100)+pf.feeWon)}
+  if(!tax&&!fee)return '<p class="hint" style="margin:6px 0 0">Soliqsiz · to‘liq '+won(total)+'</p>';
+  return '<p class="hint" style="margin:6px 0 0">'+(fee?(PAY==='pcard'?'Karta komissiyasi':'Platforma')+' −'+won(fee)+' · ':'')+'Soliq −'+won(tax)+' · <b style="color:var(--text)">Sof '+won(total-fee-tax)+'</b></p>'}
 function syncDishes(){var items=MENU.catalog||[];document.querySelectorAll('[data-add]').forEach(function(el){renderDish(el,items.find(function(i){return i.id===el.dataset.add}))})}
 function saveSale(total){
   var btn=document.getElementById('saveSale'),msg=document.getElementById('sMsg');
-  var label={cash:'Naqd',bank:'Hisob-raqam',delivery:'Delivery'}[PAY];
+  var label={cash:'Naqd',bank:'Hisob-raqam',delivery:'Delivery',pcard:'POS karta',pcash:'POS naqd'}[PAY];
   if(!confirm(label+' savdo: '+won(total)+' · '+dt.value+'. Saqlansinmi?'))return;
-  var body={operationId:OP.replace(/-/g,''),date:dt.value,mode:'sale',paymentType:PAY,branchId:sel.value,items:Object.keys(CART).filter(function(k){return CART[k]>0}).map(function(k){return {recipeId:k,quantity:CART[k]}})};
-  if(PAY==='delivery'){body.deliveryPlatform=document.getElementById('plat').value;body.deliveryOrderNumber=document.getElementById('ordNo').value.trim()}
+  var body={operationId:OP.replace(/-/g,''),date:dt.value,mode:'sale',paymentType:PAY==='pcard'?'card':PAY==='pcash'?'cash':PAY,branchId:sel.value,items:Object.keys(CART).filter(function(k){return CART[k]>0}).map(function(k){return {recipeId:k,quantity:CART[k]}})};
+  if(PAY==='pcard'||PAY==='pcash')body.salesChannel='pos';
+  if(PAY==='delivery'){body.deliveryPlatform=document.getElementById('plat').value;body.deliveryOrderNumber=document.getElementById('ordNo').value.trim();var fv=digits(document.getElementById('dFee').value);if(fv)body.deliveryFeeOverrideWon=fv}
   btn.disabled=true;
   post('/api/pos-terminal',body).then(function(x){btn.disabled=false;
     if(!x.body.ok){msg.innerHTML='<div class="msg bad">'+esc(x.body.error||'Saqlanmadi.')+'</div>';return}
@@ -242,9 +267,11 @@ function saveSale(total){
 function drawRecent(){
   var box=document.getElementById('recent'),day=dt.value||DATA.today;
   var list=(MENU.orders||[]).filter(function(o){return o.date===day});
-  var L={cash:'Naqd',bank:'Hisob-raqam',card:'Karta',delivery:'Delivery'};
-  box.innerHTML=list.length?list.map(function(o){return '<div class="list-row"><div><b>'+esc(L[o.paymentType]||o.paymentType||'Savdo')+(o.deliveryPlatform?' · '+esc(o.deliveryPlatform):'')+'</b><br><small style="color:var(--muted)">'+(o.items||[]).map(function(i){return esc(i.name||'')+' ×'+i.quantity}).join(', ')+'</small></div><b>'+won(o.total)+'</b></div>'}).join('')
-    +'<p class="hint" style="margin-top:10px">Jami: '+won(list.reduce(function(s,o){return s+Number(o.total||0)},0))+' · Xato bo‘lsa, <a href="/?eski=1">eski oynada</a> tahrirlanadi.</p>':'<p class="hint">Bu sanada kiritilgan savdo yo‘q.</p>';
+  var L={cash:'Naqd',bank:'Hisob-raqam',card:'POS karta',delivery:'Delivery'};
+  var name=function(o){return o.paymentType==='cash'&&o.salesChannel==='pos'?'POS naqd':(L[o.paymentType]||o.paymentType||'Savdo')};
+  box.innerHTML=list.length?list.map(function(o){var sid=((o.items||[])[0]||{}).saleId||'';return '<div class="list-row"><div><b>'+esc(name(o))+(o.deliveryPlatform?' · '+esc(o.deliveryPlatform):'')+'</b><br><small style="color:var(--muted)">'+(o.items||[]).map(function(i){return esc(i.name||'')+' ×'+i.quantity}).join(', ')+(o.workerName?' · '+esc(o.workerName):'')+'</small></div><div style="text-align:right"><b>'+won(o.total)+'</b>'+(sid?'<br><button class="ghost" data-so="'+esc(sid)+'" data-sl="'+esc(name(o)+' · '+won(o.total))+'" style="min-height:30px;padding:2px 10px;margin-top:4px">Olib tashlash</button>':'')+'</div></div>'}).join('')
+    +'<p class="hint" style="margin-top:10px">Jami: '+won(list.reduce(function(s,o){return s+Number(o.total||0)},0))+'</p>':'<p class="hint">Bu sanada kiritilgan savdo yo‘q.</p>';
+  box.querySelectorAll('[data-so]').forEach(function(b){b.addEventListener('click',function(){haloRemove({kind:'sale',id:b.dataset.so,branch:sel.value,label:b.dataset.sl+' · '+day,done:function(){load()}})})});
 }
 
 /* ---------- Ombor kirimi / sabzavot ---------- */
@@ -308,6 +335,7 @@ function renderExpense(){
     +'<label class="field"><span>Qaysi hisobdan to‘landi</span><select id="xAcc">'+d.accounts.map(function(a){return '<option value="'+esc(a.id)+'"'+(a.id===EXP.acc?' selected':'')+'>'+esc(a.name)+'</option>'}).join('')+'</select></label>'
     +'<label class="field"><span>Izoh (ixtiyoriy)</span><input id="xNote" maxlength="300"></label>'
     +'<button class="block" id="xSave">Saqlash</button><div id="xMsg"></div></section>'
+    +recurringCard(d)
     +'<section class="card"><h2>Shu oy xarajatlari · '+won(total)+'</h2>'
     +(Object.keys(byCat).length?'<div class="grid" style="margin-bottom:12px">'+Object.keys(byCat).sort(function(a,b){return byCat[b]-byCat[a]}).map(function(c){return '<div class="kpi"><small>'+esc(c)+'</small><b>'+won(byCat[c])+'</b></div>'}).join('')+'</div>':'')
     +(d.expenses.length?d.expenses.slice(0,60).map(function(e){return '<div class="list-row"><div><b>'+esc(e.category)+'</b>'+(e.recurring?' <span class="tag warn">avtomatik</span>':'')+'<br><small style="color:var(--muted)">'+esc(e.date)+(e.account?' · '+esc(e.account):'')+(e.note?' · '+esc(e.note):'')+(e.by?' · '+esc(e.by):'')+'</small></div><div style="text-align:right"><b>'+won(e.amount)+'</b>'+'<br><button class="ghost" data-xc="'+esc(e.id)+'" style="min-height:30px;padding:2px 10px;margin-top:4px">Olib tashlash</button></div></div>'}).join(''):'<p class="hint">Bu oyda xarajat yo‘q.</p>')+'</section>';
@@ -315,8 +343,33 @@ function renderExpense(){
   var amt=document.getElementById('xAmt');amt.addEventListener('input',function(){var v=digits(amt.value);amt.value=v?v.toLocaleString('en-US'):''});
   document.getElementById('xAcc').addEventListener('change',function(){EXP.acc=this.value});
   document.getElementById('xSave').addEventListener('click',function(){saveExpense()});
+  document.getElementById('reNew').addEventListener('click',function(){recurringForm(null)});
+  pane.querySelectorAll('[data-re]').forEach(function(b){b.addEventListener('click',function(){recurringForm((DATA.recurring||[]).find(function(r){return r.id===b.dataset.re}))})});
   pane.querySelectorAll('[data-xc]').forEach(function(b){b.addEventListener('click',function(){var e=d.expenses.find(function(x){return x.id===b.dataset.xc});
     haloRemove({kind:'finance',id:b.dataset.xc,branch:sel.value,label:e?e.category+' · '+won(e.amount)+' · '+e.date:'',done:function(){load()}})})});
+}
+/* ---------- Har oy avtomatik xarajatlar ---------- */
+var REC=null;
+function recurringCard(d){var list=d.recurring||[],act=list.filter(function(r){return r.active});
+  return '<section class="card"><h2>🔁 Har oy avtomatik xarajatlar · '+won(act.reduce(function(s2,r){return s2+r.amount},0))+'</h2><p class="hint">Ijara, internet, sug‘urta kabi har oy bir xil to‘lovlar. Belgilangan kuni o‘zi yoziladi — har oy qo‘lda kiritish shart emas.</p>'
+    +(list.length?list.map(function(r){return '<div class="list-row"><div style="min-width:0"><b>'+esc(r.name)+'</b>'+(r.active?'':' <span class="tag warn">to‘xtatilgan</span>')+'<br><small style="color:var(--muted)">'+esc(r.category)+' · har oy '+r.billingDay+'-kuni · '+esc(r.account)+(r.active&&r.nextDue?' · keyingisi '+esc(r.nextDue):'')+'</small></div><div style="text-align:right"><b>'+won(r.amount)+'</b><br><button class="ghost" data-re="'+esc(r.id)+'" style="min-height:30px;padding:2px 10px;margin-top:4px">'+(r.active?'Tahrir':'Qayta yoqish')+'</button></div></div>'}).join(''):'<p class="hint">Hali yo‘q.</p>')
+    +'<button class="ghost block" id="reNew" style="margin-top:10px">+ Oylik xarajat qo‘shish</button><div id="reForm"></div></section>'}
+function recurringForm(r){var d=DATA,box=document.getElementById('reForm'),cats=d.categories.filter(function(c){return c!=='Soliq'});
+  var day=r?r.billingDay:Number((d.today||'').slice(8,10))||1;
+  box.innerHTML='<div class="card" style="background:var(--card-2);margin-top:12px"><h2>'+(r?'Tahrirlash — '+esc(r.name):'Yangi oylik xarajat')+'</h2>'
+    +'<label class="field"><span>Nomi</span><input id="rN" maxlength="80" value="'+esc(r?r.name:'')+'" placeholder="Masalan: Do‘kon ijarasi"></label>'
+    +'<label class="field"><span>Turi</span><select id="rC">'+cats.map(function(c){return '<option'+(r&&r.category===c?' selected':'')+'>'+esc(c)+'</option>'}).join('')+'</select></label>'
+    +'<label class="field"><span>Har oy summasi</span><input class="money" id="rA" inputmode="numeric" value="'+(r?r.amount.toLocaleString('en-US'):'')+'" placeholder="0"></label>'
+    +'<div class="row"><label class="field" style="flex:1"><span>Har oyning nechanchi kuni</span><input id="rD" inputmode="numeric" value="'+day+'"></label><label class="field" style="flex:1"><span>Qaysi hisobdan</span><select id="rAc">'+d.accounts.map(function(a){return '<option value="'+esc(a.id)+'"'+(r&&r.accountId===a.id?' selected':'')+'>'+esc(a.name)+'</option>'}).join('')+'</select></label></div>'
+    +(r?'':'<label class="row" style="gap:8px;margin-bottom:12px"><input type="checkbox" id="rThis" style="width:18px;height:18px;min-height:auto"> Shu oy uchun ham yozilsin (kuni o‘tgan bo‘lsa ham)</label>')
+    +'<p class="hint">O‘zgartirish faqat keyingi oylarga ta’sir qiladi. Yozilgan oylar o‘zgarmaydi — xato bo‘lsa, pastdagi ro‘yxatdan “Olib tashlash”.</p>'
+    +'<div class="row"><button id="rS" style="flex:1">Saqlash</button>'+(r&&r.active?'<button class="ghost" id="rStop" style="flex:1">To‘xtatish</button>':'')+'</div><div id="rMsg"></div></div>';
+  var a=document.getElementById('rA');a.addEventListener('input',function(){var v=digits(a.value);a.value=v?v.toLocaleString('en-US'):''});
+  box.scrollIntoView({behavior:'smooth',block:'center'});
+  var done=function(x){if(!x.body.ok){document.getElementById('rMsg').innerHTML='<div class="msg bad">'+esc(x.body.error||'Saqlanmadi.')+'</div>';return}DATA.recurring=x.body.recurring;DATA.expenses=x.body.expenses;renderExpense();document.getElementById('xMsg').innerHTML='<div class="msg ok">✓ Oylik xarajat saqlandi</div>'};
+  document.getElementById('rS').addEventListener('click',function(){var b=this;b.disabled=true;
+    post(location.pathname,{action:'saveRecurring',branchId:sel.value,id:r?r.id:'',name:document.getElementById('rN').value,category:document.getElementById('rC').value,amount:digits(a.value),billingDay:Number(document.getElementById('rD').value),accountId:document.getElementById('rAc').value,includeThisMonth:!r&&document.getElementById('rThis').checked}).then(function(x){b.disabled=false;done(x)})});
+  var st=document.getElementById('rStop');if(st)st.addEventListener('click',function(){if(!confirm(r.name+' endi har oy yozilmasin?'))return;st.disabled=true;post(location.pathname,{action:'stopRecurring',branchId:sel.value,id:r.id}).then(done)});
 }
 function saveExpense(reason){
   var msg=document.getElementById('xMsg'),btn=document.getElementById('xSave');
@@ -350,7 +403,8 @@ function posPreview(){var box=document.getElementById('pv');box.innerHTML='<sect
 function posDraw(){var p=PI.preview,box=document.getElementById('pv');if(!box)return;
   var label={new:'yangi',saved:'oldin saqlangan',changed:'yangilanadi',unmatched:'bog‘lang',duplicate:'takror'},cls={new:'ok',saved:'',changed:'warn',unmatched:'bad',duplicate:'bad'};
   box.innerHTML='<section class="card"><h2>'+esc(p.date)+' · '+won(p.totals.revenue)+'</h2><p class="hint" style="margin:0">'+p.totals.quantity+' ta taom · '+p.products.length+' xil'+(p.counts.saved?' · '+p.counts.saved+' xil oldin saqlangan':'')+(p.counts.changed?' · '+p.counts.changed+' xil yangilanadi':'')+'</p>'
-    +(p.errors.length?'<div class="msg bad" style="margin-top:10px">'+p.errors.map(esc).join('<br>')+'</div>':'')+'</section>'
+    +(p.errors.length?'<div class="msg bad" style="margin-top:10px">'+p.errors.map(esc).join('<br>')+'</div>':'')
+    +(p.manualPos&&p.manualPos.count?'<div class="msg warn" style="margin-top:10px">Bu kunga POS savdosi qo‘lda ham kiritilgan ('+won(p.manualPos.revenue)+'). Excel’ni tasdiqlasangiz ikki marta hisoblanadi — avval Savdo bo‘limidagi qo‘lda kiritilganlarini olib tashlang.</div>':'')+'</section>'
     +'<section class="card"><h2>Taomlar</h2>'+p.products.map(function(x){
       return '<div class="list-row" style="align-items:flex-start"><div style="min-width:0;flex:1"><b>'+esc(x.recipeName||x.product)+'</b><br><small style="color:var(--muted)">'+esc(x.productCode?x.productCode+' · ':'')+esc(x.product)+' · '+x.quantity+' ta · '+won(x.revenue)+'</small>'
         +(x.status==='unmatched'?'<select data-link="'+esc(x.key)+'" style="margin-top:6px;width:100%"><option value="">— menyudagi taomni tanlang —</option>'+p.recipes.map(function(rc){return '<option value="'+esc(rc.id)+'"'+(PI.links[x.key]===rc.id?' selected':'')+'>'+esc(rc.name)+'</option>'}).join('')+'</select>':'')
@@ -382,7 +436,7 @@ function renderMeal(){
       MEAL={};OP=uuid();renderMeal();document.getElementById('mMsg').innerHTML='<div class="msg ok">✓ Saqlandi — ombordan ayirildi</div>'});
   });
 }
-sel.addEventListener('change',load);dt.addEventListener('change',function(){OP=uuid();if(TAB==='sale')drawRecent()});load();
+sel.addEventListener('change',load);dt.addEventListener('change',function(){OP=uuid();if(TAB==='sale')renderSale()});load();
 `,
   });
 }

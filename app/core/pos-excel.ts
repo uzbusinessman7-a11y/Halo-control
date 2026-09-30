@@ -103,6 +103,8 @@ export interface PosPreview {
   errors: string[];
   ready: boolean;
   recipes: Array<{ id: string; name: string }>;
+  /** Shu kunlarga qo'lda kiritilgan POS savdolari (ikki marta hisoblanmasligi uchun ogohlantirish). */
+  manualPos: { count: number; revenue: number };
 }
 
 type Resolved = ParsedPosRow & { recipeId: string; menuRevenue: number };
@@ -159,7 +161,11 @@ export function previewPosImport(state: Row, file: PosFileTable, links: Record<s
   if (reconciled.rows.some((row) => row.conflict === "file_duplicate" || row.conflict === "saved_duplicate")) errors.push("Faylda bir xil qator ikki marta bor. Asl hisobotni qayta yuklang.");
   if (!reconciled.rows.length) errors.push("Faylda savdo qatori topilmadi.");
   const unmatched = count("unmatched");
+  const dateSet = new Set(dates);
+  const manual = rows(state.sales).filter((sale) => dateSet.has(String(sale.date)) && sale.salesChannel === "pos" && !sale.posImport
+    && String(sale.id || "").startsWith("pos-terminal-sale:") && !sale.cancelledAt && !sale.voided);
   return {
+    manualPos: { count: manual.length, revenue: manual.reduce((sum, sale) => sum + money(sale.totalRevenue), 0) },
     fileName: file.fileName, date: dates[0] || today, dates, products: list,
     totals: {
       rows: reconciled.rows.length,

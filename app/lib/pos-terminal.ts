@@ -26,6 +26,8 @@ export type PosOrderInput = {
   deliveryPlatform?: DeliveryPlatform;
   deliveryOrderNumber?: string;
   deliveryFeesWon?: Record<string, unknown>;
+  /** Faqat rahbar: platforma shu buyurtmadan haqiqatda ushlagan jami summa (₩). Bo'sh — sozlamadagi foiz. */
+  deliveryFeeOverrideWon?: number | string | null;
   expectedTotal?: number;
   inventoryReason?: string;
   /** "pos" — do'kon POS apparati orqali (karta yoki naqd): soliq ushlanadi. "halo" — HALO hisob (naqd/hisob-raqam): soliqsiz. */
@@ -448,6 +450,14 @@ export function applyPosOrder(
   if(delivery){
     if(input.expectedTotal!==undefined && input.expectedTotal!==gross)throw new PosTerminalError('Delivery narxi o‘zgargan. Sahifani yangilab, jami summani tekshiring.',409);
     deliveryFees = deliveryAutomaticManualFees(deliveryFeeRuleForPlatform(state.costRules as Parameters<typeof deliveryFeeRuleForPlatform>[0], platform!));
+    const override=input.deliveryFeeOverrideWon;
+    if(override!==undefined&&override!==null&&String(override).trim()!==''){
+      if(options.ownerEntry!==true)throw new PosTerminalError('Delivery ushlanmasini faqat rahbar o‘zgartiradi.',403);
+      const won=Number(String(override).replace(/[\s,₩]/g,''));
+      if(!Number.isSafeInteger(won)||won<0||won>gross)throw new PosTerminalError('Platforma ushlagan summa 0 va buyurtma summasi oralig‘ida bo‘lsin.');
+      deliveryFees=emptyDeliveryManualFees();
+      deliveryFees.brokerage={unit:'won',value:won};
+    }
     if(!validDeliveryManualFees(deliveryFees,gross))throw new PosTerminalError('Delivery ushlanmalarini tekshiring.');
   }
   const allocated=allocateDeliveryFeeBreakdown(preparedItems.map(p=>p.quantity*p.unitPrice),calculateDeliveryManualFees(gross,deliveryFees));
