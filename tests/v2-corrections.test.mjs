@@ -82,3 +82,12 @@ test('orqa sana bilan yozilgan eski V2 to‘lovining paidAt maydoni tuzatiladi',
   assert.ok(valid(fixed));
   assert.equal(staff.repairPaymentPaidAt(fixed), fixed);
 });
+
+test('tanaffus smenadan uzun bo‘lsa rad etiladi; yopilgan oydagi to‘lovni bekor qilib bo‘lmaydi', () => {
+  let s = staff.addShift(base(), { operationId: op(), staffId: 'st1', date: '2026-09-24', from: '10:00', to: '18:00' }, '2026-09-25').state;
+  assert.throws(() => staff.editShift(s, { id: s.workShifts[0].id, from: '10:00', to: '11:00', breakMinutes: 90, reason: 'qisqa smena' }), /Tanaffus/);
+  assert.throws(() => staff.addShift(base(), { operationId: op(), staffId: 'st1', date: '2026-09-24', from: '10:00', to: '11:00', breakMinutes: 60 }, '2026-09-25'), /Tanaffus/);
+  s = staff.payStaff(base(), { operationId: op(), staffId: 'st1', kind: 'advance', amount: 1000, date: '2026-08-20', month: '2026-08', accountId: 'cash' }, '2026-09-25').state;
+  s = { ...s, monthlyCloses: [{ id: MCID, month: '2026-08', closedAt: '2026-09-02T00:00:00Z', inventoryItems: [], payrollItems: [] }] };
+  assert.throws(() => staff.voidPayment(s, { id: s.payrollPayments[0].id, reason: 'xato to‘lov' }, '2026-09-25'), /yopilgan/);
+});
