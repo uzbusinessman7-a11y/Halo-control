@@ -184,6 +184,7 @@ function page(): string {
 </style>`,
     script: `
 var S={mode:'sale',pay:'cash',plat:null,cart:{},op:uid(),data:null,wmode:'product',q:''};
+if(location.hash==='#chiqit')S.mode='waste';else if(location.hash==='#delivery')S.mode='delivery';else if(location.hash==='#oshxona')S.mode='meal';
 var app=document.getElementById('app');
 function uid(){return (crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2)).replace(/-/g,'')}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
