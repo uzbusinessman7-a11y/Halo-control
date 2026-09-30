@@ -37,7 +37,7 @@ a{color:var(--accent)}
 .nav-a svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .nav-a.on{color:var(--accent)}.nav-a.on svg{stroke-width:2.2}
 @media (min-width:900px){
- .app{display:grid;grid-template-columns:232px 1fr}
+ .app{display:grid;grid-template-columns:232px 1fr}.app.solo{display:block}
  .side{display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh;padding:20px 14px;border-right:1px solid var(--line);background:var(--card)}
  .side .brand{padding:4px 8px 18px}
  .side .nav-a{flex-direction:row;gap:12px;font-size:15px;padding:11px 12px}
@@ -130,7 +130,7 @@ function haloLoading(n){var s='';for(var i=0;i<(n||3);i++)s+='<div class="skelet
 
 /** "⋯" menyu: kam ishlatiladigan bo'limlar — ulanishlar, sozlamalar, nazorat va chiqish. */
 const MORE_MENU = [
-  ["/api/v2/pos", "🧾", "Kassa oynasi (POS, delivery)", "Alohida havola: /pos"],
+  ["/pos", "🧾", "HALO HISOB oynasi", "Naqd, hisob-raqam, delivery, oshxona, chiqit"],
   ["/api/v2/ushlanmalar", "％", "Soliq va komissiyalar", "Har savdodan avtomatik ushlanadi"],
   ["/api/v2/ulanishlar", "🔌", "Ulanishlar", "Telegram, Google Sheets, API"],
   ["/api/v2/sozlamalar", "⚙️", "Sozlamalar", "Xodim akkauntlari, filiallar"],
@@ -179,7 +179,7 @@ export function shell(input: ShellInput): string {
 <title>${input.title} · HALO</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23d4a84b'/%3E%3Ctext x='16' y='23' font-family='Arial' font-weight='900' font-size='20' text-anchor='middle' fill='%23111'%3EH%3C/text%3E%3C/svg%3E">
 <style>${DESIGN_CSS}</style></head><body>
-<div class="app">
+<div class="app${withNav ? "" : " solo"}">
 ${withNav ? `<aside class="side">${BRAND}${navLinks(input.active, "")}<div class="side-foot">Yangi tizim · sinov rejimi</div></aside>` : ""}
 <div>
 <div class="top"><div class="top-in">${BRAND}</div></div>

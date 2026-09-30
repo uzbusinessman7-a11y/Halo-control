@@ -41,9 +41,10 @@ export async function POST(request: Request) {
     const body = await request.json() as PosOrderInput & { branchId?: unknown };
     const branch = await publicBranch(body.branchId);
     if (body.mode !== "inventory_only" && (body.mode !== "sale" || !["cash", "bank", "delivery"].includes(String(body.paymentType)))) throw new PosTerminalError("Naqd, hisob-raqam yoki delivery savdosini tanlang.");
-    if (body.mode === "inventory_only") body.inventoryReason = "Oshxonada yeyilgan ovqat";
+    // Ochiq oynada ikki sabab: oshxonada yeyilgan ovqat yoki chiqit (isrof / buzilgan).
+    if (body.mode === "inventory_only") body.inventoryReason = body.inventoryReason === "Isrof / buzilgan" ? "Isrof / buzilgan" : "Oshxonada yeyilgan ovqat";
     const mutation = await mutateHaloState(state => applyPosOrder(state, body, actor), 5, branch.id, actor.name,
-      body.mode === "inventory_only" ? "HALO HISOB: oshxonada yeyilgan ovqat" : `HALO HISOB: ${body.paymentType} savdo`, "HALO HISOB · ochiq kirish");
+      body.mode === "inventory_only" ? `HALO HISOB: ${body.inventoryReason === "Isrof / buzilgan" ? "chiqit" : "oshxonada yeyilgan ovqat"}` : `HALO HISOB: ${body.paymentType} savdo`, "HALO HISOB · ochiq kirish");
     const saved = mutation.result.order || mutation.result.inventoryOutflow;
     // Confirm only this action; do not publish the underlying financial record.
     const receipt = saved ? { id: saved.id, date: saved.date, total: saved.total, createdAt: saved.createdAt, editable: false } : undefined;
