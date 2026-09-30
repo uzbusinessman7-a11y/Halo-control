@@ -7,6 +7,7 @@ import {
 import { HaloStateConflictError, mutateHaloState } from "../../lib/halo-store";
 import { isAdminRequest } from "../../lib/integration-store";
 import { isAccountingMonthClosed } from "../../lib/month-end";
+import { assertV2DayOpen, ClosedDayError } from "../../core/closed-days";
 
 class OilRecordError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
       || !Number.isSafeInteger(unitAmount) || unitAmount <= 0 || unitAmount > 100_000_000_000) {
       throw new OilRecordError("Moy turi, kanistr soni, sana va narxni tekshiring.");
     }
+    await assertV2DayOpen(branchId, date);
     const amount = canCount * unitAmount;
     if (!Number.isSafeInteger(amount) || amount > 100_000_000_000) {
       throw new OilRecordError("Moy summasi juda katta.");
@@ -81,6 +83,7 @@ export async function POST(request: Request) {
     }, 5, branchId, "Rahbar", `${purchase ? "Yangi moy olindi" : "Ishlatilgan moy sotildi"} · ${canCount} kanistr · ₩${amount.toLocaleString("en-US")}`, "Chicken moyi");
     return Response.json({ ok: true, updatedAt: mutation.updatedAt, ...mutation.result });
   } catch (error) {
+    if (error instanceof ClosedDayError) return Response.json({ error: error.message }, { status: 409 });
     if (error instanceof OilRecordError) {
       return Response.json({ error: error.message }, { status: error.status });
     }

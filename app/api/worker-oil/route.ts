@@ -12,6 +12,7 @@ import {
 import { authenticateWorkerRequest } from "../../lib/worker-auth";
 import { buildWorkerStateView } from "../../lib/worker-state-view";
 import { isAccountingMonthClosed } from "../../lib/month-end";
+import { assertV2DayOpen, ClosedDayError } from "../../core/closed-days";
 
 const cleanText = (value: unknown, max: number) => String(value || "")
   .trim()
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
       || !Number.isSafeInteger(unitAmount) || unitAmount <= 0 || unitAmount > 100_000_000_000) {
       return Response.json({ error: "Moy turi, kanistr soni, sana va narxni tekshiring." }, { status: 400 });
     }
+    await assertV2DayOpen(session.branchId, date);
     const amount = canCount * unitAmount;
     if (!Number.isSafeInteger(amount) || amount > 100_000_000_000) {
       return Response.json({ error: "Moy summasi juda katta." }, { status: 400 });
@@ -101,6 +103,7 @@ export async function POST(request: Request) {
       state: buildWorkerStateView(nextState, session.userId, revision),
     });
   } catch (error) {
+    if (error instanceof ClosedDayError) return Response.json({ error: error.message }, { status: 409 });
     if (error instanceof HaloStateConflictError) {
       return Response.json({ error: "Ma’lumot yangilangan. Sahifani qayta oching." }, { status: 409 });
     }
