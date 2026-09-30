@@ -161,6 +161,13 @@ export function cancelPosOrder(state: JsonRecord, orderIdInput: string) {
     ...sales.filter((sale) => sale.deliveryBatchId === orderId).map((sale) => String(sale.id || "")),
   ]);
   if (!saleIds.size) throw new PosTerminalError("Savdo tarkibi topilmadi.", 409);
+  const removed = removeSalesById(state, saleIds);
+  return { order, state: { ...removed, posOrders: orders.filter((entry) => String(entry.id || "") !== orderId) } };
+}
+
+/** Savdolarni olib tashlash: ombor qaytariladi, savdo va unga bog'liq ombor harakatlari o'chadi. */
+export function removeSalesById(state: JsonRecord, saleIds: Set<string>): JsonRecord {
+  const sales = records(state.sales);
   const linkedSales = sales.filter((sale) => saleIds.has(String(sale.id || "")));
   const fallbackUsage: RemovalUsage[] = linkedSales.flatMap((sale) => records(sale.stockUsage).flatMap((usage) => {
     const inventoryId = cleanText(usage.inventoryId, 100);
@@ -172,14 +179,10 @@ export function cancelPosOrder(state: JsonRecord, orderIdInput: string) {
   const movements = records(state.stockMovements);
   const restored = removalQuantities(movements, saleIds, fallbackUsage);
   return {
-    order,
-    state: {
-      ...state,
-      inventory: restoreInventory(records(state.inventory), restored),
-      sales: sales.filter((sale) => !saleIds.has(String(sale.id || ""))),
-      stockMovements: movements.filter((movement) => !saleIds.has(String(movement.referenceId || ""))),
-      posOrders: orders.filter((entry) => String(entry.id || "") !== orderId),
-    },
+    ...state,
+    inventory: restoreInventory(records(state.inventory), restored),
+    sales: sales.filter((sale) => !saleIds.has(String(sale.id || ""))),
+    stockMovements: movements.filter((movement) => !saleIds.has(String(movement.referenceId || ""))),
   };
 }
 

@@ -1,0 +1,32 @@
+import './helpers/ts-resolve.mjs';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+test('xodim ilovasi: mahsulot kirimi (kg → g, narx yangilanadi) xodim ilovasi yuboradigan maydonlar bilan', async () => {
+const sqlite = new DatabaseSync(':memory:');
+  const make = (query, params = []) => ({ bind: (...v) => make(query, v), all: async () => ({ results: sqlite.prepare(query).all(...params) }), first: async () => sqlite.prepare(query).get(...params) ?? null, run: async () => { const r = sqlite.prepare(query).run(...params); return { meta: { changes: Number(r.changes) } }; }, _exec: () => sqlite.prepare(query).run(...params) });
+  globalThis.__HALO_CONTROL_DB__ = { prepare: (q) => make(q), batch: async (st) => { sqlite.exec('BEGIN'); try { const o = st.map((s) => s._exec()); sqlite.exec('COMMIT'); return o; } catch (e) { sqlite.exec('ROLLBACK'); throw e; } } };
+  globalThis.__HALO_SELF_HOSTED__ = true;
+  const { createWorkerAccount, loginWorker } = await import('../app/lib/worker-auth.ts');
+  const { readHaloState } = await import('../app/lib/halo-store.ts');
+  const x = await import('../app/api/v2/xodim/route.ts');
+  const wd = await import('../app/api/worker-deliveries/route.ts');
+  await readHaloState('main');
+  const p = JSON.parse(sqlite.prepare("SELECT payload FROM app_state WHERE id = 'main'").get().payload);
+  p.inventory = [{ id: 'g', name: 'Go‘sht', unit: 'g', stock: 0, unitCost: 20, packageName: '', unitsPerPackage: 1, packageCost: 0, gramsPerUnit: 1, supplierId: '', categoryId: '', minStock: 0 }];
+  sqlite.prepare("UPDATE app_state SET payload = ? WHERE id = 'main'").run(JSON.stringify(p));
+  await createWorkerAccount('main', 'Ali', 'ali', '1234');
+  sqlite.exec("UPDATE halo_worker_users SET can_supplier_delivery = 1, can_warehouse_receipt = 1");
+  const cookie = (await loginWorker('main', 'ali', '1234')).cookie.split(';')[0];
+  const d = await (await x.POST(new Request('https://x.example/api/v2/xodim', { method: 'POST', headers: { cookie }, body: '{}' }))).json();
+  const f = new FormData();
+  f.set('inventoryOnly', 'true'); f.set('operationId', crypto.randomUUID()); f.set('date', d.today);
+  f.set('lines', JSON.stringify([{ inventoryId: 'g', name: 'Go‘sht', unit: 'kg', quantity: 2, totalAmount: 36000 }]));
+  f.set('updatedAt', d.updatedAt); f.set('supplierId', ''); f.set('note', '');
+  const r = await wd.POST(new Request('https://x.example/api/worker-deliveries', { method: 'POST', headers: { cookie }, body: f }));
+  assert.equal(r.status, 200);
+  const s = JSON.parse(sqlite.prepare("SELECT payload FROM app_state WHERE id = 'main'").get().payload);
+  assert.equal(s.inventory[0].stock, 2000, '2 kg → 2000 g');
+  assert.equal(s.inventory[0].unitCost, 18);
+  
+});
