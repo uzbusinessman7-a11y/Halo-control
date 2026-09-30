@@ -69,16 +69,18 @@ function render(x,note){
   var box=document.getElementById('form');
   if(x.error){box.innerHTML='<section class="card"><div class="msg bad">'+esc(x.error)+'</div></section>';return}
   var r=x.rules,e=x.example;
-  box.innerHTML='<section class="card"><h2>💳 POS (karta) savdosi</h2>'
-    +pctField('tax','Soliq',r.taxPct,'Faqat POS (karta) savdosidan: savdo × foiz. Naqd, hisob-raqam va delivery savdosiga yozilmaydi. Soliq zaxiraga yig‘iladi; to‘laganda Kiritish → Xarajat → “Soliq” deb kiriting — zaxiradan yopiladi.')
+  box.innerHTML='<section class="card"><h2>🧾 POS apparati va soliq</h2>'
+    +pctField('tax','Soliq',r.taxPct,'POS apparati savdosidan (karta va naqd) va delivery savdosidan: savdo × foiz. HALO hisob (naqd pul va hisob-raqamga o‘tkazma) — soliqsiz. Soliq zaxiraga yig‘iladi; to‘laganda Kiritish → Xarajat → “Soliq” deb kiriting — zaxiradan yopiladi.')
     +pctField('card','Karta to‘lov kompaniyasi komissiyasi',r.cardPct,'Karta puli hisobingizga shu foiz ayirilib tushadi. Kassa bo‘limida “kutilayotgan pul” sof summa bilan ko‘rinadi.')
     +'</section>'
     +'<section class="card"><h2>🛵 Delivery platformalari</h2><p class="hint">Har bir buyurtmadan: foiz (vositachilik + to‘lov + reklama + QQS birga) va qat’iy summa (masalan, yetkazish haqi).</p>'
     +r.platforms.map(function(p){return '<div class="item" style="display:block"><b>'+esc(p.label)+'</b><div class="row" style="gap:10px;margin-top:8px;flex-wrap:wrap"><label class="field" style="flex:1;min-width:130px"><span>Ushlanma, %</span><input data-pct="'+esc(p.id)+'" inputmode="decimal" value="'+esc(p.pct||'')+'" placeholder="0"></label><label class="field" style="flex:1;min-width:130px"><span>Har buyurtmadan, ₩</span><input data-fee="'+esc(p.id)+'" inputmode="numeric" value="'+esc(p.feeWon||'')+'" placeholder="0"></label></div></div>'}).join('')
     +'</section>'
     +'<section class="card"><h2>Misol: '+won(e.amount)+' savdo</h2>'
-    +'<div class="list-row"><span>💳 Karta: komissiya '+won(e.card.commission)+' · soliq '+won(e.card.tax)+'</span><b>sof '+won(e.card.net)+'</b></div>'
-    +e.delivery.map(function(d){return '<div class="list-row"><span>🛵 '+esc(d.label)+': ushlanma '+won(d.fee)+'</span><b>sof '+won(d.net)+'</b></div>'}).join('')
+    +'<div class="list-row"><span>💳 POS karta: komissiya '+won(e.card.commission)+' · soliq '+won(e.card.tax)+'</span><b>sof '+won(e.card.net)+'</b></div>'
+    +'<div class="list-row"><span>💵 POS naqd: soliq '+won(e.posCash.tax)+'</span><b>sof '+won(e.posCash.net)+'</b></div>'
+    +e.delivery.map(function(d){return '<div class="list-row"><span>🛵 '+esc(d.label)+': ushlanma '+won(d.fee)+' · soliq '+won(d.tax)+'</span><b>sof '+won(d.net)+'</b></div>'}).join('')
+    +'<div class="list-row"><span>🏦 HALO hisob (naqd / hisob-raqam)</span><b>sof '+won(e.amount)+'</b></div>'
     +'<p class="hint" style="margin-top:8px">Delivery qat’iy summasi bitta buyurtmaga bir marta olinadi.</p></section>'
     +'<section class="card">'+(BRANCHES.length>1?'<label class="row" style="gap:8px;margin-bottom:12px"><input type="checkbox" id="all" checked style="width:18px;height:18px;min-height:auto"> Hamma filiallarga bir xil qo‘llash</label>':'')
     +'<button class="block" id="save">Saqlash</button><p class="hint" style="margin-top:8px">Yangi foiz faqat bundan keyingi savdolarga qo‘llanadi — eski savdolar o‘zgarmaydi.</p><div id="msg">'+(note||'')+'</div></section>';

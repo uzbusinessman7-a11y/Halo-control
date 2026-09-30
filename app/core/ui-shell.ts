@@ -130,6 +130,7 @@ function haloLoading(n){var s='';for(var i=0;i<(n||3);i++)s+='<div class="skelet
 
 /** "⋯" menyu: kam ishlatiladigan bo'limlar — ulanishlar, sozlamalar, nazorat va chiqish. */
 const MORE_MENU = [
+  ["/api/v2/pos", "🧾", "Kassa oynasi (POS, delivery)", "Alohida havola: /pos"],
   ["/api/v2/ushlanmalar", "％", "Soliq va komissiyalar", "Har savdodan avtomatik ushlanadi"],
   ["/api/v2/ulanishlar", "🔌", "Ulanishlar", "Telegram, Google Sheets, API"],
   ["/api/v2/sozlamalar", "⚙️", "Sozlamalar", "Xodim akkauntlari, filiallar"],

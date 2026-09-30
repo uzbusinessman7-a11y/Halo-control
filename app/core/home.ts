@@ -12,6 +12,7 @@ import { ownerSummary } from "./kassa-service";
 import { runStockBridge } from "./stock-bridge";
 import { runDebtBridge } from "./debt-bridge";
 import { runPayrollBridge } from "./payroll-bridge";
+import { outflowSplit } from "./pos-report";
 import { assertScope, isIsoDate, LedgerError, type LedgerScope } from "./ledger";
 import type { D1Like } from "../lib/full-migration";
 
@@ -29,6 +30,8 @@ export interface HomeReport {
   deductions: { commission: number; tax: number; taxReserve: number };
   prime: {
     theoreticalFood: number; waste: number; countLoss: number; food: number; labor: number; total: number;
+    /** Chiqitdan: oshxonada yeyilgan ovqat va haqiqiy isrof (tannarx) alohida. */
+    staffMeals: number; wasteOnly: number;
     foodPercent: number | null; laborPercent: number | null; primePercent: number | null;
   };
   money: { cash: number; bank: number; receivable: number; oldestReceivableDays: number | null };
@@ -108,6 +111,8 @@ export async function homeReport(db: D1Like, scope: LedgerScope, state: Row, tod
   const taxReserve = -(await accountSum(db, scope, ["soliq-zaxira"], "0000-01-01", today));
 
   const food = await foodCostTotals(db, scope, monthStart, today);
+  const split = outflowSplit(state, monthStart, today);
+  const staffMeals = Math.min(split.meals, Math.max(0, food.waste));
   const labor = pay.employees.reduce((sum, employee) => {
     const current = employee.months.find((item) => item.month === month);
     return sum + (current ? current.earned + current.bonus - current.deduction : 0);
@@ -149,7 +154,8 @@ export async function homeReport(db: D1Like, scope: LedgerScope, state: Row, tod
     expenses: { monthToDate: expensesMtd },
     deductions: { commission: commissionMtd, tax: taxMtd, taxReserve },
     prime: {
-      theoreticalFood: food.theoretical, waste: food.waste, countLoss: food.countLoss, food: food.food, labor, total: prime,
+      theoreticalFood: food.theoretical, waste: food.waste, countLoss: food.countLoss,
+      staffMeals, wasteOnly: Math.max(0, food.waste - staffMeals), food: food.food, labor, total: prime,
       foodPercent: pct(food.food, salesMtd), laborPercent: pct(labor, salesMtd), primePercent: pct(prime, salesMtd),
     },
     money: { cash: byRole("cash"), bank: byRole("bank"), receivable, oldestReceivableDays },

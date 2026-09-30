@@ -181,10 +181,10 @@ function renderSale(){
   var items=MENU.catalog||[];
   var groups=cats.map(function(c){return {name:c.name,items:items.filter(function(i){return i.categoryId===c.id})}}).filter(function(g){return g.items.length});
   var rest=items.filter(function(i){return !cats.some(function(c){return c.id===i.categoryId})});if(rest.length)groups.push({name:groups.length?'Boshqa':'Menyu',items:rest});
-  pane.innerHTML='<section class="card"><h2>To‘lov turi</h2><div class="pay">'
-    +[['card','💳 Karta (POS)'],['cash','💵 Naqd'],['bank','🏦 Hisob-raqam'],['delivery','🛵 Delivery']].map(function(p){return '<button class="'+(PAY===p[0]?'':'ghost')+'" data-pay="'+p[0]+'">'+p[1]+'</button>'}).join('')+'</div>'
-    +(PAY==='card'&&DATA.rules?'<p class="hint" style="margin:10px 0 0">Avtomatik ushlanadi: soliq '+DATA.rules.taxPct+'% · karta komissiyasi '+DATA.rules.cardPct+'%. <a href="/api/v2/ushlanmalar">O‘zgartirish</a></p>':'')
-    +(PAY==='delivery'?'<div class="row" style="margin-top:12px"><select id="plat" style="flex:1">'+DATA.platforms.map(function(p){return '<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>'}).join('')+'</select><input id="ordNo" maxlength="64" placeholder="Buyurtma raqami (ixtiyoriy)" style="flex:1"></div><p class="hint" style="margin:8px 0 0">Delivery narxi va platforma ushlanmalari avtomatik hisoblanadi.</p>':'')
+  if(PAY!=='cash'&&PAY!=='bank')PAY='cash';
+  pane.innerHTML='<section class="card"><h2>HALO hisob — soliqsiz</h2><p class="hint" style="margin:0 0 10px">Naqd pul va hisob-raqamga o‘tkazilgan savdo. POS apparati (karta/naqd) va delivery savdosi <a href="/pos"><b>Kassa oynasi</b></a>da kiritiladi — u yerda soliq va komissiya avtomatik.</p><div class="pay">'
+    +[['cash','💵 Naqd'],['bank','🏦 Hisob-raqam']].map(function(p){return '<button class="'+(PAY===p[0]?'':'ghost')+'" data-pay="'+p[0]+'">'+p[1]+'</button>'}).join('')+'</div>'
+    (PAY==='delivery'?'<div class="row" style="margin-top:12px"><select id="plat" style="flex:1">'+DATA.platforms.map(function(p){return '<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>'}).join('')+'</select><input id="ordNo" maxlength="64" placeholder="Buyurtma raqami (ixtiyoriy)" style="flex:1"></div><p class="hint" style="margin:8px 0 0">Delivery narxi va platforma ushlanmalari avtomatik hisoblanadi.</p>':'')
     +'</section>'
     +groups.map(function(g){return '<section class="card"><h2>'+esc(g.name)+'</h2><div class="menu-grid">'+g.items.map(function(i){var q=CART[i.id]||0,p=price(i);
       return '<button class="dish'+(q?' on':'')+'" data-add="'+esc(i.id)+'"'+(p?'':' style="opacity:.45"')+'>'+(q?'<span class="q">'+q+'</span>':'')+'<b>'+esc(i.name)+'</b><small>'+(p?won(p):'narx yo‘q')+'</small></button>'}).join('')+'</div></section>'}).join('')

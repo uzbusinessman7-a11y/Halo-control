@@ -109,7 +109,7 @@ function load(){
       +'<div class="gauge"><i style="width:'+Math.min(100,pp||0)+'%;background:'+color+'"></i></div>'
       +'<p class="hint">Oziq-ovqat tannarxi + ish haqi, savdoga nisbatan. Restoranning eng muhim ko‘rsatkichi.</p>'
       +'<div class="grid">'
-      +kpi('Oziq-ovqat'+(p.foodPercent!=null?' · '+p.foodPercent+'%':''),won(p.food),'retsept '+won(p.theoreticalFood)+' · chiqit '+won(p.waste)+' · kamomad '+won(p.countLoss))
+      +kpi('Oziq-ovqat'+(p.foodPercent!=null?' · '+p.foodPercent+'%':''),won(p.food),'retsept '+won(p.theoreticalFood)+' · oshxonada yeyilgan '+won(p.staffMeals)+' · chiqit '+won(p.wasteOnly)+' · kamomad '+won(p.countLoss))
       +kpi('Ish haqi'+(p.laborPercent!=null?' · '+p.laborPercent+'%':''),won(p.labor),'hisoblangan maosh, bonus bilan')
       +kpi('Boshqa xarajatlar',won(r.expenses.monthToDate),'xarajat, komissiya, soliq, kassa farqi')
       +kpi('Avtomatik ushlanma',won(r.deductions.commission+r.deductions.tax),'komissiya '+won(r.deductions.commission)+' · soliq '+won(r.deductions.tax)+(r.deductions.taxReserve?' · to‘lanadigan soliq zaxirasi '+won(r.deductions.taxReserve):''))

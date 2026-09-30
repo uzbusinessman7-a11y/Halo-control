@@ -28,6 +28,8 @@ export type PosOrderInput = {
   deliveryFeesWon?: Record<string, unknown>;
   expectedTotal?: number;
   inventoryReason?: string;
+  /** "pos" — do'kon POS apparati orqali (karta yoki naqd): soliq ushlanadi. "halo" — HALO hisob (naqd/hisob-raqam): soliqsiz. */
+  salesChannel?: "pos" | "halo";
   items: Array<{ recipeId: string; quantity: number }>;
   note?: string;
 };
@@ -109,7 +111,7 @@ function removeEditableSale(state: JsonRecord, orderIdInput: string) {
   if (!["cash", "bank"].includes(String(order.paymentType || ""))) {
     throw new PosTerminalError("Faqat naqd yoki hisob-raqam savdosini o‘zgartirish mumkin.", 403);
   }
-  if (cleanText(order.workerId, 100) !== "pos-terminal") {
+  if (cleanText(order.workerId, 100) !== "pos-terminal" || order.salesChannel === "pos") {
     throw new PosTerminalError("Faqat HALO HISOB oynasidan kiritilgan savdoni o‘zgartirish mumkin.", 403);
   }
   if (isAccountingMonthClosed(state.monthlyCloses, order.date)) {
@@ -118,6 +120,47 @@ function removeEditableSale(state: JsonRecord, orderIdInput: string) {
   const saleIds = new Set(records(order.items).map((item) => cleanText(item.saleId, 160)).filter(Boolean));
   if (!saleIds.size) throw new PosTerminalError("Savdo tarkibi topilmadi.", 409);
   const sales = records(state.sales);
+  const linkedSales = sales.filter((sale) => saleIds.has(String(sale.id || "")));
+  const fallbackUsage: RemovalUsage[] = linkedSales.flatMap((sale) => records(sale.stockUsage).flatMap((usage) => {
+    const inventoryId = cleanText(usage.inventoryId, 100);
+    const quantity = Number(usage.deductedQuantity ?? usage.quantity);
+    return inventoryId && Number.isFinite(quantity) && quantity > 0
+      ? [{ inventoryId, quantity, referenceId: cleanText(sale.id, 160) }]
+      : [];
+  }));
+  const movements = records(state.stockMovements);
+  const restored = removalQuantities(movements, saleIds, fallbackUsage);
+  return {
+    order,
+    state: {
+      ...state,
+      inventory: restoreInventory(records(state.inventory), restored),
+      sales: sales.filter((sale) => !saleIds.has(String(sale.id || ""))),
+      stockMovements: movements.filter((movement) => !saleIds.has(String(movement.referenceId || ""))),
+      posOrders: orders.filter((entry) => String(entry.id || "") !== orderId),
+    },
+  };
+}
+
+/**
+ * Rahbar: POS oynasidan kiritilgan istalgan savdoni (karta, naqd, delivery) bekor qilish.
+ * Ombor qaytariladi, savdo yozuvlari olib tashlanadi (holat tarixi halo_state_backups'da qoladi,
+ * V2 jurnalida esa teskari yozuv paydo bo'ladi).
+ */
+export function cancelPosOrder(state: JsonRecord, orderIdInput: string) {
+  const orderId = cleanText(orderIdInput, 160);
+  const orders = records(state.posOrders);
+  const order = orders.find((entry) => String(entry.id || "") === orderId);
+  if (!order || !orderId.startsWith("pos-order:")) throw new PosTerminalError("Savdo yozuvi topilmadi.", 404);
+  if (isAccountingMonthClosed(state.monthlyCloses, order.date)) {
+    throw new PosTerminalError("Yopilgan oydagi savdoni bekor qilib bo‘lmaydi.", 409);
+  }
+  const sales = records(state.sales);
+  const saleIds = new Set([
+    ...records(order.items).map((item) => cleanText(item.saleId, 160)).filter(Boolean),
+    ...sales.filter((sale) => sale.deliveryBatchId === orderId).map((sale) => String(sale.id || "")),
+  ]);
+  if (!saleIds.size) throw new PosTerminalError("Savdo tarkibi topilmadi.", 409);
   const linkedSales = sales.filter((sale) => saleIds.has(String(sale.id || "")));
   const fallbackUsage: RemovalUsage[] = linkedSales.flatMap((sale) => records(sale.stockUsage).flatMap((usage) => {
     const inventoryId = cleanText(usage.inventoryId, 100);
@@ -193,6 +236,11 @@ function orderNumberForDate(orders: JsonRecord[], date: string) {
   }, 0) + 1;
 }
 
+/** Savdo kanali bo'yicha soliq foizini savdoga yozadi (delivery ham soliqqa tortiladi). */
+function withChannelTax<T extends JsonRecord>(sale: T, taxPct: number): T {
+  return { ...sale, taxPctAtSale: taxPct };
+}
+
 export function buildPosTerminalView(state: JsonRecord) {
   const recipes = ensureMenuCodes(records(state.recipes).map((recipe) => ({
     ...recipe,
@@ -221,7 +269,7 @@ export function buildPosTerminalView(state: JsonRecord) {
         if(!linked.length)return [];
         return [{...order,editable:false,total:linked.reduce((sum,s)=>sum+Number(s.totalRevenue||0),0),items:linked.map(s=>({id:s.id,saleId:s.id,recipeId:s.recipeId,name:recipes.find(r=>r.id===s.recipeId)?.name||'Taom',quantity:s.quantity,unitPrice:s.unitPrice,total:s.totalRevenue}))}];
       }
-      return [{...order,editable:cleanText(order.workerId,100)==='pos-terminal' && ['cash','bank'].includes(String(order.paymentType||''))}];
+      return [{...order,editable:cleanText(order.workerId,100)==='pos-terminal' && order.salesChannel!=='pos' && ['cash','bank'].includes(String(order.paymentType||''))}];
     });
   const inventoryOutflows = records(state.workerConsumptions)
     .filter((entry) => entry.kind === "inventory_only" || entry.kind === "meal")
@@ -410,6 +458,11 @@ export function applyPosOrder(
         : "Karta / POS hisobi topilmadi.",
   );
   const accountId = cleanText(account.id, 100);
+  // Soliq: POS apparati (karta yoki naqd) va delivery savdosidan; HALO hisob (naqd/hisob-raqam) — soliqsiz.
+  if (input.salesChannel === "pos" && !["card", "cash"].includes(accountType)) throw new PosTerminalError("POS apparati orqali faqat karta yoki naqd savdo kiritiladi.");
+  const salesChannel = delivery ? "delivery" : accountType === "card" || input.salesChannel === "pos" ? "pos" : "halo";
+  const taxable = salesChannel !== "halo";
+  const rulesTaxPct = Math.min(100, Math.max(0, Number((state.costRules as JsonRecord | undefined)?.taxPct) || 0));
   if (isAccountingMonthClosed(state.monthlyCloses, date)) {
     throw new PosTerminalError(`${date.slice(0, 7)} oyi yopilgan. Savdoni ochiq oyga kiriting.`, 409);
   }
@@ -465,7 +518,7 @@ export function applyPosOrder(
       inventory.map((entry) => ({ ...entry, id: cleanText(entry.id, 100), unitCost: money(entry.unitCost) })),
       records(recipe.extraCosts).map((entry) => ({ amount: money(entry.amount) })),
     ).totalCost * quantity;
-    sales.push(snapshotSaleFinancialRates({
+    sales.push(withChannelTax(snapshotSaleFinancialRates({
       id: saleId,
       recipeId,
       quantity,
@@ -475,13 +528,13 @@ export function applyPosOrder(
       date,
       source: delivery ? "delivery" : "pos",
       ...(delivery ? {deliveryPlatform:platform,deliveryOrderNumber:deliveryNumber,deliveryBatchId:orderId,deliveryCommissionAmount:allocated[itemIndex].total,deliveryCommissionPct:gross?calculateDeliveryManualFees(gross,deliveryFees).total/gross*100:0,deliveryFeeBreakdown:allocated[itemIndex],deliveryManualFees:deliveryFees,soldAt:date === today ? createdAt : date,createdAt,posOrderId:orderId} : {}),
-      // Soliq faqat POS (karta) savdosidan avtomatik ushlanadi; naqd/hisob-raqam/delivery — yo'q.
-      taxTreatment: accountType === "card" ? "automatic" : "accountant_managed",
+      taxTreatment: taxable ? "automatic" : "accountant_managed",
+      salesChannel,
       externalId: `${orderId}:${itemIndex}`,
       stockUsage,
       ...(lineShortages.length ? { stockShortages: lineShortages } : {}),
       accountId,
-    }, accountType, state.costRules as { cardCommissionPct?: unknown; taxPct?: unknown } | undefined));
+    }, accountType, state.costRules as { cardCommissionPct?: unknown; taxPct?: unknown } | undefined), taxable ? rulesTaxPct : 0));
     stockUsage.forEach((usageEntry, movementIndex) => movements.push({
       id: `pos-terminal-movement:${operationId}:${itemIndex}:${movementIndex}`,
       inventoryId: usageEntry.inventoryId,
@@ -507,6 +560,7 @@ export function applyPosOrder(
     orderNumber: orderNumberForDate(orders, date),
     date,
     paymentType: input.paymentType,
+    salesChannel,
     ...(delivery?{deliveryPlatform:platform,deliveryOrderNumber:deliveryNumber,deliveryRequestKey:JSON.stringify([input.paymentType,input.deliveryPlatform,input.items])}:{}),
     accountId,
     status: "new",
