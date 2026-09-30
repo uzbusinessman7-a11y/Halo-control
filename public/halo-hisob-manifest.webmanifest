@@ -2,15 +2,24 @@
   "id": "/hisob",
   "name": "HALO HISOB",
   "short_name": "HALO HISOB",
-  "description": "Naqd, hisob-raqam savdosi va oshxonada yeyilgan ovqatni tez kiritish oynasi.",
+  "description": "Do'kon oynasi: naqd, hisob-raqam, delivery, oshxonada yeyilgan va chiqit.",
   "lang": "uz",
-  "start_url": "/hisob",
-  "scope": "/",
+  "dir": "ltr",
+  "start_url": "/api/v2/pos",
+  "scope": "/api/v2/",
   "display": "standalone",
-  "background_color": "#090b0d",
-  "theme_color": "#090b0d",
+  "display_override": [
+    "fullscreen",
+    "standalone"
+  ],
+  "background_color": "#0b0b0c",
+  "theme_color": "#0b0b0c",
   "orientation": "any",
-  "categories": ["business", "food", "productivity"],
+  "categories": [
+    "business",
+    "food",
+    "productivity"
+  ],
   "icons": [
     {
       "src": "/icons/halo-192.png",
@@ -22,7 +31,13 @@
       "src": "/icons/halo-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/halo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

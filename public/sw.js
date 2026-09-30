@@ -1,4 +1,4 @@
-const CACHE_NAME = "halo-control-shell-v7";
+const CACHE_NAME = "halo-control-shell-v8";
 const APP_ASSETS = [
   "/manifest.webmanifest",
   "/halo-hisob-manifest.webmanifest",

@@ -132,6 +132,7 @@ function haloLoading(n){var s='';for(var i=0;i<(n||3);i++)s+='<div class="skelet
 const MORE_MENU = [
   ["/pos", "🧾", "HALO HISOB oynasi", "Naqd, hisob-raqam, delivery, oshxona, chiqit"],
   ["/api/v2/vazifalar", "✅", "Xodim vazifalari", "Vazifa yuborish va bajarilishi"],
+  ["/api/v2/ornatish", "📲", "Ilovani o‘rnatish", "iPhone, Mac, Windows, Android"],
   ["/api/v2/ushlanmalar", "％", "Soliq va komissiyalar", "Har savdodan avtomatik ushlanadi"],
   ["/api/v2/ulanishlar", "🔌", "Ulanishlar", "Telegram, Google Sheets, API"],
   ["/api/v2/sozlamalar", "⚙️", "Sozlamalar", "Xodim akkauntlari, filiallar"],
@@ -167,7 +168,27 @@ export interface ShellInput {
   headerRight?: string;
   body: string;
   script: string;
+  /** Qaysi ilova sifatida o'rnatiladi (telefon/kompyuter): rahbar, xodim yoki do'kon oynasi. */
+  app?: "owner" | "xodim" | "hisob";
 }
+
+const APPS = {
+  owner: { manifest: "/manifest.webmanifest", icon: "/icons/halo-180.png", title: "HALO" },
+  xodim: { manifest: "/xodim-manifest.webmanifest", icon: "/icons/halo-xodim-180.png", title: "HALO Xodim" },
+  hisob: { manifest: "/halo-hisob-manifest.webmanifest", icon: "/icons/halo-180.png", title: "HALO HISOB" },
+} as const;
+
+/** Ilova o'rnatish: service worker (Windows/Android/Chrome/Edge talabi) va o'rnatish taklifini ushlab qolish. */
+const INSTALL_SCRIPT = `if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){})})}
+window.haloInstall=null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.haloInstall=e;document.dispatchEvent(new Event('halo-installable'))});
+window.haloStandalone=function(){return (window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||navigator.standalone===true};
+window.haloDoInstall=function(){if(!window.haloInstall){location.href='/api/v2/ornatish';return}window.haloInstall.prompt();window.haloInstall.userChoice.then(function(){window.haloInstall=null;var b=document.getElementById('haloInstallPill');if(b)b.remove()})};
+document.addEventListener('halo-installable',function(){try{if(localStorage.getItem('halo-install-hide')==='1')return}catch(e){}if(document.getElementById('haloInstallPill')||window.haloStandalone())return;
+ var d=document.createElement('div');d.id='haloInstallPill';d.style.cssText='position:fixed;right:14px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:40;display:flex;gap:4px;align-items:center;background:var(--accent);color:var(--accent-ink);border-radius:99px;padding:4px 6px 4px 14px;font-weight:800;box-shadow:0 8px 24px rgba(0,0,0,.35)';
+ d.innerHTML='<span style="cursor:pointer" id="haloInstallGo">📲 Ilova qilib o‘rnatish</span><button aria-label="Yopish" id="haloInstallX" style="min-height:30px;padding:0 10px;background:transparent;color:inherit">✕</button>';
+ document.body.appendChild(d);document.getElementById('haloInstallGo').addEventListener('click',window.haloDoInstall);
+ document.getElementById('haloInstallX').addEventListener('click',function(){try{localStorage.setItem('halo-install-hide','1')}catch(e){}d.remove()})});
+`;
 
 export function shell(input: ShellInput): string {
   const withNav = input.active !== null;
@@ -177,6 +198,11 @@ export function shell(input: ShellInput): string {
   return `<!doctype html><html lang="uz"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex">
 <meta name="theme-color" content="#0b0b0c">
+<link rel="manifest" href="${APPS[input.app || "owner"].manifest}">
+<link rel="apple-touch-icon" href="${APPS[input.app || "owner"].icon}">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="${APPS[input.app || "owner"].title}">
 <title>${input.title} · HALO</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23d4a84b'/%3E%3Ctext x='16' y='23' font-family='Arial' font-weight='900' font-size='20' text-anchor='middle' fill='%23111'%3EH%3C/text%3E%3C/svg%3E">
 <style>${DESIGN_CSS}</style></head><body>
@@ -188,6 +214,6 @@ ${withNav ? `<aside class="side">${BRAND}${navLinks(input.active, "")}<div class
 </div>
 </div>
 ${withNav ? `<nav class="bottom">${navLinks(input.active, "")}</nav>${MORE_UI}` : ""}
-<script>${COMMON_SCRIPT}${withNav ? MORE_SCRIPT : ""}${input.script}</script>
+<script>${INSTALL_SCRIPT}${COMMON_SCRIPT}${withNav ? MORE_SCRIPT : ""}${input.script}</script>
 </body></html>`;
 }
