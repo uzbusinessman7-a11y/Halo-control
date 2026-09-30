@@ -102,7 +102,7 @@ export async function POST(request: Request) {
 function page(user: { role: "owner" | "staff"; name: string; branches: Array<{ id: string; name: string }> } | null): string {
   const boot = JSON.stringify(user).replace(/</g, "\\u003c");
   return shell({
-    title: "Kassa", active: user?.role === "owner" ? "kassa" : null,
+    title: "Kassa", active: user?.role === "owner" ? "kassa" : null, back: user?.role === "owner" ? "/api/v2/bosh" : "/api/v2/xodim",
     body: `<div id="app" style="display:grid;gap:16px"></div>`,
     script: `
 var USER=${boot};

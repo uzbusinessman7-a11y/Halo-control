@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   const app = new URL(request.url).searchParams.get("app");
   const kind = app === "xodim" || app === "hisob" ? app : "owner";
   return new Response(shell({
-    title: "Ilovani o‘rnatish", active: null, app: kind,
+    title: "Ilovani o‘rnatish", active: null, app: kind, back: "history",
     heading: "Ilovani o‘rnatish",
     subtitle: "HALO telefon va kompyuterda alohida ilova bo‘lib ochiladi — App Store kerak emas",
     body: `<section class="card"><h2>Qaysi ilova?</h2><div id="apps" style="display:grid;gap:10px"></div></section>

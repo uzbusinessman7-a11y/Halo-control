@@ -31,6 +31,7 @@ a{color:var(--accent)}
 .brand b{font-size:17px;letter-spacing:.08em}.brand small{display:block;font-size:11px;color:var(--muted);letter-spacing:.02em;margin-top:-2px}
 .content{max-width:980px;margin:0 auto;padding:18px 16px calc(96px + env(safe-area-inset-bottom));display:grid;gap:16px}
 .page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.backrow{margin-bottom:-6px}.backbtn{min-height:40px;padding:6px 14px 6px 10px;font-size:15px;border-radius:12px}
 .page-head h1{font-size:26px;line-height:1.15;margin:0;letter-spacing:-.02em}.page-head p{margin:4px 0 0;color:var(--muted);font-size:14px}
 .bottom{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(7,1fr);padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
 .nav-a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;border-radius:12px;color:var(--muted);text-decoration:none;font-size:10.5px;font-weight:600;letter-spacing:-.01em}
@@ -170,6 +171,8 @@ export interface ShellInput {
   script: string;
   /** Qaysi ilova sifatida o'rnatiladi (telefon/kompyuter): rahbar, xodim yoki do'kon oynasi. */
   app?: "owner" | "xodim" | "hisob";
+  /** "Orqaga" tugmasi: tarix bo'lmasa qayerga qaytadi (standart — bosh sahifa); "history" — faqat tarix bo'lsa ko'rinadi; false — yo'q. */
+  back?: string | "history" | false;
 }
 
 const APPS = {
@@ -179,6 +182,12 @@ const APPS = {
 } as const;
 
 /** Ilova o'rnatish: service worker (Windows/Android/Chrome/Edge talabi) va o'rnatish taklifini ushlab qolish. */
+const BACK_SCRIPT = `function haloCanBack(){try{return document.referrer&&new URL(document.referrer).origin===location.origin&&new URL(document.referrer).href!==location.href&&history.length>1}catch(e){return false}}
+function haloBack(fb){if(haloCanBack())history.back();else if(fb)location.href=fb}
+(function(){var b=document.getElementById('haloBack');if(!b)return;var fb=b.getAttribute('data-fallback');if(fb==='history'&&!haloCanBack()){b.parentNode.removeChild(b);return}
+b.addEventListener('click',function(){haloBack(fb==='history'?'':fb)})})();
+`;
+
 const INSTALL_SCRIPT = `if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){})})}
 window.haloInstall=null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.haloInstall=e;document.dispatchEvent(new Event('halo-installable'))});
 window.haloStandalone=function(){return (window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||navigator.standalone===true};
@@ -210,10 +219,10 @@ export function shell(input: ShellInput): string {
 ${withNav ? `<aside class="side">${BRAND}${navLinks(input.active, "")}<div class="side-foot">Yangi tizim · sinov rejimi</div></aside>` : ""}
 <div>
 <div class="top"><div class="top-in">${BRAND}</div></div>
-<main class="content">${head}${input.body}</main>
+<main class="content">${input.back === false ? "" : `<div class="backrow"><button class="ghost backbtn" id="haloBack" type="button" data-fallback="${input.back || "/api/v2/bosh"}">‹ Orqaga</button></div>`}${head}${input.body}</main>
 </div>
 </div>
 ${withNav ? `<nav class="bottom">${navLinks(input.active, "")}</nav>${MORE_UI}` : ""}
-<script>${INSTALL_SCRIPT}${COMMON_SCRIPT}${withNav ? MORE_SCRIPT : ""}${input.script}</script>
+<script>${INSTALL_SCRIPT}${BACK_SCRIPT}${COMMON_SCRIPT}${withNav ? MORE_SCRIPT : ""}${input.script}</script>
 </body></html>`;
 }

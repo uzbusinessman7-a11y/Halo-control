@@ -56,7 +56,7 @@ export async function POST(request: Request) {
 export async function GET() {
   if (globalThis.__HALO_SELF_HOSTED__ !== true) return new Response("V2 faqat yangi saytda.", { status: 403 });
   return new Response(shell({
-    title: "Xodim", active: null, app: "xodim",
+    title: "Xodim", active: null, app: "xodim", back: false,
     body: `<div id="app" style="display:grid;gap:16px"><section class="card"><div class="skeleton"></div></section></div>
 <style>
 .huge{width:100%;min-height:110px;font-size:24px;font-weight:900;letter-spacing:.02em;border-radius:22px}.huge.out{background:#dc2626;color:#fff}

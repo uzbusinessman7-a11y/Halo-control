@@ -72,7 +72,7 @@ export async function POST(request: Request) {
 function page(branches: Array<{ id: string; name: string }>): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
   return shell({
-    title: "Bosh sahifa", active: "bosh", heading: "Bugun HALO'da", subtitle: '<span id="sub">Yuklanmoqda…</span>',
+    title: "Bosh sahifa", active: "bosh", back: false, heading: "Bugun HALO'da", subtitle: '<span id="sub">Yuklanmoqda…</span>',
     headerRight: '<select id="branch"></select>',
     body: `<div id="body" style="display:grid;gap:16px"><section class="card"><div class="skeleton" style="width:60%"></div><div class="skeleton" style="margin-top:12px;width:85%"></div><div class="skeleton" style="margin-top:12px;width:40%"></div></section></div>`,
     script: `
