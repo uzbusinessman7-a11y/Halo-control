@@ -4,6 +4,8 @@ import { RecipeError, recipeCategories, recipeChoices, recipeViews, saveRecipe, 
 import { DELIVERY_PLATFORMS } from "../../../lib/delivery-sales";
 import { menuReport } from "../../../core/menu";
 import { shell } from "../../../core/ui-shell";
+import { PRICE_CALC_JS, PRICE_STEPS } from "../../../core/price-calc";
+import { readDeductionRules } from "../../../core/deductions";
 
 declare global {
   var __HALO_SELF_HOSTED__: boolean | undefined;
@@ -32,6 +34,7 @@ export async function POST(request: Request) {
     const recipesPayload = (state: Record<string, unknown>) => ({
       recipes: recipeViews(state), products: recipeChoices(state, today), categories: recipeCategories(state),
       platforms: DELIVERY_PLATFORMS, target: TARGET_FOOD_COST,
+      deduction: (() => { const rules = readDeductionRules(state); return { taxPct: rules.taxPct, cardPct: rules.cardPct }; })(),
     });
     if (body.action === "recipes") {
       const { state } = await readHaloState(branchId);
@@ -120,7 +123,7 @@ function drawRecipes(){
     +'<div class="kpi"><small>35% dan yuqori</small><b style="color:var(--'+(high.length?'bad':'ok')+')">'+high.length+' ta</b></div>'
     +'<div class="kpi"><small>Tannarxi to‘liq emas</small><b style="color:var(--'+(broken.length?'warn':'ok')+')">'+broken.length+' ta</b></div></div>'
     +(stale.length?'<div class="msg warn" style="margin-top:12px">'+stale.length+' ta taomda eski narx “muzlatib” saqlangan — hisobotlarda foyda noto‘g‘ri chiqadi. Taomni ochib “Saqlash”ni bossangiz, hozirgi narxga o‘tadi.</div>':'')+'</section>'
-    +'<section class="card"><div class="row" style="margin-bottom:10px"><input id="rq" placeholder="🔍 Taom qidirish" value="'+esc(RQ)+'" style="flex:1"><button id="rNew">+ Yangi taom</button></div>'
+    +'<section class="card"><div class="row" style="margin-bottom:10px"><input id="rq" placeholder="🔍 Taom qidirish" value="'+esc(RQ)+'" style="flex:1"><button id="rNew">+ Yangi taom</button><a href="/api/v2/kalkulyator" style="text-decoration:none"><button class="ghost" type="button">🧮 Kalkulyator</button></a></div>'
     +(list.length?list.map(function(r){return '<div class="item" data-r="'+esc(r.id)+'" style="cursor:pointer"><b>'+esc(r.name)+(r.stale?'<span class="tag warn">eski narx</span>':'')+(r.status!=='Tayyor'?'<span class="tag bad">'+esc(r.status)+'</span>':'')+'</b><span class="v" style="color:'+fcColor(r.foodCostPercent)+'">'+pct(r.foodCostPercent)+'</span>'
       +'<small>Narx '+won(r.salePrice)+' · tannarx '+(r.cost==null?'—':won(r.cost))+(r.margin!=null?' · foyda '+won(r.margin):'')+(r.stale?' · eski hisob: '+won(r.storedCost):'')+'</small></div>'}).join(''):'<p class="hint">Taom topilmadi.</p>')+'</section>';
   var q=document.getElementById('rq');q.addEventListener('input',function(){RQ=q.value;var pos=q.selectionStart;drawRecipes();var n=document.getElementById('rq');n.focus();n.setSelectionRange(pos,pos)});
@@ -155,6 +158,7 @@ function drawEditor(){
     +'<section class="card"><h2>Qo‘shimcha xarajat</h2><p class="hint">Qadoq, stakan, sous idishi, salfetka…</p>'
     +EDIT.extras.map(function(e,i){return '<div class="row" style="margin-bottom:8px"><input data-xi="'+i+'" data-xf="name" placeholder="Nomi" value="'+esc(e.name)+'" style="flex:2"><input data-xi="'+i+'" data-xf="amount" inputmode="numeric" placeholder="₩" value="'+esc(e.amount)+'" style="flex:1"><button class="ghost" data-xd="'+i+'" style="flex:0 0 auto;min-height:40px;padding:6px 12px">✕</button></div>'}).join('')
     +'<button class="ghost" id="eXadd">+ Qo‘shimcha xarajat</button></section>'
+    +priceHelper(c)
     +'<section class="card"><h2>Narxlar</h2><label class="field"><span>Zalda / olib ketish narxi</span><input class="money" id="ePrice" inputmode="numeric" value="'+esc(EDIT.salePrice?Number(EDIT.salePrice).toLocaleString('en-US'):'')+'" placeholder="0"></label>'
     +'<div class="grid">'+RD.platforms.map(function(p){var v=EDIT.delivery[p.id];return '<label class="field" style="margin:0"><span>'+esc(p.shortLabel)+' narxi</span><input data-dp="'+esc(p.id)+'" inputmode="numeric" value="'+esc(v?Number(v).toLocaleString('en-US'):'')+'" placeholder="0"></label>'}).join('')+'</div></section>'
     +'<section class="card" style="position:sticky;bottom:calc(72px + env(safe-area-inset-bottom));z-index:3;padding:12px 14px"><div class="row" style="justify-content:space-between;align-items:center;gap:10px">'
@@ -172,7 +176,28 @@ function drawEditor(){
   var pr=document.getElementById('ePrice');pr.addEventListener('input',function(){var v=num(pr.value);EDIT.salePrice=v;pr.value=v?v.toLocaleString('en-US'):'';refreshTotals()});
   document.getElementById('eBack').addEventListener('click',function(){EDIT=null;drawRecipes()});
   document.getElementById('eSave').addEventListener('click',saveEditor);
+  bindPriceHelper();
 }
+/* ---------- Tannarxdan narx topish (30 / 35 / 40% va o'zingiz yozgan foiz) ---------- */
+var PC={step:100,ded:false,custom:''};
+function pcDeduct(){var d=RD.deduction||{taxPct:0,cardPct:0};return PC.ded?Math.round((d.taxPct+d.cardPct)*100)/100:0}
+function priceHelper(c){
+  if(c.missing||!(c.total>0))return '<section class="card"><h2>🧮 Tannarxdan narx topish</h2><p class="hint">Tarkibni to‘liq kiriting — tannarx chiqqach, 30%, 35%, 40% bo‘yicha narx shu yerda hisoblanadi.</p></section>';
+  var ded=pcDeduct(),d=RD.deduction||{taxPct:0,cardPct:0},pcts=[30,35,40];var cp=pcP(PC.custom);if(cp>0&&cp<100&&pcts.indexOf(cp)<0)pcts.push(cp);
+  return '<section class="card"><h2>🧮 Tannarxdan narx topish</h2><p class="hint">Tannarx <b style="color:var(--text)">'+won(c.total)+'</b> — sotuv narxining necha foizi bo‘lishini tanlang. Narx yuqoriga yaxlitlanadi.</p>'
+    +'<div class="row" style="gap:8px;margin-bottom:10px">'+${JSON.stringify(PRICE_STEPS)}.map(function(o){return '<button class="'+(PC.step===o.step?'':'ghost')+'" data-pcs="'+o.step+'" style="min-height:36px;padding:4px 12px">'+o.label+'</button>'}).join('')+'</div>'
+    +'<label class="row" style="gap:8px;margin-bottom:10px;font-size:14px"><input type="checkbox" id="pcDed" style="width:18px;height:18px;min-height:auto"'+(PC.ded?' checked':'')+'> Soliq ('+d.taxPct+'%) va karta ('+d.cardPct+'%) ushlanmasidan keyin hisoblash</label>'
+    +'<table><tr><th>Tannarx foizi</th><th class="n">Narx</th><th class="n">Foyda</th><th></th></tr>'
+    +pcts.map(function(p){var r=pcPriceForCost(c.total,p,ded,PC.step);if(!r)return '';return '<tr><td><b>'+pcFmt(p,2)+'%</b><br><small style="color:var(--muted)">aniq: '+pcFmt(r.exact,0)+' · haqiqiy '+pcFmt(r.realPct,1)+'%</small></td><td class="n" style="white-space:nowrap"><b>'+won(r.price)+'</b></td><td class="n" style="white-space:nowrap">'+won(r.profit)+'</td><td class="n"><button class="ghost" data-pcset="'+r.price+'" style="min-height:32px;padding:2px 10px">Narxga qo‘yish</button></td></tr>'}).join('')+'</table>'
+    +'<label class="field" style="margin-top:10px"><span>Boshqa foiz</span><input id="pcCustom" inputmode="decimal" placeholder="masalan 33" value="'+esc(PC.custom)+'"></label></section>'}
+function pcRedraw(){var y=window.scrollY;drawEditor();window.scrollTo(0,y)}
+function bindPriceHelper(){
+  document.querySelectorAll('[data-pcs]').forEach(function(b){b.addEventListener('click',function(){PC.step=Number(b.dataset.pcs);pcRedraw()})});
+  var dd=document.getElementById('pcDed');if(dd)dd.addEventListener('change',function(){PC.ded=dd.checked;pcRedraw()});
+  var cu=document.getElementById('pcCustom');if(cu)cu.addEventListener('input',function(){PC.custom=cu.value;refreshTotals()});
+  document.querySelectorAll('[data-pcset]').forEach(function(b){b.addEventListener('click',function(){EDIT.salePrice=Number(b.dataset.pcset);var y=window.scrollY;drawEditor();window.scrollTo(0,y);var pr=document.getElementById('ePrice');if(pr){pr.focus();pr.scrollIntoView({block:'center',behavior:'smooth'})}})});
+}
+${PRICE_CALC_JS}
 var refreshTimer=null;
 function refreshTotals(){clearTimeout(refreshTimer);refreshTimer=setTimeout(function(){var a=document.activeElement,k=a&&(a.dataset.lf?'[data-li="'+a.dataset.li+'"][data-lf="'+a.dataset.lf+'"]':a.dataset.xf?'[data-xi="'+a.dataset.xi+'"][data-xf="'+a.dataset.xf+'"]':a.id?'#'+a.id:null),pos=a&&a.selectionStart;var y=window.scrollY;drawEditor();window.scrollTo(0,y);if(k){var n=document.querySelector(k);if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}},500)}
 function saveEditor(){

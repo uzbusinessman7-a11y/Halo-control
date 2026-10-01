@@ -162,6 +162,7 @@ const MORE_MENU = [
   ["/api/v2/nazorat", "☑️", "Kunlik nazorat", "Ochilish/yopilish tekshiruvi, oshxona qoidalari"],
   ["/api/v2/eksport", "📥", "Hisobot va zaxira", "Excel uchun yuklab olish, nusxa, qaytarish"],
   ["/api/v2/ornatish", "📲", "Ilovani o‘rnatish", "iPhone, Mac, Windows, Android"],
+  ["/api/v2/kalkulyator", "🧮", "Narx kalkulyatori", "Tannarxdan narx: 30/35/40%, foiz qo‘shish/ayirish"],
   ["/api/v2/ushlanmalar", "％", "Soliq va komissiyalar", "Har savdodan avtomatik ushlanadi"],
   ["/api/v2/ulanishlar", "🔌", "Ulanishlar", "Telegram, Google Sheets, API"],
   ["/api/v2/sozlamalar", "⚙️", "Sozlamalar", "Xodim akkauntlari, filiallar"],
