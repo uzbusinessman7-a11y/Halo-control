@@ -4,6 +4,7 @@
  */
 import { configureExpenseOnly, expenseOnlyOnDate } from "../lib/vegetable-expenses";
 import { setInventoryCatalogArchived } from "../lib/inventory-catalog-archive";
+import { categoryIdOf, CategoryError, resolveNewCategory } from "./categories";
 
 type Row = Record<string, unknown>;
 export const STOCK_UNITS = ["g", "ml", "dona", "kg", "litr"] as const;
@@ -16,7 +17,7 @@ const nameKey = (value: unknown) => clean(value, 100).toLocaleLowerCase().replac
 
 export interface ProductRow {
   id: string; name: string; unit: string; stock: number; minStock: number; unitCost: number; value: number;
-  packageName: string; unitsPerPackage: number; vegetable: boolean; low: boolean; lastReceipt: string | null; movements: number; supplierId: string;
+  packageName: string; unitsPerPackage: number; vegetable: boolean; low: boolean; lastReceipt: string | null; movements: number; supplierId: string; categoryId: string;
 }
 
 export function productList(state: Row, today: string): ProductRow[] {
@@ -40,7 +41,7 @@ export function productList(state: Row, today: string): ProductRow[] {
         value: vegetable ? 0 : Math.round(Math.max(0, stock) * unitCost),
         packageName: String(item.packageName || ""), unitsPerPackage: Number(item.unitsPerPackage) || 0,
         vegetable, low: !vegetable && minStock > 0 && stock <= minStock,
-        lastReceipt: lastReceipt.get(String(item.id)) || null, movements: count.get(String(item.id)) || 0, supplierId: String(item.supplierId || ""),
+        lastReceipt: lastReceipt.get(String(item.id)) || null, movements: count.get(String(item.id)) || 0, supplierId: String(item.supplierId || ""), categoryId: categoryIdOf(state, "inventory", item),
       };
     })
     .sort((left, right) => Number(right.low) - Number(left.low) || left.name.localeCompare(right.name));
@@ -69,7 +70,14 @@ export function saveProduct(state: Row, body: Row) {
   if (twin) throw new CatalogError(`«${String(twin.name)}» nomli mahsulot allaqachon bor.`, 409);
   const supplierId = clean(body.supplierId, 100);
   if (supplierId && !rows(state.suppliers).some((supplier) => supplier.id === supplierId)) throw new CatalogError("Yetkazib beruvchi topilmadi.");
-  const fields = { name, minStock, packageName, unitsPerPackage: packageName ? unitsPerPackage : 0, ...(body.supplierId !== undefined ? { supplierId } : {}) };
+  // Kategoriya: tanlangan bo'lsa — o'sha; yangi mahsulotda tanlanmagan bo'lsa nomidan taxmin qilinadi.
+  let categoryId: string | undefined;
+  try {
+    categoryId = id ? (body.categoryId ? resolveNewCategory(state, "inventory", body.categoryId, name) : undefined) : resolveNewCategory(state, "inventory", body.categoryId, name);
+  } catch (error) {
+    throw new CatalogError(error instanceof CategoryError ? error.message : "Kategoriyani tanlang.");
+  }
+  const fields = { name, minStock, packageName, unitsPerPackage: packageName ? unitsPerPackage : 0, ...(body.supplierId !== undefined ? { supplierId } : {}), ...(categoryId ? { categoryId } : {}) };
   // Sabzavot/sous: sanalmaydi, xaridi xarajat bo'lib yoziladi. O'zgarish tarixi bilan (eski hisobotlar buzilmaydi).
   const withVeg = (next: Row, productId: string) => (body.vegetable === undefined ? next
     : configureExpenseOnly(next, productId, body.vegetable === true));
@@ -86,7 +94,7 @@ export function saveProduct(state: Row, body: Row) {
   const newId = `inv-${operationId.slice(0, 13)}`;
   const existing = inventory.find((item) => item.id === newId);
   if (existing) return { state, result: { product: existing, created: false } };
-  const product = { id: newId, supplierId: "", ...fields, unit, stock: 0, unitCost: 0, packageCost: 0, gramsPerUnit: unit === "g" ? 1 : 0, categoryId: "", createdAt: new Date().toISOString() };
+  const product = { id: newId, supplierId: "", ...fields, unit, stock: 0, unitCost: 0, packageCost: 0, gramsPerUnit: unit === "g" ? 1 : 0, createdAt: new Date().toISOString() };
   return { state: withVeg({ ...state, inventory: [product, ...inventory] }, newId), result: { product, created: true } };
 }
 

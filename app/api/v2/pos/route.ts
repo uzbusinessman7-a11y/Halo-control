@@ -10,6 +10,7 @@ import { posDayReport } from "../../../core/pos-report";
 import { shell } from "../../../core/ui-shell";
 import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
 import { isAccountingMonthClosed } from "../../../lib/month-end";
+import { categoryIdOf, categoryList } from "../../../core/categories";
 
 declare global {
   var __HALO_SELF_HOSTED__: boolean | undefined;
@@ -50,7 +51,7 @@ export async function GET() {
 function inventoryChoices(state: Row) {
   return (Array.isArray(state.inventory) ? state.inventory as Row[] : [])
     .filter((item) => item && item.id && item.name && item.catalogArchived !== true)
-    .map((item) => ({ id: String(item.id), name: String(item.name), unit: String(item.unit || "birlik"), units: compatibleInventoryInputUnits(String(item.unit || "")) }))
+    .map((item) => ({ id: String(item.id), name: String(item.name), unit: String(item.unit || "birlik"), units: compatibleInventoryInputUnits(String(item.unit || "")), categoryId: categoryIdOf(state, "inventory", item) }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
@@ -61,7 +62,7 @@ function view(state: Row, date: string, role: User["role"]) {
   return {
     catalog: terminal.catalog,
     categories: terminal.productCategories,
-    inventory: inventoryChoices(state),
+    inventory: inventoryChoices(state), inventoryCategories: categoryList(state, "inventory").map((category) => ({ id: category.id, name: category.name })),
     rules: { taxPct: rules.taxPct, platforms: rules.platforms },
     // Summalar va tannarx — faqat rahbarga; xodim bugungi yozuvlar ro'yxatini ko'radi; loginsiz — hech narsa.
     report: role === "owner" ? report
@@ -305,7 +306,8 @@ function renderWaste(){
     +'<label class="field"><span>Sabab</span><select id="wr">'+d.wasteReasons.map(function(r){return '<option>'+esc(r)+'</option>'}).join('')+'</select></label>'
     +'<label class="field"><span>Izoh (ixtiyoriy)</span><input id="wno" maxlength="200"></label><button class="block" id="wsave">🗑 Chiqit deb saqlash</button></section>';
   var q=document.getElementById('wq'),sel=document.getElementById('wi'),unit=document.getElementById('wu');
-  function fill(){var t=q.value.trim().toLowerCase();sel.innerHTML=d.inventory.filter(function(i){return !t||i.name.toLowerCase().indexOf(t)>=0}).map(function(i){return '<option value="'+esc(i.id)+'">'+esc(i.name)+' ('+esc(i.unit)+')</option>'}).join('')}
+  function fill(){var t=q.value.trim().toLowerCase(),opt=function(i){return '<option value="'+esc(i.id)+'">'+esc(i.name)+' ('+esc(i.unit)+')</option>'},list=d.inventory.filter(function(i){return !t||i.name.toLowerCase().indexOf(t)>=0});
+    sel.innerHTML=t||!(d.inventoryCategories||[]).length?list.map(opt).join(''):d.inventoryCategories.map(function(c){var items=list.filter(function(i){return i.categoryId===c.id});return items.length?'<optgroup label="'+esc(c.name)+'">'+items.map(opt).join('')+'</optgroup>':''}).join('')}
   function units(){var it=d.inventory.find(function(i){return i.id===sel.value});unit.innerHTML=(it?it.units:[]).map(function(u){return '<option>'+esc(u)+'</option>'}).join('')}
   q.addEventListener('input',function(){fill();units()});sel.addEventListener('change',units);fill();
   document.getElementById('wsave').addEventListener('click',function(){var btn=this;if(!sel.value){toast('Mahsulotni tanlang.',true);return}

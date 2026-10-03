@@ -12,6 +12,7 @@
 import { calculateRecipeMarginAudit, type RecipeCostInventory } from "../lib/recipe-costing";
 import { DELIVERY_PLATFORMS } from "../lib/delivery-sales";
 import { expenseOnlyOnDate } from "../lib/vegetable-expenses";
+import { categoryIdOf, categoryList, resolveNewCategory } from "./categories";
 
 type Row = Record<string, unknown>;
 export class RecipeError extends Error {
@@ -57,7 +58,7 @@ export function recipeViews(state: Row): RecipeView[] {
     const storedCost = stored.complete ? Math.round(stored.totalCost) : null;
     const prices = (recipe.deliveryPrices && typeof recipe.deliveryPrices === "object" ? recipe.deliveryPrices : {}) as Row;
     return {
-      id: String(recipe.id), name: String(recipe.name || recipe.id), categoryId: String(recipe.categoryId || ""), salePrice,
+      id: String(recipe.id), name: String(recipe.name || recipe.id), categoryId: categoryIdOf(state, "recipe", recipe), salePrice,
       deliveryPrices: Object.fromEntries(DELIVERY_PLATFORMS.map((platform) => [platform.id, Math.round(Number(prices[platform.id]) || 0)])),
       lines: live.lines, extraCosts: live.extraCosts, cost,
       foodCostPercent: cost != null && salePrice > 0 ? Math.round((cost / salePrice) * 1000) / 10 : null,
@@ -72,14 +73,12 @@ export function recipeViews(state: Row): RecipeView[] {
 export function recipeChoices(state: Row, today: string) {
   return rows(state.inventory)
     .filter((item) => typeof item.id === "string" && item.id && item.catalogArchived !== true)
-    .map((item) => ({ id: String(item.id), name: String(item.name || item.id), unit: String(item.unit || ""), unitCost: Number(item.unitCost) || 0, vegetable: expenseOnlyOnDate(item as never, today) }))
+    .map((item) => ({ id: String(item.id), name: String(item.name || item.id), unit: String(item.unit || ""), unitCost: Number(item.unitCost) || 0, vegetable: expenseOnlyOnDate(item as never, today), categoryId: categoryIdOf(state, "inventory", item) }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export function recipeCategories(state: Row) {
-  return rows(state.productCategories).filter((category) => category.kind === "recipe")
-    .map((category) => ({ id: String(category.id), name: String(category.name), sortOrder: Number(category.sortOrder) || 0 }))
-    .sort((left, right) => left.sortOrder - right.sortOrder);
+  return categoryList(state, "recipe");
 }
 
 /** Retsept yaratish/tahrirlash. Ingredientlarga narx saqlanmaydi — tannarx doim ombordagi oxirgi narxdan. */
@@ -102,8 +101,10 @@ export function saveRecipe(state: Row, body: Row) {
   if (recipes.some((recipe) => recipe.id !== id && recipe.archived !== true && nameKey(recipe.name) === nameKey(name))) throw new RecipeError(`«${name}» nomli taom allaqachon bor.`, 409);
   const salePrice = Number(body.salePrice);
   if (!Number.isSafeInteger(salePrice) || salePrice < 0 || salePrice > 10_000_000) throw new RecipeError("Sotuv narxini tekshiring.");
-  const categoryId = clean(body.categoryId, 100);
-  if (categoryId && !recipeCategories(state).some((category) => category.id === categoryId)) throw new RecipeError("Toifani tanlang.");
+  // Kategoriya: tanlangan bo'lsa — o'sha; tanlanmagan bo'lsa eski qiymat, yangi taomda esa nomidan taxmin.
+  const askedCategory = clean(body.categoryId, 100);
+  if (askedCategory && !recipeCategories(state).some((category) => category.id === askedCategory)) throw new RecipeError("Kategoriyani tanlang.");
+  const categoryId = askedCategory || (current ? String(current.categoryId || "") : "") || resolveNewCategory(state, "recipe", "", name);
   const seen = new Set<string>();
   const ingredients = rows(body.ingredients).map((line, index) => {
     const item = byId.get(clean(line.inventoryId, 100));

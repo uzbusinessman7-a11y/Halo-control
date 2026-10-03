@@ -9,6 +9,7 @@ import { selectActiveFinancialEntries } from "../../../lib/daily-report";
 import { warehouseDocuments } from "../../../lib/warehouse-records";
 import { CHICKEN_OIL_CAN_LITERS, isOilLedgerEntry } from "../../../lib/oil-accounting";
 import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
+import { categoryIdOf, categoryList } from "../../../core/categories";
 import { ensureRecurring, RecurringError, recurringList, saveRecurring, stopRecurring } from "../../../core/recurring";
 import { shell } from "../../../core/ui-shell";
 
@@ -43,7 +44,7 @@ function inventoryChoices(state: Row, today: string) {
     .map((item) => ({
       id: String(item.id), name: String(item.name || item.id), unit: String(item.unit || "dona"),
       packageName: String(item.packageName || ""), unitsPerPackage: Number(item.unitsPerPackage) || 0,
-      unitCost: Number(item.unitCost) || 0, vegetable: expenseOnlyOnDate(item as never, today),
+      unitCost: Number(item.unitCost) || 0, vegetable: expenseOnlyOnDate(item as never, today), categoryId: categoryIdOf(state, "inventory", item),
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
@@ -156,7 +157,7 @@ export async function POST(request: Request) {
     await ensureRecurring(branchId, today);
     const { state } = await readHaloState(branchId);
     return json({
-      recurring: recurringList(state as Row),
+      recurring: recurringList(state as Row), inventoryCategories: categoryList(state as Row, "inventory"),
       ok: true, today, inventory: inventoryChoices(state as Row, today), platforms: DELIVERY_PLATFORMS, rules: readDeductionRules(state as Row),
       accounts: moneyAccounts(state as Row), categories: EXPENSE_CATEGORIES, expenses: monthExpenses(state as Row, today), receipts: monthReceipts(state as Row, today), oil: monthOil(state as Row, today),
       posImportDates: [...new Set((Array.isArray((state as Row).sales) ? (state as Row).sales as Row[] : []).filter((sale) => sale.posImport && !sale.cancelledAt && !sale.voided).map((sale) => String(sale.date)))].slice(-120),
@@ -297,7 +298,7 @@ function renderLines(veg){
   pane.innerHTML='<section class="card"><h2>'+(veg?'Sabzavot va sous xaridi':'Omborga mahsulot kiritish')+'</h2><p class="hint">'+(veg?'Pomidor, karam, sous kabi — tortilmaydigan, xarajat sifatida hisoblanadigan mahsulotlar. Qancha olganingiz va qancha to‘laganingizni yozing.':'Nima keldi, qancha va jami necha pulga. Qarz yoki to‘lov alohida — Qarz bo‘limida.')+'</p>'
     +(pool.length?'':'<div class="msg warn">'+(veg?'Sabzavot va sous deb belgilangan mahsulot yo‘q. Eski oynada “Sabzavot va sous” bo‘limida belgilang.':'Ombor mahsuloti yo‘q.')+'</div>')
     +LINES.map(function(l,idx){var it=pool.find(function(i){return i.id===l.id});var us=it?units(it,veg):[];
-      return '<div class="line"><select data-i="'+idx+'" data-f="id"><option value="">— mahsulot tanlang —</option>'+pool.map(function(i){return '<option value="'+esc(i.id)+'"'+(i.id===l.id?' selected':'')+'>'+esc(i.name)+'</option>'}).join('')+'</select>'
+      return '<div class="line"><select data-i="'+idx+'" data-f="id"><option value="">— mahsulot tanlang —</option>'+(DATA.inventoryCategories||[]).map(function(c){var items=pool.filter(function(i){return i.categoryId===c.id});return items.length?'<optgroup label="'+esc(c.name)+'">'+items.map(function(i){return '<option value="'+esc(i.id)+'"'+(i.id===l.id?' selected':'')+'>'+esc(i.name)+'</option>'}).join('')+'</optgroup>':''}).join('')+'</select>'
         +'<div class="row"><input data-i="'+idx+'" data-f="q" inputmode="decimal" placeholder="Miqdor" value="'+esc(l.q)+'"><select data-i="'+idx+'" data-f="u">'+us.map(function(u){return '<option'+(u===l.u?' selected':'')+'>'+esc(u)+'</option>'}).join('')+'</select><input data-i="'+idx+'" data-f="a" inputmode="numeric" placeholder="Jami narx ₩" value="'+esc(l.a)+'"></div>'
         +(it&&it.unitCost&&!veg?'<small style="color:var(--muted)">Oxirgi narx: '+won(Math.round(it.unitCost*(it.unit==='g'||it.unit==='ml'?1000:1)))+' / '+(it.unit==='g'?'kg':it.unit==='ml'?'litr':esc(it.unit))+'</small>':'')
         +(LINES.length>1?'<button class="ghost" data-del="'+idx+'" style="justify-self:start;min-height:34px;padding:4px 10px">Olib tashlash</button>':'')+'</div>'}).join('')

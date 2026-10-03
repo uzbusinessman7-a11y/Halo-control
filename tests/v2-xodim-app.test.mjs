@@ -35,7 +35,8 @@ test('xodim ilovasi: ma’lumot — mahsulot birliklari, yetkazuvchilar, hisobla
   const cookie = (await loginWorker('main', 'ali', '1234')).cookie.split(';')[0];
   const d = await (await POST(new Request('https://x.example/api/v2/xodim', { method: 'POST', headers: { cookie }, body: '{}' }))).json();
   assert.equal(d.ok, true);
-  assert.deepEqual(d.inventory[0], { id: 'g', name: 'Go‘sht', unit: 'g', packageName: 'quti', unitsPerPackage: 10000, vegetable: false });
+  assert.deepEqual(d.inventory[0], { id: 'g', name: 'Go‘sht', unit: 'g', packageName: 'quti', unitsPerPackage: 10000, vegetable: false, categoryId: 'inventory-other' });
+  assert.ok(d.categories.some((c) => c.id === 'inventory-other'));
   assert.deepEqual(d.suppliers.map((s) => s.name), ['Nodir aka'], 'MEZANA alohida bo‘limda');
   assert.ok(d.updatedAt);
   assert.ok(!d.expenseCategories.includes('Soliq'), 'avtomatik soliq bo‘lsa, soliq xarajati xodimga ko‘rinmaydi');

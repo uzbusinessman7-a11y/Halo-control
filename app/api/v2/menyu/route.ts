@@ -6,6 +6,7 @@ import { menuReport } from "../../../core/menu";
 import { shell } from "../../../core/ui-shell";
 import { PRICE_CALC_JS, PRICE_STEPS } from "../../../core/price-calc";
 import { readDeductionRules } from "../../../core/deductions";
+import { categoryList } from "../../../core/categories";
 
 declare global {
   var __HALO_SELF_HOSTED__: boolean | undefined;
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
     const today = seoulToday();
     const recipesPayload = (state: Record<string, unknown>) => ({
       recipes: recipeViews(state), products: recipeChoices(state, today), categories: recipeCategories(state),
-      platforms: DELIVERY_PLATFORMS, target: TARGET_FOOD_COST,
+      platforms: DELIVERY_PLATFORMS, target: TARGET_FOOD_COST, inventoryCategories: categoryList(state, "inventory"),
       deduction: (() => { const rules = readDeductionRules(state); return { taxPct: rules.taxPct, cardPct: rules.cardPct }; })(),
     });
     if (body.action === "recipes") {
@@ -115,7 +116,9 @@ document.getElementById('days').style.display='none';
 function loadRecipes(){rpost({action:'recipes',branchId:sel.value}).then(function(x){if(!x.body.ok){document.getElementById('rec').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}RD=x.body;if(!EDIT)drawRecipes()})}
 function drawRecipes(){
   var box=document.getElementById('rec'),f=RQ.toLowerCase();
-  var list=RD.recipes.filter(function(r){return !f||r.name.toLowerCase().indexOf(f)>=0});
+  RD.categories.forEach(function(c){c.count=RD.recipes.filter(function(r){return r.categoryId===c.id}).length});
+  if(RCAT&&!RD.categories.some(function(c){return c.id===RCAT}))RCAT='';
+  var list=RD.recipes.filter(function(r){return (!f||r.name.toLowerCase().indexOf(f)>=0)&&(!RCAT||r.categoryId===RCAT)});
   var ready=RD.recipes.filter(function(r){return r.foodCostPercent!=null});
   var high=ready.filter(function(r){return r.foodCostPercent>35}),stale=RD.recipes.filter(function(r){return r.stale}),broken=RD.recipes.filter(function(r){return r.status!=='Tayyor'});
   var avg=ready.length?Math.round(ready.reduce(function(s,r){return s+r.foodCostPercent},0)/ready.length*10)/10:null;
@@ -124,14 +127,25 @@ function drawRecipes(){
     +'<div class="kpi"><small>Tannarxi to‘liq emas</small><b style="color:var(--'+(broken.length?'warn':'ok')+')">'+broken.length+' ta</b></div></div>'
     +(stale.length?'<div class="msg warn" style="margin-top:12px">'+stale.length+' ta taomda eski narx “muzlatib” saqlangan — hisobotlarda foyda noto‘g‘ri chiqadi. Taomni ochib “Saqlash”ni bossangiz, hozirgi narxga o‘tadi.</div>':'')+'</section>'
     +'<section class="card"><div class="row" style="margin-bottom:10px"><input id="rq" placeholder="🔍 Taom qidirish" value="'+esc(RQ)+'" style="flex:1"><button id="rNew">+ Yangi taom</button><a href="/api/v2/kalkulyator" style="text-decoration:none"><button class="ghost" type="button">🧮 Kalkulyator</button></a></div>'
-    +(list.length?list.map(function(r){return '<div class="item" data-r="'+esc(r.id)+'" style="cursor:pointer"><b>'+esc(r.name)+(r.stale?'<span class="tag warn">eski narx</span>':'')+(r.status!=='Tayyor'?'<span class="tag bad">'+esc(r.status)+'</span>':'')+'</b><span class="v" style="color:'+fcColor(r.foodCostPercent)+'">'+pct(r.foodCostPercent)+'</span>'
-      +'<small>Narx '+won(r.salePrice)+' · tannarx '+(r.cost==null?'—':won(r.cost))+(r.margin!=null?' · foyda '+won(r.margin):'')+(r.stale?' · eski hisob: '+won(r.storedCost):'')+'</small></div>'}).join(''):'<p class="hint">Taom topilmadi.</p>')+'</section>';
+    +haloCatChips(RD.categories,RCAT,RD.recipes.length)
+    +(RCAT&&rcatOf(RCAT).fallback&&list.length?'<p class="hint">Bu yerda kategoriyasi yo‘q taomlar. Har birining yonidan kategoriyasini tanlang yoki ⚙️ Kategoriyalar → avtomatik taqsimlash.</p>':'')
+    +(list.length?(!RCAT&&!f?RD.categories.map(function(c){var items=list.filter(function(r){return r.categoryId===c.id});return items.length?'<div class="cat-head">'+esc(c.name)+' · '+items.length+'</div>'+items.map(function(r){return recRow(r,false)}).join(''):''}).join(''):list.map(function(r){return recRow(r,!RCAT)}).join('')):'<p class="hint">Taom topilmadi.</p>')+'</section>';
+  box.querySelectorAll('[data-cat]').forEach(function(b){b.addEventListener('click',function(){RCAT=b.dataset.cat;drawRecipes()})});
+  box.querySelectorAll('[data-catman]').forEach(function(b){b.addEventListener('click',function(){haloCategories({kind:'recipe',branch:sel.value,done:loadRecipes})})});
+  box.querySelectorAll('[data-qc]').forEach(function(q2){q2.addEventListener('click',function(ev){ev.stopPropagation()});q2.addEventListener('change',function(){if(!q2.value)return;q2.disabled=true;
+    fetch('/api/v2/kategoriya',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'assign',kind:'recipe',branchId:sel.value,itemId:q2.dataset.qc,categoryId:q2.value})}).then(function(r){return r.json()}).then(function(x){if(!x.ok){alert(x.error||'Bo‘lmadi.');q2.disabled=false;return}loadRecipes()}).catch(function(){q2.disabled=false})})});
   var q=document.getElementById('rq');q.addEventListener('input',function(){RQ=q.value;var pos=q.selectionStart;drawRecipes();var n=document.getElementById('rq');n.focus();n.setSelectionRange(pos,pos)});
   document.getElementById('rNew').addEventListener('click',function(){openEditor(null)});
   box.querySelectorAll('[data-r]').forEach(function(el){el.addEventListener('click',function(){openEditor(RD.recipes.find(function(r){return r.id===el.dataset.r}))})});
 }
+var RCAT='';
+function rcatOf(id){return RD.categories.find(function(c){return c.id===id})||{name:'',fallback:false}}
+function recRow(r,showCat){var quick=rcatOf(r.categoryId).fallback&&RCAT===r.categoryId;
+  return '<div class="item" data-r="'+esc(r.id)+'" style="cursor:pointer"><b>'+esc(r.name)+(r.stale?'<span class="tag warn">eski narx</span>':'')+(r.status!=='Tayyor'?'<span class="tag bad">'+esc(r.status)+'</span>':'')+'</b><span class="v" style="color:'+fcColor(r.foodCostPercent)+'">'+pct(r.foodCostPercent)+'</span>'
+    +'<small>'+(showCat?esc(rcatOf(r.categoryId).name)+' · ':'')+'Narx '+won(r.salePrice)+' · tannarx '+(r.cost==null?'—':won(r.cost))+(r.margin!=null?' · foyda '+won(r.margin):'')+(r.stale?' · eski hisob: '+won(r.storedCost):'')+'</small>'
+    +(quick?'<select data-qc="'+esc(r.id)+'" style="grid-column:1/-1;min-height:38px;margin-top:6px"><option value="">— kategoriyaga o‘tkazish —</option>'+RD.categories.filter(function(c){return !c.fallback}).map(function(c){return '<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>'}).join('')+'</select>':'')+'</div>'}
 function openEditor(r){
-  EDIT={id:r?r.id:'',op:uuid(),name:r?r.name:'',categoryId:r?r.categoryId:((RD.categories[0]||{}).id||''),salePrice:r?r.salePrice:'',
+  EDIT={id:r?r.id:'',op:uuid(),name:r?r.name:'',categoryId:r?r.categoryId:(RCAT||''),salePrice:r?r.salePrice:'',
     delivery:r?Object.assign({},r.deliveryPrices):{},lines:r?r.lines.map(function(l){return {inventoryId:l.inventoryId,quantity:l.quantity,yieldPct:''}}):[{inventoryId:'',quantity:'',yieldPct:''}],
     extras:r?r.extraCosts.map(function(e){return {name:e.name,amount:e.amount}}):[]};
   drawEditor();window.scrollTo({top:0,behavior:'smooth'});
@@ -147,11 +161,11 @@ function drawEditor(){
   var c=editorCost(),price=num(EDIT.salePrice),fc=price>0&&!c.missing?Math.round(c.total/price*1000)/10:null,sug=c.total>0?Math.ceil(c.total/RD.target/100)*100:null;
   box.innerHTML='<section class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">'+(EDIT.id?'Taomni tahrirlash':'Yangi taom')+'</h2><button class="ghost" id="eBack">← Ro‘yxat</button></div>'
     +'<label class="field" style="margin-top:12px"><span>Taom nomi</span><input id="eName" maxlength="120" value="'+esc(EDIT.name)+'"></label>'
-    +(RD.categories.length?'<label class="field"><span>Toifa</span><select id="eCat">'+RD.categories.map(function(k){return '<option value="'+esc(k.id)+'"'+(k.id===EDIT.categoryId?' selected':'')+'>'+esc(k.name)+'</option>'}).join('')+'</select></label>':'')
+    +(RD.categories.length?'<label class="field"><span>Kategoriya</span><select id="eCat">'+(EDIT.id?'':'<option value="">— avtomatik (nomiga qarab) —</option>')+RD.categories.map(function(k){return '<option value="'+esc(k.id)+'"'+(k.id===EDIT.categoryId?' selected':'')+'>'+esc(k.name)+'</option>'}).join('')+'</select></label>':'')
     +'</section>'
     +'<section class="card"><h2>Tarkibi (bir porsiya)</h2><p class="hint">Miqdorni ombor birligida yozing. Tozalashda chiqit bo‘lsa (go‘sht, piyoz…), “chiqish %”ni yozing — xom miqdor avtomatik hisoblanadi.</p>'
     +EDIT.lines.map(function(l,i){var p=byId[l.inventoryId],raw=rawQty(l);
-      return '<div class="line" style="grid-template-columns:1fr"><select style="width:100%" data-li="'+i+'" data-lf="inventoryId"><option value="">— mahsulot —</option>'+RD.products.map(function(x){return '<option value="'+esc(x.id)+'"'+(x.id===l.inventoryId?' selected':'')+'>'+esc(x.name)+' ('+esc(x.unit)+')</option>'}).join('')+'</select>'
+      return '<div class="line" style="grid-template-columns:1fr"><select style="width:100%" data-li="'+i+'" data-lf="inventoryId"><option value="">— mahsulot —</option>'+(RD.inventoryCategories||[]).map(function(c){var items=RD.products.filter(function(x){return x.categoryId===c.id});return items.length?'<optgroup label="'+esc(c.name)+'">'+items.map(function(x){return '<option value="'+esc(x.id)+'"'+(x.id===l.inventoryId?' selected':'')+'>'+esc(x.name)+' ('+esc(x.unit)+')</option>'}).join('')+'</optgroup>':''}).join('')+'</select>'
         +'<div class="row"><label style="flex:1;min-width:0"><small style="color:var(--muted)">'+(num(l.yieldPct)?'Tayyor miqdor':'Miqdor')+(p?' ('+esc(p.unit)+')':'')+'</small><input data-li="'+i+'" data-lf="quantity" inputmode="decimal" value="'+esc(l.quantity)+'" style="width:100%"></label><label style="flex:1;min-width:0"><small style="color:var(--muted)">Chiqish % (ixtiyoriy)</small><input data-li="'+i+'" data-lf="yieldPct" inputmode="decimal" placeholder="masalan 80" value="'+esc(l.yieldPct)+'" style="width:100%"></label><button class="ghost" data-ld="'+i+'" style="flex:0 0 auto;min-height:40px;padding:6px 12px;align-self:flex-end">✕</button></div>'
         +(p?'<small style="color:'+(p.unitCost>0?'var(--muted)':'var(--bad)')+'">'+(raw!==num(l.quantity)?'Xom: '+raw+' '+esc(p.unit)+' · ':'')+(p.unitCost>0?'Narx: '+won(Math.round(raw*p.unitCost)):'Bu mahsulotning narxi yo‘q — avval kirim kiriting')+'</small>':'')+'</div>'}).join('')
     +'<button class="ghost" id="eAdd" style="margin-top:10px">+ Mahsulot qo‘shish</button></section>'

@@ -4,6 +4,7 @@ import { readHaloState } from "../../../lib/halo-store";
 import { expenseOnlyOnDate } from "../../../lib/vegetable-expenses";
 import { costRuleCoversCategory } from "../../../lib/daily-report";
 import { seoulBusinessDate } from "../../../lib/business-time";
+import { categoryIdOf, categoryList } from "../../../core/categories";
 
 declare global {
   var __HALO_SELF_HOSTED__: boolean | undefined;
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
     .map((item) => ({
       id: String(item.id), name: String(item.name || item.id), unit: String(item.unit || "dona"),
       packageName: String(item.packageName || ""), unitsPerPackage: Number(item.unitsPerPackage) || 0,
-      vegetable: expenseOnlyOnDate(item as never, today),
+      vegetable: expenseOnlyOnDate(item as never, today), categoryId: categoryIdOf(state, "inventory", item),
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
   const accounts = (Array.isArray(state.accounts) ? state.accounts as Row[] : [])
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
     ok: true, today, updatedAt: current.updatedAt,
     canReceive: Boolean(session.canSupplierDelivery), canExpense: Boolean(session.canWarehouseReceipt),
     inventory, accounts, suppliers,
+    categories: categoryList(state, "inventory").map((category) => ({ id: category.id, name: category.name })),
     expenseCategories: WORKER_EXPENSE_CATEGORIES.filter((category) => !costRuleCoversCategory(category, state.costRules as never)),
   });
 }
@@ -206,13 +208,16 @@ function posScreen(){
 /* ---------- Mahsulot kirimi ---------- */
 function units(item){var u=[item.unit];if(item.unit==='g')u.push('kg');if(item.unit==='ml')u.push('litr');if(item.unit==='kg')u.push('g');if(item.unit==='litr')u.push('ml');if(item.packageName&&item.unitsPerPackage>1)u.push(item.packageName);else if(item.vegetable)u.push('qadoq');if(item.vegetable&&u.indexOf('dona')<0)u.push('dona');return u.filter(function(x,i,a){return x&&a.indexOf(x)===i})}
 function intakeScreen(){
-  var I={veg:false,lines:[],op:uuid(),q:''};
+  var I={veg:false,lines:[],op:uuid(),q:'',cat:''};
   screen('📦 '+t('aIn'),'<div id="ib"><section class="card">'+haloLoading(3)+'</section></div>');
   loadData().then(function(d){if(!d)return;draw()});
   function draw(){var d=DATA,box=document.getElementById('ib');
     var list=d.inventory.filter(function(i){return i.vegetable===I.veg&&!I.lines.some(function(l){return l.inventoryId===i.id})&&(!I.q||i.name.toLowerCase().indexOf(I.q.toLowerCase())>=0)});
+    var cats=(d.categories||[]).filter(function(c){return list.some(function(i){return i.categoryId===c.id})});
+    if(I.cat&&!cats.some(function(c){return c.id===I.cat}))I.cat='';
+    if(I.cat)list=list.filter(function(i){return i.categoryId===I.cat});
     box.innerHTML='<section class="card"><div class="seg" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="'+(I.veg?'ghost':'')+'" data-veg="0">📦 Ombor</button><button class="'+(I.veg?'':'ghost')+'" data-veg="1">🥬 Sabzavot va sous</button></div>'
-      +'<input id="iq" placeholder="🔍 Mahsulot qidirish" value="'+esc(I.q)+'" style="margin-top:12px"><div class="pick" style="margin-top:8px">'+(list.map(function(i){return '<button data-add="'+esc(i.id)+'"><span>'+esc(i.name)+'</span><small style="color:var(--muted)">'+esc(i.unit)+' +</small></button>'}).join('')||'<p class="hint" style="padding:10px">Topilmadi</p>')+'</div></section>'
+      +'<input id="iq" placeholder="🔍 Mahsulot qidirish" value="'+esc(I.q)+'" style="margin-top:12px">'+(cats.length>1?'<div class="chips" style="margin-top:8px"><button class="'+(I.cat?'ghost':'')+'" data-ic="">Hammasi</button>'+cats.map(function(c){return '<button class="'+(I.cat===c.id?'':'ghost')+'" data-ic="'+esc(c.id)+'">'+esc(c.name)+'</button>'}).join('')+'</div>':'')+'<div class="pick" style="margin-top:8px">'+(list.map(function(i){return '<button data-add="'+esc(i.id)+'"><span>'+esc(i.name)+'</span><small style="color:var(--muted)">'+esc(i.unit)+' +</small></button>'}).join('')||'<p class="hint" style="padding:10px">Topilmadi</p>')+'</div></section>'
       +(I.lines.length?'<section class="card"><h2>Kirim</h2>'+I.lines.map(function(l,idx){var it=d.inventory.find(function(i){return i.id===l.inventoryId});
         return '<div style="border-bottom:1px solid var(--line);padding:10px 0"><div class="row" style="justify-content:space-between"><b>'+esc(it.name)+'</b><button class="ghost" data-rm="'+idx+'" style="min-height:32px;padding:2px 10px">✕</button></div>'
           +'<div class="row" style="gap:8px;margin-top:6px"><input data-q="'+idx+'" inputmode="decimal" placeholder="Miqdor" value="'+esc(l.quantity)+'" style="flex:1;min-width:0"><select data-u="'+idx+'" style="flex:1;min-width:0">'+units(it).map(function(u){return '<option'+(u===l.unit?' selected':'')+'>'+esc(u)+'</option>'}).join('')+'</select><input data-a="'+idx+'" inputmode="numeric" placeholder="Jami ₩" value="'+esc(l.amount)+'" style="flex:1.2;min-width:0"></div></div>'}).join('')
@@ -221,6 +226,7 @@ function intakeScreen(){
         +'<div class="row" style="justify-content:space-between"><b>Jami: <span id="itot">'+won(total())+'</span></b></div><button class="block" id="isave" style="margin-top:10px">✓ Kirimni saqlash</button><p class="hint" style="margin:8px 0 0">Faqat kirim — qarz va to‘lov rahbar tomonidan yoziladi.</p></section>':'');
     box.querySelectorAll('[data-veg]').forEach(function(b){b.addEventListener('click',function(){I.veg=b.dataset.veg==='1';draw()})});
     var q=document.getElementById('iq');q.addEventListener('input',function(){I.q=q.value;var p=q.selectionStart;draw();var n=document.getElementById('iq');n.focus();try{n.setSelectionRange(p,p)}catch(e){}});
+    box.querySelectorAll('[data-ic]').forEach(function(b){b.addEventListener('click',function(){I.cat=b.dataset.ic;draw()})});
     box.querySelectorAll('[data-add]').forEach(function(b){b.addEventListener('click',function(){var it=d.inventory.find(function(i){return i.id===b.dataset.add});I.lines.push({inventoryId:it.id,quantity:'',unit:units(it)[0],amount:''});I.q='';draw()})});
     box.querySelectorAll('[data-rm]').forEach(function(b){b.addEventListener('click',function(){I.lines.splice(Number(b.dataset.rm),1);draw()})});
     box.querySelectorAll('[data-q]').forEach(function(x){x.addEventListener('input',function(){I.lines[x.dataset.q].quantity=x.value})});
