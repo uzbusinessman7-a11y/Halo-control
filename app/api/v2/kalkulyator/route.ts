@@ -42,6 +42,7 @@ function tabs(){document.getElementById('tabs').innerHTML=Object.keys(TABS).map(
 function render(){tabs();var pane=document.getElementById('pane');
   if(TAB==='cost')pane.innerHTML='<section class="card"><label class="field"><span>Tannarx (₩)</span><input class="money" id="cost" inputmode="numeric" placeholder="5,000" value="'+esc(S.cost)+'"></label>'
     +'<label class="field"><span>Tannarx sotuv narxining necha foizi bo‘lsin (bir nechta bo‘lsa vergul bilan; o‘nlik uchun nuqta: 32.5)</span><input id="pcts" inputmode="decimal" value="'+esc(S.pcts)+'"></label>'
+    +'<p class="hint" style="margin:0 0 6px">Narxni nechaga yaxlitlash (yuqoriga):</p>'
     +'<div class="row" style="gap:8px;margin-bottom:10px">'+STEPS.map(function(o){return '<button class="'+(S.step===o.step?'':'ghost')+'" data-s="'+o.step+'" style="min-height:36px;padding:4px 12px">'+o.label+'</button>'}).join('')+'</div>'
     +'<label class="row" style="gap:8px;font-size:14px"><input type="checkbox" id="ded" style="width:18px;height:18px;min-height:auto"'+(S.ded?' checked':'')+'> Soliq ('+DED.taxPct+'%) va karta ('+DED.cardPct+'%) ushlanmasidan keyin (POS savdo)</label></section>'
     +'<section class="card"><h2>Natija</h2><div id="out"></div></section>';

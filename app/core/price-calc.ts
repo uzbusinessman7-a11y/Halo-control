@@ -32,8 +32,8 @@ function pcFmt(n,dec){if(n==null||!isFinite(n))return '—';return Number(n).toL
 
 /** Yaxlitlash variantlari (₩). */
 export const PRICE_STEPS = [
-  { step: 100, label: "100 ₩" },
-  { step: 500, label: "500 ₩" },
-  { step: 1000, label: "1 000 ₩" },
-  { step: 1, label: "Aniq (1 ₩)" },
+  { step: 100, label: "100 ₩ gacha" },
+  { step: 500, label: "500 ₩ gacha" },
+  { step: 1000, label: "1 000 ₩ gacha" },
+  { step: 1, label: "Yaxlitlamasdan" },
 ];

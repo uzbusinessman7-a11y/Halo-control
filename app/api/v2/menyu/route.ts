@@ -199,6 +199,7 @@ function priceHelper(c){
   if(c.missing||!(c.total>0))return '<section class="card"><h2>🧮 Tannarxdan narx topish</h2><p class="hint">Tarkibni to‘liq kiriting — tannarx chiqqach, 30%, 35%, 40% bo‘yicha narx shu yerda hisoblanadi.</p></section>';
   var ded=pcDeduct(),d=RD.deduction||{taxPct:0,cardPct:0},pcts=[30,35,40];var cp=pcP(PC.custom);if(cp>0&&cp<100&&pcts.indexOf(cp)<0)pcts.push(cp);
   return '<section class="card"><h2>🧮 Tannarxdan narx topish</h2><p class="hint">Tannarx <b style="color:var(--text)">'+won(c.total)+'</b> — sotuv narxining necha foizi bo‘lishini tanlang. Narx yuqoriga yaxlitlanadi.</p>'
+    +'<p class="hint" style="margin:0 0 6px">Narxni nechaga yaxlitlash (yuqoriga):</p>'
     +'<div class="row" style="gap:8px;margin-bottom:10px">'+${JSON.stringify(PRICE_STEPS)}.map(function(o){return '<button class="'+(PC.step===o.step?'':'ghost')+'" data-pcs="'+o.step+'" style="min-height:36px;padding:4px 12px">'+o.label+'</button>'}).join('')+'</div>'
     +'<label class="row" style="gap:8px;margin-bottom:10px;font-size:14px"><input type="checkbox" id="pcDed" style="width:18px;height:18px;min-height:auto"'+(PC.ded?' checked':'')+'> Soliq ('+d.taxPct+'%) va karta ('+d.cardPct+'%) ushlanmasidan keyin hisoblash</label>'
     +'<table><tr><th>Tannarx foizi</th><th class="n">Narx</th><th class="n">Foyda</th><th></th></tr>'
