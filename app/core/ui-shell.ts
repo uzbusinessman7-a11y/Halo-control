@@ -102,6 +102,10 @@ pre{white-space:pre-wrap;font:14px/1.55 ui-monospace,Menlo,monospace;background:
 @keyframes sk{to{background-position:-200% 0}}
 details summary{cursor:pointer;color:var(--muted);font-size:14px}
 [hidden]{display:none!important}
+.content>*,.card{min-width:0}
+.chipbar{display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;min-width:0}.chipbar>button{flex:0 0 auto;min-height:36px;padding:4px 10px;border-radius:99px;font-size:14px;white-space:nowrap}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;flex:1 1 auto;min-width:0;max-width:100%;scrollbar-width:thin;-webkit-overflow-scrolling:touch}.chips>button{flex:0 0 auto;min-height:36px;padding:4px 12px;font-size:14px;white-space:nowrap;border-radius:99px}
+.cat-head{font-size:13px;font-weight:800;color:var(--accent);letter-spacing:.04em;text-transform:uppercase;padding:14px 4px 4px;border-top:1px solid var(--line)}.cat-head:first-child{border-top:0;padding-top:4px}
 .sheet-bg{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center;padding:0}
 .sheet{background:var(--card);border:1px solid var(--line);border-radius:18px 18px 0 0;width:min(560px,100%);max-height:88dvh;overflow-y:auto;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
 .sheet h3{margin:0 0 6px;font-size:19px}.sheet .fx{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}.sheet .fx b{font-variant-numeric:tabular-nums;text-align:right}
@@ -151,6 +155,35 @@ call({action:'preview',kind:o.kind,id:o.id}).then(function(p){
    if(!x.ok||!x.j.ok){b.disabled=false;bg.querySelector('#rmMsg').innerHTML='<div class="msg bad">'+e(x.j.error||'Bo‘lmadi.')+'</div>';return}
    close();if(o.done)o.done(x.j)})}
 })}
+/* Kategoriyalarni boshqarish oynasi (ombor: kind='inventory', menyu: kind='recipe'). Yopilganda done() chaqiriladi. */
+function haloCategories(o){var bg=document.createElement('div');bg.className='sheet-bg';var changed=false;
+var e=function(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
+var close=function(){bg.remove();if(changed&&o.done)o.done()};bg.addEventListener('click',function(ev){if(ev.target===bg)close()});
+var what=o.kind==='recipe'?'taom':'mahsulot';
+bg.innerHTML='<div class="sheet" role="dialog" aria-modal="true"><div class="row" style="justify-content:space-between;flex-wrap:nowrap"><h3 style="margin:0">Kategoriyalar</h3><button class="ghost" id="kcX" style="min-height:36px;padding:4px 12px">Yopish</button></div><p class="hint" style="margin-top:6px">'+(o.kind==='recipe'?'Menyu taomlari':'Ombor mahsulotlari')+' uchun. Tartib ro‘yxatlarda ham shunday ko‘rinadi.</p><div id="kcBody">'+haloLoading(3)+'</div></div>';
+document.body.appendChild(bg);bg.querySelector('#kcX').onclick=close;var body=bg.querySelector('#kcBody');
+var call=function(d){d.kind=o.kind;d.branchId=o.branch||'main';return fetch('/api/v2/kategoriya',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(function(r){return r.json()}).catch(function(){return {error:'Internet aloqasini tekshiring.'}})};
+var uid=function(){return crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16)})};
+var draw=function(list,msg){var real=list.filter(function(c){return !c.fallback}),fb=list.filter(function(c){return c.fallback})[0];
+ body.innerHTML=(msg||'')+real.map(function(c,i){return '<div class="list-row"><div style="min-width:0"><b>'+e(c.name)+'</b><br><small style="color:var(--muted)">'+c.count+' ta '+what+'</small></div><div class="row" style="gap:4px;flex-wrap:nowrap">'
+   +'<button class="ghost" data-up="'+e(c.id)+'" style="min-height:34px;padding:2px 9px"'+(i===0?' disabled':'')+' aria-label="Yuqoriga">▲</button><button class="ghost" data-dn="'+e(c.id)+'" style="min-height:34px;padding:2px 9px"'+(i===real.length-1?' disabled':'')+' aria-label="Pastga">▼</button>'
+   +'<button class="ghost" data-rn="'+e(c.id)+'" data-n="'+e(c.name)+'" style="min-height:34px;padding:2px 9px" aria-label="Nomini o‘zgartirish">✏️</button><button class="ghost" data-rm="'+e(c.id)+'" data-n="'+e(c.name)+'" data-c="'+c.count+'" style="min-height:34px;padding:2px 9px" aria-label="O‘chirish">🗑</button></div></div>'}).join('')
+  +(fb?'<div class="list-row"><div><b>'+e(fb.name)+'</b><br><small style="color:var(--muted)">'+fb.count+' ta '+what+' · kategoriyasi yo‘qlar shu yerda</small></div><span></span></div>':'')
+  +'<div class="row" style="margin-top:14px;flex-wrap:nowrap"><input id="kcNew" maxlength="60" placeholder="Yangi kategoriya nomi" style="flex:1;min-width:0"><button id="kcAdd">Qo‘shish</button></div>'
+  +(fb&&fb.count?'<button class="ghost block" id="kcAuto" style="margin-top:10px">✨ “'+e(fb.name)+'”dagi '+fb.count+' tasini nomiga qarab avtomatik taqsimlash</button>':'');
+ var run=function(d,okText){return call(d).then(function(x){if(!x.ok){draw(list,'<div class="msg bad" style="margin-bottom:10px">'+e(x.error||'Bo‘lmadi.')+'</div>');return}changed=true;draw(x.categories,okText?'<div class="msg ok" style="margin-bottom:10px">'+okText(x)+'</div>':'')})};
+ body.querySelectorAll('[data-up]').forEach(function(b){b.onclick=function(){run({action:'move',id:b.dataset.up,direction:-1})}});
+ body.querySelectorAll('[data-dn]').forEach(function(b){b.onclick=function(){run({action:'move',id:b.dataset.dn,direction:1})}});
+ body.querySelectorAll('[data-rn]').forEach(function(b){b.onclick=function(){var n=prompt('Kategoriya nomi:',b.dataset.n);if(n===null||!n.trim()||n.trim()===b.dataset.n)return;run({action:'save',id:b.dataset.rn,name:n.trim()})}});
+ body.querySelectorAll('[data-rm]').forEach(function(b){b.onclick=function(){if(!confirm('“'+b.dataset.n+'” kategoriyasi o‘chirilsinmi?'+(Number(b.dataset.c)?' Ichidagi '+b.dataset.c+' ta '+what+' “Boshqa”ga o‘tadi (o‘chmaydi).':'')))return;run({action:'delete',id:b.dataset.rm})}});
+ var add=function(){var i=body.querySelector('#kcNew'),n=i.value.trim();if(n.length<2){i.focus();return}run({action:'save',name:n,operationId:uid()},function(){return '✓ “'+e(n)+'” qo‘shildi'})};
+ body.querySelector('#kcAdd').onclick=add;body.querySelector('#kcNew').addEventListener('keydown',function(ev){if(ev.key==='Enter')add()});
+ var au=body.querySelector('#kcAuto');if(au)au.onclick=function(){au.disabled=true;run({action:'auto'},function(x){return x.result.changed?'✓ '+x.result.changed+' ta '+what+' kategoriyasiga joylandi':'Nomidan aniqlab bo‘lmadi — qo‘lda belgilang'})};
+};
+call({action:'list'}).then(function(x){if(!x.ok){body.innerHTML='<div class="msg bad">'+e(x.error||'Ochilmadi.')+'</div>';return}draw(x.categories)})}
+/* Kategoriya tugmachalari (filtr): list=[{id,name,count}], sel — tanlangan id ('' = hammasi). */
+function haloCatChips(list,sel,total){var e=function(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
+ return '<div class="chipbar"><div class="chips">'+'<button class="'+(sel?'ghost':'')+'" data-cat="">Hammasi · '+total+'</button>'+list.filter(function(c){return c.count>0||c.id===sel}).map(function(c){return '<button class="'+(sel===c.id?'':'ghost')+'" data-cat="'+e(c.id)+'">'+e(c.name)+' · '+c.count+'</button>'}).join('')+'</div><button class="ghost" data-catman="1" aria-label="Kategoriyalarni sozlash">⚙️ Sozlash</button></div>'}
 function haloLoading(n){var s='';for(var i=0;i<(n||3);i++)s+='<div class="skeleton" style="margin:10px 0;width:'+(90-i*15)+'%"></div>';return s}
 `;
 

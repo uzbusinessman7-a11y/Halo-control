@@ -1,6 +1,7 @@
 import { isAdminRequest } from "../../../lib/integration-store";
 import { HaloStateConflictError, listHaloBranches, mutateHaloState, readHaloState } from "../../../lib/halo-store";
 import { archivedProducts, archiveProduct, CatalogError, productList, saveProduct } from "../../../core/catalog";
+import { categoryList } from "../../../core/categories";
 import { InventoryCatalogError } from "../../../lib/inventory-catalog-archive";
 import { VegetableExpenseError } from "../../../lib/vegetable-expenses";
 import { InventoryCountingError, saveAccountingCount } from "../../../lib/inventory-counting";
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
     const branchId = String(body.branchId || "main");
     const today = seoulToday();
     const extra = (st: Record<string, unknown>) => ({
-      archived: archivedProducts(st),
+      archived: archivedProducts(st), categories: categoryList(st, "inventory"),
       suppliers: (Array.isArray(st.suppliers) ? st.suppliers as Array<Record<string, unknown>> : []).map((s) => ({ id: String(s.id), name: String(s.name || s.id) })).sort((a, b) => a.name.localeCompare(b.name)),
     });
     if (body.action === "products") {
@@ -124,23 +125,34 @@ function load(){
 }
 document.getElementById('go').addEventListener('click',load);sel.addEventListener('change',load);load();
 /* ---------- Mahsulotlar va sanoq ---------- */
-var PRODUCTS=[],ARCH=[],SUPS=[],OTAB='list',Q='',CNT={},OPID='';
+var PRODUCTS=[],ARCH=[],SUPS=[],CATS=[],CAT='',OTAB='list',Q='',CNT={},OPID='';
 function uuid(){return crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16)})}
 function post(b){return fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json().then(function(j){return {status:r.status,body:j}})}).catch(function(){return {status:0,body:{error:'Internet aloqasini tekshiring.'}}})}
 function showTab(t){OTAB=t;document.querySelectorAll('[data-o]').forEach(function(b){b.className=b.dataset.o===t?'':'ghost'});
   document.getElementById('oList').style.display=t==='list'?'grid':'none';document.getElementById('oCount').style.display=t==='count'?'grid':'none';document.getElementById('oAvt').style.display=t==='avt'?'grid':'none';
   if(t==='list')drawList();if(t==='count'){OPID=uuid();CNT={};drawCount()}}
 document.querySelectorAll('[data-o]').forEach(function(b){b.addEventListener('click',function(){showTab(b.dataset.o)})});
-function loadProducts(){post({action:'products',branchId:sel.value}).then(function(x){if(!x.body.ok){document.getElementById('oList').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}PRODUCTS=x.body.products;ARCH=x.body.archived||[];SUPS=x.body.suppliers||[];if(OTAB==='list')drawList();if(OTAB==='count')drawCount()})}
+function loadProducts(){post({action:'products',branchId:sel.value}).then(function(x){if(!x.body.ok){document.getElementById('oList').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}PRODUCTS=x.body.products;ARCH=x.body.archived||[];SUPS=x.body.suppliers||[];CATS=x.body.categories||[];if(CAT&&!CATS.some(function(c){return c.id===CAT}))CAT='';if(OTAB==='list')drawList();if(OTAB==='count')drawCount()})}
+function catOf(id){return CATS.find(function(c){return c.id===id})||{name:'',fallback:false}}
+function prodRow(p,showCat){var quick=catOf(p.categoryId).fallback&&CAT===p.categoryId;
+  return '<div class="item" data-edit="'+esc(p.id)+'" style="cursor:pointer"><b>'+esc(p.name)+(p.low?'<span class="tag bad">kam qoldi</span>':'')+(p.vegetable?'<span class="tag warn">xarajat sifatida</span>':'')+'</b><span class="v'+(p.low?' bad':'')+'">'+(p.vegetable?'—':qty(p.stock,p.unit))+'</span>'
+    +'<small>'+(showCat?esc(catOf(p.categoryId).name)+' · ':'')+(p.vegetable?'Sanalmaydi, xaridi xarajatga yoziladi':'Minimum: '+qty(p.minStock,p.unit)+' · narx: '+(p.unitCost?won(Math.round(p.unitCost*(p.unit==='g'||p.unit==='ml'?1000:1)))+' / '+(p.unit==='g'?'kg':p.unit==='ml'?'litr':esc(p.unit)):'—')+' · qiymati '+won(p.value))+(p.lastReceipt?' · oxirgi kirim '+esc(p.lastReceipt):'')+'</small>'
+    +(quick?'<select data-qc="'+esc(p.id)+'" style="grid-column:1/-1;min-height:38px;margin-top:6px"><option value="">— kategoriyaga o‘tkazish —</option>'+CATS.filter(function(c){return !c.fallback}).map(function(c){return '<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>'}).join('')+'</select>':'')+'</div>'}
 function drawList(){
+  CATS.forEach(function(c){c.count=PRODUCTS.filter(function(p){return p.categoryId===c.id}).length});
   var box=document.getElementById('oList'),stock=PRODUCTS.filter(function(p){return !p.vegetable});
   var low=stock.filter(function(p){return p.low}),value=stock.reduce(function(s,p){return s+p.value},0);
-  var f=Q.toLowerCase(),list=PRODUCTS.filter(function(p){return !f||p.name.toLowerCase().indexOf(f)>=0});
+  var f=Q.toLowerCase(),list=PRODUCTS.filter(function(p){return (!f||p.name.toLowerCase().indexOf(f)>=0)&&(!CAT||p.categoryId===CAT)});
   box.innerHTML='<section class="card"><div class="grid"><div class="kpi"><small>Ombordagi mahsulot qiymati</small><b>'+won(value)+'</b></div><div class="kpi"><small>Mahsulot turlari</small><b>'+stock.length+' ta</b></div><div class="kpi"><small>Kam qolgan</small><b style="color:var(--'+(low.length?'bad':'ok')+')">'+low.length+' ta</b></div></div></section>'
     +(low.length?'<section class="card"><h2>🛒 Kam qolganlar — xarid ro‘yxati</h2>'+low.map(function(p){return '<div class="list-row"><div><b>'+esc(p.name)+'</b><br><small style="color:var(--muted)">bor: '+qty(p.stock,p.unit)+' · minimum: '+qty(p.minStock,p.unit)+'</small></div><span class="tag bad">kam</span></div>'}).join('')+'<button class="ghost block" id="buyCopy" style="margin-top:10px">📋 Ro‘yxatni nusxalash (yetkazib beruvchiga yuborish uchun)</button><div id="buyMsg"></div></section>':'')
     +'<section class="card"><div class="row" style="margin-bottom:10px"><input id="pq" placeholder="🔍 Qidirish" value="'+esc(Q)+'" style="flex:1"><button id="pNew">+ Yangi mahsulot</button></div><div id="pForm"></div>'
-    +(list.length?list.map(function(p){return '<div class="item" data-edit="'+esc(p.id)+'" style="cursor:pointer"><b>'+esc(p.name)+(p.low?'<span class="tag bad">kam qoldi</span>':'')+(p.vegetable?'<span class="tag warn">xarajat sifatida</span>':'')+'</b><span class="v'+(p.low?' bad':'')+'">'+(p.vegetable?'—':qty(p.stock,p.unit))+'</span>'
-      +'<small>'+(p.vegetable?'Sanalmaydi, xaridi xarajatga yoziladi':'Minimum: '+qty(p.minStock,p.unit)+' · narx: '+(p.unitCost?won(Math.round(p.unitCost*(p.unit==='g'||p.unit==='ml'?1000:1)))+' / '+(p.unit==='g'?'kg':p.unit==='ml'?'litr':esc(p.unit)):'—')+' · qiymati '+won(p.value))+(p.lastReceipt?' · oxirgi kirim '+esc(p.lastReceipt):'')+'</small></div>'}).join(''):'<p class="hint">Mahsulot topilmadi.</p>')+'</section>';
+    +haloCatChips(CATS,CAT,PRODUCTS.length)
+    +(CAT&&catOf(CAT).fallback&&list.length?'<p class="hint">Bu yerda kategoriyasi yo‘q mahsulotlar. Har birining yonidan kategoriyasini tanlang yoki ⚙️ Kategoriyalar → avtomatik taqsimlash.</p>':'')
+    +(list.length?(!CAT&&!f?CATS.map(function(c){var items=list.filter(function(p){return p.categoryId===c.id});return items.length?'<div class="cat-head">'+esc(c.name)+' · '+items.length+'</div>'+items.map(function(p){return prodRow(p,false)}).join(''):''}).join(''):list.map(function(p){return prodRow(p,!CAT)}).join('')):'<p class="hint">Mahsulot topilmadi.</p>')+'</section>';
+  box.querySelectorAll('[data-cat]').forEach(function(b){b.addEventListener('click',function(){CAT=b.dataset.cat;drawList()})});
+  box.querySelectorAll('[data-catman]').forEach(function(b){b.addEventListener('click',function(){haloCategories({kind:'inventory',branch:sel.value,done:loadProducts})})});
+  box.querySelectorAll('[data-qc]').forEach(function(q){q.addEventListener('click',function(ev){ev.stopPropagation()});q.addEventListener('change',function(){if(!q.value)return;q.disabled=true;
+    fetch('/api/v2/kategoriya',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'assign',kind:'inventory',branchId:sel.value,itemId:q.dataset.qc,categoryId:q.value})}).then(function(r){return r.json()}).then(function(x){if(!x.ok){alert(x.error||'Bo‘lmadi.');q.disabled=false;return}loadProducts()}).catch(function(){q.disabled=false})})});
   var pq=document.getElementById('pq');pq.addEventListener('input',function(){Q=pq.value;var pos=pq.selectionStart;drawList();var n=document.getElementById('pq');n.focus();n.setSelectionRange(pos,pos)});
   document.getElementById('pNew').addEventListener('click',function(){productForm(null)});
   var bc=document.getElementById('buyCopy');if(bc)bc.addEventListener('click',function(){var t='Xarid ro‘yxati ('+new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'})+'):\\n'+low.map(function(p){return '• '+p.name+' — bor '+qty(p.stock,p.unit).replace(/&amp;/g,'&')}).join('\\n');
@@ -158,6 +170,7 @@ function productForm(p){
     +'<label class="field" style="flex:1"><span>Minimum qoldiq</span><input id="fMin" inputmode="decimal" value="'+esc(p?p.minStock:'')+'" placeholder="0"></label></div>'
     +'<div class="row"><label class="field" style="flex:1"><span>Qadoq nomi (ixtiyoriy)</span><input id="fPack" maxlength="30" value="'+esc(p?p.packageName:'')+'" placeholder="quti, qop, banka…"></label>'
     +'<label class="field" style="flex:1"><span>Qadoqda nechta birlik</span><input id="fPer" inputmode="decimal" value="'+esc(p&&p.unitsPerPackage?p.unitsPerPackage:'')+'" placeholder="masalan 1000"></label></div>'
+    +'<label class="field"><span>Kategoriya</span><select id="fCat">'+(p?'':'<option value="">— avtomatik (nomiga qarab) —</option>')+CATS.map(function(c){return '<option value="'+esc(c.id)+'"'+(p&&p.categoryId===c.id?' selected':(!p&&CAT===c.id?' selected':''))+'>'+esc(c.name)+'</option>'}).join('')+'</select></label>'
     +'<label class="field"><span>Asosiy yetkazib beruvchi (ixtiyoriy)</span><select id="fSup"><option value="">—</option>'+SUPS.map(function(s2){return '<option value="'+esc(s2.id)+'"'+(p&&p.supplierId===s2.id?' selected':'')+'>'+esc(s2.name)+'</option>'}).join('')+'</select></label>'
     +'<label class="row" style="gap:8px;margin-bottom:12px"><input type="checkbox" id="fVeg" style="width:18px;height:18px;min-height:auto"'+(p&&p.vegetable?' checked':'')+'> Sabzavot / sous — sanalmaydi, xaridi xarajat bo‘lib yoziladi</label>'
     +(p&&p.movements?'<p class="hint">Harakatlari bor — birlikni o‘zgartirib bo‘lmaydi.</p>':'')
@@ -168,16 +181,16 @@ function productForm(p){
     post({action:'archiveProduct',branchId:sel.value,id:p.id,reason:why.trim()}).then(function(x){fa.disabled=false;if(!x.body.ok){document.getElementById('fMsg').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}PRODUCTS=x.body.products;ARCH=x.body.archived||[];drawList();document.getElementById('pForm').innerHTML='<div class="msg ok" style="margin-bottom:10px">✓ Ro‘yxatdan olib tashlandi</div>'})});
   document.getElementById('fSave').addEventListener('click',function(){
     var btn=this;btn.disabled=true;
-    post({action:'saveProduct',branchId:sel.value,id:p?p.id:'',operationId:op,name:document.getElementById('fName').value,unit:document.getElementById('fUnit').value,minStock:Number(document.getElementById('fMin').value.replace(',','.')||0),packageName:document.getElementById('fPack').value,unitsPerPackage:Number(document.getElementById('fPer').value.replace(',','.')||0),supplierId:document.getElementById('fSup').value,vegetable:document.getElementById('fVeg').checked}).then(function(x){btn.disabled=false;
+    post({action:'saveProduct',branchId:sel.value,id:p?p.id:'',operationId:op,name:document.getElementById('fName').value,unit:document.getElementById('fUnit').value,minStock:Number(document.getElementById('fMin').value.replace(',','.')||0),packageName:document.getElementById('fPack').value,unitsPerPackage:Number(document.getElementById('fPer').value.replace(',','.')||0),supplierId:document.getElementById('fSup').value,categoryId:document.getElementById('fCat').value,vegetable:document.getElementById('fVeg').checked}).then(function(x){btn.disabled=false;
       if(!x.body.ok){document.getElementById('fMsg').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}
-      PRODUCTS=x.body.products;drawList();document.getElementById('pForm').innerHTML='<div class="msg ok" style="margin-bottom:10px">✓ '+(x.body.created?'Mahsulot qo‘shildi':'Saqlandi')+'</div>'});
+      PRODUCTS=x.body.products;CATS=x.body.categories||CATS;drawList();document.getElementById('pForm').innerHTML='<div class="msg ok" style="margin-bottom:10px">✓ '+(x.body.created?'Mahsulot qo‘shildi':'Saqlandi')+'</div>'});
   });
 }
 function drawCount(){
   var box=document.getElementById('oCount'),list=PRODUCTS.filter(function(p){return !p.vegetable});
   var filled=Object.keys(CNT).filter(function(k){return CNT[k]!==''}).length;
   box.innerHTML='<section class="card"><h2>Bugungi sanoq</h2><p class="hint">Tortib yoki sanab, haqiqiy qoldiqni yozing. Hamma mahsulotni birdan sanash shart emas. Saqlangach, farq ombor tuzatishi bo‘lib yoziladi va “Yo‘qotish nazorati”da ko‘rinadi.</p>'
-    +list.map(function(p){return '<div class="list-row" style="grid-template-columns:1fr minmax(110px,150px)"><div><b>'+esc(p.name)+'</b><br><small style="color:var(--muted)">'+esc(p.unit)+(p.packageName&&p.unitsPerPackage>1?' · 1 '+esc(p.packageName)+' = '+p.unitsPerPackage+' '+esc(p.unit):'')+'</small></div><input data-c="'+esc(p.id)+'" inputmode="decimal" placeholder="'+esc(p.unit)+'" value="'+esc(CNT[p.id]||'')+'" style="text-align:right;font-weight:700;width:100%"></div>'}).join('')
+    +(function(){var row=function(p){return '<div class="list-row" style="grid-template-columns:1fr minmax(110px,150px)"><div><b>'+esc(p.name)+'</b><br><small style="color:var(--muted)">'+esc(p.unit)+(p.packageName&&p.unitsPerPackage>1?' · 1 '+esc(p.packageName)+' = '+p.unitsPerPackage+' '+esc(p.unit):'')+'</small></div><input data-c="'+esc(p.id)+'" inputmode="decimal" placeholder="'+esc(p.unit)+'" value="'+esc(CNT[p.id]||'')+'" style="text-align:right;font-weight:700;width:100%"></div>'};return CATS.map(function(c){var items=list.filter(function(p){return p.categoryId===c.id});return items.length?'<div class="cat-head">'+esc(c.name)+'</div>'+items.map(row).join(''):''}).join('')+list.filter(function(p){return !CATS.some(function(c){return c.id===p.categoryId})}).map(row).join('')})()
     +'</section><section class="card sticky-total" style="position:sticky;bottom:calc(76px + env(safe-area-inset-bottom))"><div class="row" style="justify-content:space-between"><span><b id="cN">'+filled+'</b> ta mahsulot sanaldi</span><button id="cSave">Sanoqni saqlash</button></div><div id="cMsg"></div></section>';
   box.querySelectorAll('[data-c]').forEach(function(i){i.addEventListener('input',function(){CNT[i.dataset.c]=i.value.replace(',','.').replace(/[^0-9.]/g,'');document.getElementById('cN').textContent=Object.keys(CNT).filter(function(k){return CNT[k]!==''}).length})});
   document.getElementById('cSave').addEventListener('click',function(){
