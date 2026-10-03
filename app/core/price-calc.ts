@@ -19,6 +19,8 @@ function pcPriceForCost(cost,pct,deductPct,step){cost=pcNum(cost);pct=pcP(pct);d
   var exact=pcClean(cost*100/pct);if(deductPct>0)exact=pcClean(exact*100/(100-deductPct));
   var price=pcRoundUp(exact,step),net=pcClean(price*(100-deductPct)/100);
   return {pct:pct,exact:exact,price:price,net:net,profit:Math.round(net-cost),realPct:Math.round(cost/net*1000)/10}}
+function pcForPrice(cost,price,deductPct){cost=pcNum(cost);price=pcNum(price);deductPct=pcP(deductPct);if(!(cost>0)||!(price>0)||deductPct<0||deductPct>=100)return null;
+  var net=pcClean(price*(100-deductPct)/100);return {price:price,net:net,profit:Math.round(net-cost),realPct:Math.round(cost/net*1000)/10}}
 function pcMarkup(cost,pct,step){cost=pcNum(cost);pct=pcP(pct);if(!(cost>0)||pct<0)return null;var exact=pcClean(cost*(100+pct)/100);var price=pcRoundUp(exact,step);
   return {pct:pct,exact:exact,price:price,profit:Math.round(price-cost),realPct:Math.round(cost/price*1000)/10}}
 function pcAdd(x,p){return pcClean(pcNum(x)*(100+pcP(p))/100)}

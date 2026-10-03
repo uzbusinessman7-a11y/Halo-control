@@ -193,7 +193,7 @@ function drawEditor(){
   bindPriceHelper();
 }
 /* ---------- Tannarxdan narx topish (30 / 35 / 40% va o'zingiz yozgan foiz) ---------- */
-var PC={step:100,ded:false,custom:''};
+var PC={step:100,ded:false,custom:'',own:''};
 function pcDeduct(){var d=RD.deduction||{taxPct:0,cardPct:0};return PC.ded?Math.round((d.taxPct+d.cardPct)*100)/100:0}
 function priceHelper(c){
   if(c.missing||!(c.total>0))return '<section class="card"><h2>🧮 Tannarxdan narx topish</h2><p class="hint">Tarkibni to‘liq kiriting — tannarx chiqqach, 30%, 35%, 40% bo‘yicha narx shu yerda hisoblanadi.</p></section>';
@@ -202,13 +202,16 @@ function priceHelper(c){
     +'<div class="row" style="gap:8px;margin-bottom:10px">'+${JSON.stringify(PRICE_STEPS)}.map(function(o){return '<button class="'+(PC.step===o.step?'':'ghost')+'" data-pcs="'+o.step+'" style="min-height:36px;padding:4px 12px">'+o.label+'</button>'}).join('')+'</div>'
     +'<label class="row" style="gap:8px;margin-bottom:10px;font-size:14px"><input type="checkbox" id="pcDed" style="width:18px;height:18px;min-height:auto"'+(PC.ded?' checked':'')+'> Soliq ('+d.taxPct+'%) va karta ('+d.cardPct+'%) ushlanmasidan keyin hisoblash</label>'
     +'<table><tr><th>Tannarx foizi</th><th class="n">Narx</th><th class="n">Foyda</th><th></th></tr>'
-    +pcts.map(function(p){var r=pcPriceForCost(c.total,p,ded,PC.step);if(!r)return '';return '<tr><td><b>'+pcFmt(p,2)+'%</b><br><small style="color:var(--muted)">aniq: '+pcFmt(r.exact,0)+' · haqiqiy '+pcFmt(r.realPct,1)+'%</small></td><td class="n" style="white-space:nowrap"><b>'+won(r.price)+'</b></td><td class="n" style="white-space:nowrap">'+won(r.profit)+'</td><td class="n"><button class="ghost" data-pcset="'+r.price+'" style="min-height:32px;padding:2px 10px">Narxga qo‘yish</button></td></tr>'}).join('')+'</table>'
-    +'<label class="field" style="margin-top:10px"><span>Boshqa foiz</span><input id="pcCustom" inputmode="decimal" placeholder="masalan 33" value="'+esc(PC.custom)+'"></label></section>'}
+    +pcts.map(function(p){var r=pcPriceForCost(c.total,p,ded,PC.step);if(!r)return '';return '<tr><td><b>'+pcFmt(p,2)+'%</b><br><small style="color:var(--muted)">aniq: '+pcFmt(r.exact,0)+' · haqiqiy '+pcFmt(r.realPct,1)+'%</small></td><td class="n" style="white-space:nowrap"><b>'+won(r.price)+'</b></td><td class="n" style="white-space:nowrap">'+won(r.profit)+'</td><td class="n"><button class="ghost" data-pcset="'+r.price+'" style="min-height:32px;padding:2px 10px">Narxga qo‘yish</button></td></tr>'}).join('')
+    +(function(){var o=pcForPrice(c.total,PC.own,ded);if(!o)return '';return '<tr><td><b>O‘z narxim</b><br><small style="color:'+fcColor(o.realPct)+'">tannarx '+pcFmt(o.realPct,1)+'%</small></td><td class="n" style="white-space:nowrap"><b>'+won(o.price)+'</b></td><td class="n" style="white-space:nowrap">'+won(o.profit)+'</td><td class="n"><button class="ghost" data-pcset="'+o.price+'" style="min-height:32px;padding:2px 10px">Narxga qo‘yish</button></td></tr>'})()+'</table>'
+    +'<label class="field" style="margin-top:10px"><span>Boshqa foiz</span><input id="pcCustom" inputmode="decimal" placeholder="masalan 33" value="'+esc(PC.custom)+'"></label>'
+    +'<label class="field"><span>O‘z narxim (₩) — o‘zingiz yozing, tannarx foizi va foydani ko‘rsatadi</span><input id="pcOwn" inputmode="numeric" placeholder="masalan 15,900" value="'+esc(PC.own)+'"></label></section>'}
 function pcRedraw(){var y=window.scrollY;drawEditor();window.scrollTo(0,y)}
 function bindPriceHelper(){
   document.querySelectorAll('[data-pcs]').forEach(function(b){b.addEventListener('click',function(){PC.step=Number(b.dataset.pcs);pcRedraw()})});
   var dd=document.getElementById('pcDed');if(dd)dd.addEventListener('change',function(){PC.ded=dd.checked;pcRedraw()});
   var cu=document.getElementById('pcCustom');if(cu)cu.addEventListener('input',function(){PC.custom=cu.value;refreshTotals()});
+  var ow=document.getElementById('pcOwn');if(ow)ow.addEventListener('input',function(){var v=pcNum(ow.value);ow.value=v?v.toLocaleString('en-US'):'';PC.own=ow.value;refreshTotals()});
   document.querySelectorAll('[data-pcset]').forEach(function(b){b.addEventListener('click',function(){EDIT.salePrice=Number(b.dataset.pcset);var y=window.scrollY;drawEditor();window.scrollTo(0,y);var pr=document.getElementById('ePrice');if(pr){pr.focus();pr.scrollIntoView({block:'center',behavior:'smooth'})}})});
 }
 ${PRICE_CALC_JS}

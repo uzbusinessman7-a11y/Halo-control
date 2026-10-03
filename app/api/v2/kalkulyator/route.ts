@@ -33,7 +33,7 @@ function page(deduction: { taxPct: number; cardPct: number }): string {
     subtitle: "Tannarxdan sotuv narxini topish, foiz qo‘shish va ayirish",
     body: `<section class="card"><div class="row" id="tabs" style="gap:8px"></div></section><div id="pane" style="display:grid;gap:16px"></div>`,
     script: `
-var DED=${JSON.stringify(deduction)},STEPS=${JSON.stringify(PRICE_STEPS)},TAB='cost',S={cost:'',pcts:'30, 35, 40',step:100,ded:false,x:'',p:'',a:'',b:''};
+var DED=${JSON.stringify(deduction)},STEPS=${JSON.stringify(PRICE_STEPS)},TAB='cost',S={cost:'',pcts:'30, 35, 40',step:100,ded:false,own:'',x:'',p:'',a:'',b:''};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function won(n){return n==null?'—':pcFmt(Math.round(n),0)+' ₩'}
 var TABS={cost:'🧮 Tannarx → narx',pct:'％ Foiz qo‘shish / ayirish',two:'↔ Ikki son'};
@@ -42,12 +42,13 @@ function tabs(){document.getElementById('tabs').innerHTML=Object.keys(TABS).map(
 function render(){tabs();var pane=document.getElementById('pane');
   if(TAB==='cost')pane.innerHTML='<section class="card"><label class="field"><span>Tannarx (₩)</span><input class="money" id="cost" inputmode="numeric" placeholder="5,000" value="'+esc(S.cost)+'"></label>'
     +'<label class="field"><span>Tannarx sotuv narxining necha foizi bo‘lsin (bir nechta bo‘lsa vergul bilan; o‘nlik uchun nuqta: 32.5)</span><input id="pcts" inputmode="decimal" value="'+esc(S.pcts)+'"></label>'
+    +'<label class="field"><span>O‘z narxim (₩, ixtiyoriy) — o‘zingiz yozing, tannarx foizi va foydani ko‘rsatadi</span><input class="money" id="own" inputmode="numeric" placeholder="masalan 15,900" value="'+esc(S.own)+'" style="font-size:22px"></label>'
     +'<div class="row" style="gap:8px;margin-bottom:10px">'+STEPS.map(function(o){return '<button class="'+(S.step===o.step?'':'ghost')+'" data-s="'+o.step+'" style="min-height:36px;padding:4px 12px">'+o.label+'</button>'}).join('')+'</div>'
     +'<label class="row" style="gap:8px;font-size:14px"><input type="checkbox" id="ded" style="width:18px;height:18px;min-height:auto"'+(S.ded?' checked':'')+'> Soliq ('+DED.taxPct+'%) va karta ('+DED.cardPct+'%) ushlanmasidan keyin (POS savdo)</label></section>'
     +'<section class="card"><h2>Natija</h2><div id="out"></div></section>';
   if(TAB==='pct')pane.innerHTML='<section class="card"><div class="row"><label class="field" style="flex:2"><span>Son yoki summa</span><input class="money" id="x" inputmode="numeric" placeholder="5,000" value="'+esc(S.x)+'"></label><label class="field" style="flex:1"><span>Foiz (%)</span><input id="p" inputmode="decimal" placeholder="30" value="'+esc(S.p)+'" style="font-size:24px;font-weight:800;text-align:right"></label></div></section><section class="card"><h2>Natija</h2><div id="out"></div></section>';
   if(TAB==='two')pane.innerHTML='<section class="card"><div class="row"><label class="field" style="flex:1"><span>A (masalan tannarx yoki eski narx)</span><input class="money" id="a" inputmode="numeric" value="'+esc(S.a)+'"></label><label class="field" style="flex:1"><span>B (masalan sotuv yoki yangi narx)</span><input class="money" id="b" inputmode="numeric" value="'+esc(S.b)+'"></label></div></section><section class="card"><h2>Natija</h2><div id="out"></div></section>';
-  ['cost','x','a','b'].forEach(function(id){var el=document.getElementById(id);if(el)el.addEventListener('input',function(){var v=pcNum(el.value);el.value=v?v.toLocaleString('en-US'):'';S[id]=el.value;calc()})});
+  ['cost','own','x','a','b'].forEach(function(id){var el=document.getElementById(id);if(el)el.addEventListener('input',function(){var v=pcNum(el.value);el.value=v?v.toLocaleString('en-US'):'';S[id]=el.value;calc()})});
   ['pcts','p'].forEach(function(id){var el=document.getElementById(id);if(el)el.addEventListener('input',function(){S[id]=el.value;calc()})});
   document.querySelectorAll('[data-s]').forEach(function(b){b.addEventListener('click',function(){S.step=Number(b.dataset.s);render()})});
   var d=document.getElementById('ded');if(d)d.addEventListener('change',function(){S.ded=d.checked;calc()});
@@ -59,7 +60,8 @@ function calc(){var out=document.getElementById('out');if(!out)return;
     if(!(cost>0)){out.innerHTML='<p class="hint">Tannarxni yozing.</p>';return}
     var list=String(S.pcts).split(/[,;\\s\\/]+/).map(function(v){return Number(v)}).filter(function(p){return p>0&&p<100});if(!list.length)list=[30,35,40];
     out.innerHTML='<table><tr><th>Tannarx foizi</th><th class="n">Sotuv narxi</th><th class="n">Foyda</th></tr>'+list.map(function(p){var r=pcPriceForCost(cost,p,ded,S.step);
-      return '<tr><td><b>'+pcFmt(p,2)+'%</b><br><small style="color:var(--muted)">aniq '+pcFmt(r.exact,0)+' ₩ · haqiqiy '+pcFmt(r.realPct,1)+'%'+(ded?' · qo‘lga tegadi '+won(r.net):'')+'</small></td><td class="n" style="white-space:nowrap"><b style="font-size:18px">'+won(r.price)+'</b></td><td class="n" style="white-space:nowrap">'+won(r.profit)+'</td></tr>'}).join('')+'</table>'
+      return '<tr><td><b>'+pcFmt(p,2)+'%</b><br><small style="color:var(--muted)">aniq '+pcFmt(r.exact,0)+' ₩ · haqiqiy '+pcFmt(r.realPct,1)+'%'+(ded?' · qo‘lga tegadi '+won(r.net):'')+'</small></td><td class="n" style="white-space:nowrap"><b style="font-size:18px">'+won(r.price)+'</b></td><td class="n" style="white-space:nowrap">'+won(r.profit)+'</td></tr>'}).join('')
+      +(function(){var o=pcForPrice(cost,S.own,ded);if(!o)return '';return '<tr><td><b>O‘z narxim</b><br><small style="color:var(--muted)">tannarx narxning '+pcFmt(o.realPct,1)+'%'+(ded?' · qo‘lga tegadi '+won(o.net):'')+'</small></td><td class="n" style="white-space:nowrap"><b style="font-size:18px">'+won(o.price)+'</b></td><td class="n" style="white-space:nowrap">'+won(o.profit)+'</td></tr>'})()+'</table>'
       +'<p class="hint" style="margin-top:12px">Formula: narx = tannarx × 100 ÷ foiz'+(ded?' ÷ (1 − '+pcFmt(ded,2)+'%)':'')+'. Masalan '+won(cost)+' × 100 ÷ '+pcFmt(list[0],2)+' = '+pcFmt(pcPriceForCost(cost,list[0],0,1).exact,2)+' ₩.</p>'
       +'<h3 style="font-size:15px;margin:16px 0 4px">Ustama bilan (tannarx + foiz)</h3>'+list.map(function(p){var m=pcMarkup(cost,p,S.step);return row(won(cost)+' + '+pcFmt(p,2)+'%',won(m.price),'foyda '+won(m.profit)+' · tannarx narxning '+pcFmt(m.realPct,1)+'%')}).join('');
     return}
