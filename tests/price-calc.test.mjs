@@ -2,7 +2,7 @@ import './helpers/ts-resolve.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const { PRICE_CALC_JS } = await import('../app/core/price-calc.ts');
-const C = new Function(PRICE_CALC_JS + '; return {pcNum,pcP,pcRoundUp,pcPriceForCost,pcMarkup,pcAdd,pcSub,pcPart,pcInside,pcRatio,pcChange};')();
+const C = new Function(PRICE_CALC_JS + '; return {pcNum,pcP,pcRoundUp,pcPriceForCost,pcForPrice,pcMarkup,pcAdd,pcSub,pcPart,pcInside,pcRatio,pcChange};')();
 
 test('tannarx 5000 → 30/35/40% narx (aniq va yuqoriga yaxlitlangan)', () => {
   assert.deepEqual([30, 35, 40].map((p) => C.pcPriceForCost(5000, p, 0, 1).price), [16667, 14286, 12500]);
@@ -34,4 +34,14 @@ test('ustama va oddiy foiz amallari', () => {
   assert.equal(C.pcPriceForCost(5000, 0, 0, 100), null);
   assert.equal(C.pcPriceForCost(5000, 100, 0, 100), null);
   assert.equal(C.pcPriceForCost(0, 30, 0, 100), null);
+});
+
+test('o‘z narxim: yozilgan narxdan tannarx foizi va foyda', () => {
+  assert.deepEqual(C.pcForPrice(5000, '15,900', 0), { price: 15900, net: 15900, profit: 10900, realPct: 31.4 });
+  const d = C.pcForPrice(5000, 15900, 11.6);
+  assert.equal(d.net, 14055.6);
+  assert.equal(d.profit, 9056);
+  assert.equal(d.realPct, 35.6);
+  assert.equal(C.pcForPrice(5000, 4000, 0).profit, -1000); // tannarxdan past narx — zarar ko'rinadi
+  assert.equal(C.pcForPrice(5000, '', 0), null);
 });
