@@ -44,6 +44,18 @@ keshlanmaydi (`no-store`); faqat rasm doimiy keshlanadi (manzili o‘zgarmas).
 Eski saytda o‘chiq bo‘lgani uchun ko‘rib bo‘lmagan, shuning uchun eski CSS asosida tiklangan qismlar:
 «Kun aksiyasi» sahifasining ichki tuzilishi, «SOTILDI» yozuvining tegi, SET MENU o‘chiq bo‘lgandagi pastki qator.
 
+## Sayqallangan variant (ixtiyoriy)
+
+`/menu?screen=kebab&look=premium` — **o‘sha ko‘rinish**, ustidan kichik qatlam (`app/core/tv-css-sayqal.ts`).
+Joylashuv, ranglar, kartalar va TYPE/SIZE/PRICE jadvali o‘zgarmaydi. Manzilda `&look=premium` bo‘lmasa asl ko‘rinish chiqadi.
+
+- Yozuvlar kattaroq (televizorlar baland osilgan): umumiy ko‘rinishda nom 24→34, narx 29→40; katta ko‘rinishda
+  nom 52→68, jadval yozuvi 20→28, narx 25→40 piksel (1920×1080 da). Katta ko‘rinishda rasm 68%→64%.
+- Umumiy ko‘rinishda bitta narx o‘rniga hamma narx (2–4 ta bo‘lsa); rasm 70%→60%.
+- Jadvalda harflar bir xil («chicken» / «CHICKEN» → «Chicken»); ma’lumotning o‘zi o‘zgarmaydi.
+- «Taom haqida qisqa ma’lumot» namuna yozuvi ko‘rsatilmaydi.
+- Taom almashganda yumshoq ochiladi; «SET MENU» yozuvi chetdan ko‘tarilgan; to‘liq ekranda tugma yashirinadi.
+
 ## Yangilanish va internetsiz holat
 
 - Sahifa har 15 soniyada so‘raydi. Menyu o‘zgarmagan bo‘lsa ekran qayta chizilmaydi; o‘zgargan bo‘lsa

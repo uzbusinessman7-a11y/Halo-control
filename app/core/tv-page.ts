@@ -19,6 +19,7 @@
  */
 import type { TvItem, TvView } from "./digital-menu";
 import { TV_CSS } from "./tv-css";
+import { TV_CSS_SAYQAL } from "./tv-css-sayqal";
 
 export const TV_VERSION = "tv-3";
 
@@ -43,9 +44,33 @@ function grid(count: number): { cols: number; rows: number } {
   return { cols: 4, rows: 2 };
 }
 
-function variantTable(item: TvItem): string {
+/**
+ * Ko'rinish: "" — asl (eski saytdagi bilan aynan bir xil, odatiy); "premium" — o'sha ko'rinishning sayqallangan varianti
+ * (joylashuv, ranglar va jadval o'sha; farqlari tv-css-sayqal.ts boshida yozilgan). Faqat manzilda &look=premium bo'lsa ishlaydi.
+ */
+export const LOOK_SAYQAL = "premium";
+export const tvLook = (value: string | null | undefined) => (value === LOOK_SAYQAL ? LOOK_SAYQAL : "");
+
+/** Sayqallangan variantda yozuvlar bir xil ko'rinishda: "chicken", "CHICKEN", "Chicken" → "Chicken" (ma'lumotning o'zi o'zgarmaydi). */
+const sentence = (value: string) => { const text = value.toLowerCase(); return text.charAt(0).toUpperCase() + text.slice(1); };
+/** Rahbar hali to'ldirmagan namuna tavsif ("Taom haqida qisqa ma'lumot") — sayqallangan variantda ekranga chiqarilmaydi. */
+const isPlaceholder = (value: string) => value.toLowerCase().replace(/[‘’`ʻʼ']/g, "").replace(/\s+/g, " ").trim() === "taom haqida qisqa malumot";
+
+function variantTable(item: TvItem, sayqal = false): string {
+  const cell = (value: string) => escText(sayqal ? sentence(value) : value);
   return `<div class="variant-table"><div class="variant-head"><span>TYPE</span><span>SIZE</span><span>PRICE</span></div>${item.variants.map((variant) =>
-    `<div class="variant-row"><span>${escText(variant.label)}</span><span>${escText(variant.size)}</span><strong class="variant-price"><em>${won(variant.price)}</em></strong></div>`).join("")}</div>`;
+    `<div class="variant-row"><span>${cell(variant.label)}</span><span>${cell(variant.size)}</span><strong class="variant-price"><em>${won(variant.price)}</em></strong></div>`).join("")}</div>`;
+}
+
+/**
+ * Umumiy ko'rinishdagi narx. Asl ko'rinishda — faqat birinchi narx. Sayqallangan variantda 2–4 ta narxi bor taomda
+ * hammasi kichik ro'yxat bo'lib chiqadi (SIZE + narx); undan ko'p bo'lsa birinchi narx va "~" (bundan boshlab).
+ */
+function priceBlock(item: TvItem, sayqal: boolean): string {
+  const single = `<strong>${item.price > 0 ? won(item.price) : ""}</strong>`;
+  if (!sayqal || item.variants.length < 2) return `<div class="price">${single}</div>`;
+  if (item.variants.length > 4) return `<div class="price"><strong class="from">${won(item.price)}</strong></div>`;
+  return `<div class="price list">${item.variants.map((variant) => `<div class="mini"><span>${escText(sentence(variant.size || variant.label))}</span><b>${won(variant.price)}</b></div>`).join("")}</div>`;
 }
 
 function image(src: string, fallback: string, lazy: boolean): string {
@@ -56,38 +81,42 @@ function image(src: string, fallback: string, lazy: boolean): string {
   return `<img ${lazy ? "data-src" : "src"}="${escAttr(first)}"${onerror} alt="" decoding="async">`;
 }
 
-function card(item: TvItem, fallback: string, lazy: boolean): string {
+function card(item: TvItem, fallback: string, lazy: boolean, sayqal = false): string {
+  const about = sayqal && isPlaceholder(item.description) ? "" : item.description;
   const badge = item.badge ? `<b class="badge">${escText(item.badge)}</b>` : "";
   const sold = item.soldOut ? `<b class="soldout">${escText(item.soldOutText)}</b>` : "";
   return `<article class="menu-card">
         <div class="card-inner">
           <div class="photo">${image(item.image, fallback, lazy)}${badge}${sold}</div>
           <div class="copy">
-            <div class="item-text"><h2>${escText(item.name)}</h2><p>${escText(item.description)}</p>${variantTable(item)}</div>
-            <div class="price"><strong>${item.price > 0 ? won(item.price) : ""}</strong></div>
+            <div class="item-text"><h2>${escText(item.name)}</h2><p>${escText(about)}</p>${variantTable(item, sayqal)}</div>
+            ${priceBlock(item, sayqal)}
           </div>
         </div>
       </article>`;
 }
 
 /** «Kun aksiyasi» sahifasi: eski CSS'dagi .daily-offer-page (katta rasm + nom, tarkib, narxlar jadvali). */
-function offerPage(view: TvView): string {
+function offerPage(view: TvView, sayqal = false): string {
   if (!view.offer) return "";
   const item = view.offer.item;
+  const about = sayqal && isPlaceholder(item.description) ? "" : item.description;
   return `<section id="daily-offer" class="daily-offer-page"><div class="combo-card"><div class="combo-photo">${image(item.image, view.screen.fallbackImage, false)}<b>${escText(view.offer.label)}</b></div>`
-    + `<div class="combo-copy"><h2>${escText(item.name)}</h2><p>${escText(item.description)}</p>${variantTable(item)}</div></div></section>`;
+    + `<div class="combo-copy"><h2>${escText(item.name)}</h2><p>${escText(about)}</p>${variantTable(item, sayqal)}</div></div></section>`;
 }
 
-function stage(view: TvView, title: string): string {
+function stage(view: TvView, title: string, sayqal = false): string {
   const per = Math.max(1, view.screen.itemsPerPage);
   const pages: TvItem[][] = [];
   for (let index = 0; index < view.items.length; index += per) pages.push(view.items.slice(index, index + per));
-  if (!pages.length) return `<div class="empty">Menyu tayyorlanmoqda</div>${offerPage(view)}`;
+  if (!pages.length) return `<div class="empty">Menyu tayyorlanmoqda</div>${offerPage(view, sayqal)}`;
   return pages.map((items, page) => {
     const shape = grid(items.length);
     // Faqat birinchi sahifa rasmlari darhol yuklanadi; qolganlari sahifa ochilganda (eski saytdagidek).
-    return `<section class="menu-page cols-${shape.cols} rows-${shape.rows}${page === 0 ? " active" : ""}" data-title="${escAttr(title)}">${items.map((item) => card(item, view.screen.fallbackImage, page > 0)).join("")}</section>`;
-  }).join("") + offerPage(view);
+    // Sayqallangan variant: sahifada ko'p narxli taom bo'lsa, yozuvlarga ko'proq joy beriladi ("many").
+    const many = sayqal && items.some((item) => item.variants.length >= 2) ? " many" : "";
+    return `<section class="menu-page cols-${shape.cols} rows-${shape.rows}${many}${page === 0 ? " active" : ""}" data-title="${escAttr(title)}">${items.map((item) => card(item, view.screen.fallbackImage, page > 0, sayqal)).join("")}</section>`;
+  }).join("") + offerPage(view, sayqal);
 }
 
 function footer(view: TvView): { footerClass: string; footer: string } {
@@ -105,13 +134,14 @@ function footer(view: TvView): { footerClass: string; footer: string } {
 }
 
 /** Ekran ma'lumotidan tayyor HTML bo'laklari (eski sayt serverda chizgani kabi) va vaqt sozlamalari. */
-export function tvRender(view: TvView): TvPayload {
+export function tvRender(view: TvView, look = ""): TvPayload {
+  const sayqal = look === LOOK_SAYQAL;
   const title = `${view.screen.title} MENYU`;
   return {
     title: `${view.restaurant.name} — ${view.screen.title}`,
     bodyClass: view.setOffer ? "has-set-offer" : "",
     brand: { mark: view.restaurant.name.trim().charAt(0).toUpperCase() || "H", name: view.restaurant.name, slogan: view.restaurant.slogan },
-    stage: stage(view, title),
+    stage: stage(view, title, sayqal),
     ...footer(view),
     cfg: {
       title, motionMs: view.screen.spotlightSeconds * 1000, overviewMs: view.screen.overviewSeconds * 1000, pageMs: view.screen.pageSeconds * 1000, slots: view.slots,
@@ -137,7 +167,7 @@ export function tvRevision(payload: TvPayload): string {
 const SCRIPT = `
 (function(){
   var CFG=__BOOT__;
-  var KEY='halo-tv:'+CFG.b+':'+CFG.screen;
+  var KEY='halo-tv:'+CFG.b+':'+CFG.screen+(CFG.look?':'+CFG.look:'');
   var currentRevision='';
   var T={title:'',motionMs:8000,overviewMs:15000,pageMs:5000,slots:1,offerIntervalMs:30000,offerDurationMs:10000,offerLabel:''};
   var activePage=0;
@@ -333,7 +363,7 @@ const SCRIPT = `
     try{
       var request=new XMLHttpRequest();
       var requestStarted=(new Date()).getTime();
-      request.open('GET',CFG.api+'?data=1&screen='+encodeURIComponent(CFG.screen)+'&b='+encodeURIComponent(CFG.b)+'&rev='+encodeURIComponent(currentRevision),true);
+      request.open('GET',CFG.api+'?data=1&screen='+encodeURIComponent(CFG.screen)+'&b='+encodeURIComponent(CFG.b)+(CFG.look?'&look='+encodeURIComponent(CFG.look):'')+'&rev='+encodeURIComponent(currentRevision),true);
       request.onreadystatechange=function(){
         if(request.readyState!==4)return;
         // Javob kelmasa (internet yoki baza vaqtincha ishlamayapti) — ekrandagi oxirgi menyu o'z holicha qoladi.
@@ -377,12 +407,16 @@ function goFull(){var e=document.documentElement;var f=e.requestFullscreen||e.we
 `;
 
 /** Ekran sahifasi. Bazadan hech narsa o'qimaydi — menyu keyin /api/v2/tv?data=1 dan olinadi (baza vaqtincha ishlamasa ham sahifa ochiladi). */
-export function tvPage(input: { screen: string; branch: string }): string {
-  const boot = JSON.stringify({ api: "/api/v2/tv", screen: input.screen, b: input.branch, v: TV_VERSION }).replace(/</g, "\\u003c");
+export function tvPage(input: { screen: string; branch: string; look?: string }): string {
+  const look = tvLook(input.look);
+  // Asl ko'rinishda sahifa matni o'zgarmaydi: "look" va qo'shimcha CSS faqat sayqallangan variantda qo'shiladi.
+  const config: Record<string, string> = { api: "/api/v2/tv", screen: input.screen, b: input.branch, v: TV_VERSION };
+  if (look) config.look = look;
+  const boot = JSON.stringify(config).replace(/</g, "\\u003c");
   return `<!doctype html>
 <html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>HALO — ${escText(input.screen)}</title>
-<style>${TV_CSS}</style></head>
+<style>${TV_CSS}</style>${look ? `<style>${TV_CSS_SAYQAL}</style>` : ""}</head>
 <body>
 <header><div class="brand"><div class="mark">H</div><div><strong>HALO</strong><span></span></div></div><div class="screen-name"></div><button id="fullscreen-button" class="fullscreen" type="button" autofocus tabindex="0" onclick="goFull()">⛶ TO‘LIQ EKRAN</button></header>
 <main id="stage"></main>
