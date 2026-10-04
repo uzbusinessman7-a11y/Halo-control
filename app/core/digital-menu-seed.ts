@@ -18,19 +18,25 @@ export const DIGITAL_MENU_SEED = {
       "id": "kebab",
       "title": "Kebab",
       "itemsPerPage": 8,
-      "spotlightSeconds": 8
+      "spotlightSeconds": 8,
+      "overviewSeconds": 15,
+      "design": "navbat"
     },
     {
       "id": "chicken",
       "title": "Chicken",
       "itemsPerPage": 8,
-      "spotlightSeconds": 8
+      "spotlightSeconds": 8,
+      "overviewSeconds": 15,
+      "design": "navbat"
     },
     {
       "id": "pitsa",
       "title": "Pitsa",
       "itemsPerPage": 8,
-      "spotlightSeconds": 8
+      "spotlightSeconds": 8,
+      "overviewSeconds": 15,
+      "design": "navbat"
     }
   ],
   "items": [
