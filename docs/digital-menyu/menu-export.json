@@ -1,0 +1,508 @@
+{
+  "source": "https://halo-digital-menu.uzbusinessman7.chatgpt.site/api/menu",
+  "snapshotCheckedAt": "2026-08-27T23:50:42Z",
+  "sourceUpdatedAt": "2026-08-26T11:23:50.014Z",
+  "note": "This is the latest preserved monitor snapshot available in the user's files. Fields absent from that snapshot are null rather than guessed.",
+  "categories": [
+    {
+      "name": "Kebab",
+      "order": 1
+    },
+    {
+      "name": "Chicken",
+      "order": 2
+    },
+    {
+      "name": "Pitsa",
+      "order": 3
+    }
+  ],
+  "items": [
+    {
+      "id": "item-1786013209296-qktxl4",
+      "category": "Pitsa",
+      "name": {
+        "uz": "CHEESE",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "Cheese / Medium",
+          "price": 11900
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 1,
+      "badges": []
+    },
+    {
+      "id": "item-1786013751522-0tg1xf",
+      "category": "Pitsa",
+      "name": {
+        "uz": "PEPERONI",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "Peperoni / Medium",
+          "price": 12900
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 2,
+      "badges": []
+    },
+    {
+      "id": "item-1786015987195-7ih2wb",
+      "category": "Pitsa",
+      "name": {
+        "uz": "CHICKEN PIZZA",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "Chicken pizza / Medium",
+          "price": 13900
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 3,
+      "badges": []
+    },
+    {
+      "id": "item-1786015448967-rb1daw",
+      "category": "Pitsa",
+      "name": {
+        "uz": "LAMB PIZZA",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "LAMB PIZZA / Medium",
+          "price": 14900
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 4,
+      "badges": []
+    },
+    {
+      "id": "item-1786015698773-6aq6tf",
+      "category": "Pitsa",
+      "name": {
+        "uz": "MUSHROOM CHICKEN",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "Mushroom chicken / Medium",
+          "price": 13900
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 5,
+      "badges": []
+    },
+    {
+      "id": "item-1786013408248-om0ioy",
+      "category": "Pitsa",
+      "name": {
+        "uz": "VEGETABLE",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "Vegetable / Medium",
+          "price": 11900
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 6,
+      "badges": []
+    },
+    {
+      "id": "item-1786012927512-h3lxbf",
+      "category": "Pitsa",
+      "name": {
+        "uz": "HUNTER’S PIZZA",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "Hunter’s pizza / Medium",
+          "price": 13900
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 7,
+      "badges": []
+    },
+    {
+      "id": "item-1786163282248-7aaatn",
+      "category": "Kebab",
+      "name": {
+        "uz": "TANDIR LAVASH",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "Tandir lavash / chicken",
+          "price": 12900
+        },
+        {
+          "label": "Tandir lavash / lamb",
+          "price": 13900
+        },
+        {
+          "label": "Tandir Lavash / mix",
+          "price": 13900
+        },
+        {
+          "label": "Tandir Lavash / cheese",
+          "price": 14900
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 8,
+      "badges": []
+    },
+    {
+      "id": "item-1786158215360-9pfqst",
+      "category": "Kebab",
+      "name": {
+        "uz": "HALO LAVASH",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "HALO LAVASH / CHICKEN",
+          "price": 11900
+        },
+        {
+          "label": "HALO LAVASH / LAMB",
+          "price": 12900
+        },
+        {
+          "label": "HALO LAVASH / MIX",
+          "price": 12900
+        },
+        {
+          "label": "HALO LAVASH / CHEESE",
+          "price": 13900
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 9,
+      "badges": []
+    },
+    {
+      "id": "item-1786081846559-7zcaho",
+      "category": "Kebab",
+      "name": {
+        "uz": "HAGGI",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "Haggi / Chicken",
+          "price": 10900
+        },
+        {
+          "label": "Haggi / Lamb",
+          "price": 11900
+        },
+        {
+          "label": "Haggi / Cheesse",
+          "price": 12900
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 10,
+      "badges": []
+    },
+    {
+      "id": "item-1786073084253-8qai7e",
+      "category": "Kebab",
+      "name": {
+        "uz": "KEBAB",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "Kebab / Chicken",
+          "price": 7900
+        },
+        {
+          "label": "Kebab / Lamb",
+          "price": 8900
+        },
+        {
+          "label": "Kebab / Mix",
+          "price": 8900
+        },
+        {
+          "label": "Kebab / Cheese",
+          "price": 9900
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 11,
+      "badges": []
+    },
+    {
+      "id": "item-1785998700059-yn27yt",
+      "category": "Kebab",
+      "name": {
+        "uz": "HOT DOG",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "HOT DOG / CLASSIC",
+          "price": 8500
+        },
+        {
+          "label": "HOT DOG / CHEESE",
+          "price": 9500
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 12,
+      "badges": []
+    },
+    {
+      "id": "item-1786085727829-cjfwj0",
+      "category": "Chicken",
+      "name": {
+        "uz": "FRIED CHICKEN",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "Boneless / 450 gram",
+          "price": 11900
+        },
+        {
+          "label": "Boneless / 800 gram",
+          "price": 19900
+        },
+        {
+          "label": "With Bone / 1kg",
+          "price": 19900
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 13,
+      "badges": []
+    },
+    {
+      "id": "item-1786080367984-33bpgn",
+      "category": "Chicken",
+      "name": {
+        "uz": "SWEET CHILI",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "Boneless / 450 gram",
+          "price": 13500
+        },
+        {
+          "label": "Boneless / 800 gram",
+          "price": 21900
+        },
+        {
+          "label": "With Bone / 1kg",
+          "price": 21900
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 14,
+      "badges": []
+    },
+    {
+      "id": "item-1786079947244-hoo8yv",
+      "category": "Chicken",
+      "name": {
+        "uz": "SNOW",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "Boneless / 450 gram",
+          "price": 13500
+        },
+        {
+          "label": "Boneless / 800 gram",
+          "price": 22900
+        },
+        {
+          "label": "With Bone / 1kg",
+          "price": 22900
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 15,
+      "badges": []
+    },
+    {
+      "id": "item-1786018287105-150115",
+      "category": "Chicken",
+      "name": {
+        "uz": "SPICY",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "Boneless / 450 gram",
+          "price": 12900
+        },
+        {
+          "label": "Boneless / 800 gram",
+          "price": 20900
+        },
+        {
+          "label": "With Bone / 1kg",
+          "price": 20900
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 16,
+      "badges": []
+    },
+    {
+      "id": "item-1786169347086-zccwfa",
+      "category": "Chicken",
+      "name": {
+        "uz": "Chicken wings",
+        "ko": null,
+        "en": null,
+        "ru": null
+      },
+      "description": null,
+      "variants": [
+        {
+          "label": "Wings / 4pcs",
+          "price": 4900
+        },
+        {
+          "label": "Wings / 8pcs",
+          "price": 8900
+        }
+      ],
+      "imageFile": null,
+      "visible": true,
+      "soldOut": false,
+      "order": 17,
+      "badges": []
+    }
+  ],
+  "promotions": [
+    {
+      "type": "promotion",
+      "visible": false,
+      "title": "HALO COMBO",
+      "description": "2 ta Chicken Kebab + 2 ta Cola",
+      "price": 21900,
+      "oldPrice": 27000,
+      "badge": "−19%",
+      "imageFile": null,
+      "schedule": null
+    },
+    {
+      "type": "setOffer",
+      "visible": true,
+      "title": "SET MENU",
+      "description": "Drink + french fries",
+      "price": 3900,
+      "imageFile": null,
+      "schedule": null
+    }
+  ],
+  "slides": [],
+  "slideRotation": {
+    "seconds": null,
+    "order": null,
+    "status": "Not present in preserved snapshot"
+  }
+}

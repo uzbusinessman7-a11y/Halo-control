@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#090909" />
+  <title>HALO Digital Menu</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">H</div>
+      <div>
+        <h1>HALO</h1>
+        <p id="brandSubtitle">CHICKEN • KEBAB • PIZZA</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div id="clock" class="clock">--:--</div>
+      <button id="langBtn" class="pill">UZ</button>
+      <button id="adminBtn" class="pill admin-link">⚙</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <span id="heroBadge" class="hero-badge">YANGI TAYYORLANDI</span>
+        <h2 id="heroTitle">Mazali. Tez. Halol.</h2>
+        <p id="heroText">HALO bilan har bir taom — yangi taassurot.</p>
+      </div>
+      <div class="hero-price">
+        <small id="fromText">Narxlar</small>
+        <strong>15,000₩</strong>
+        <small id="fromSuffix">dan boshlab</small>
+      </div>
+    </section>
+
+    <nav id="categoryNav" class="category-nav"></nav>
+    <section id="menuGrid" class="menu-grid"></section>
+  </main>
+
+  <footer>
+    <span>HALO DIGITAL MENU</span>
+    <span id="footerNote">43″ TV uchun moslangan</span>
+  </footer>
+
+  <div id="adminOverlay" class="overlay hidden">
+    <section class="admin-panel">
+      <div class="admin-head">
+        <div>
+          <h2>Boshqaruv paneli</h2>
+          <p>Taomlar, narxlar, yozuvlar va tillarni boshqaring.</p>
+        </div>
+        <button id="closeAdmin" class="icon-btn">✕</button>
+      </div>
+
+      <div id="loginBox" class="login-box">
+        <label>Parol</label>
+        <input id="passwordInput" type="password" placeholder="Parolni kiriting" />
+        <button id="loginBtn" class="primary-btn">Kirish</button>
+        <p class="hint">Boshlang‘ich parol: <b>BU_YERGA_QOYILADI</b></p>
+      </div>
+
+      <div id="adminContent" class="hidden">
+        <div class="admin-tabs">
+          <button class="tab active" data-tab="items">Taomlar</button>
+          <button class="tab" data-tab="settings">Sozlamalar</button>
+          <button class="tab" data-tab="security">Parol</button>
+        </div>
+
+        <div id="itemsTab" class="tab-content">
+          <div class="form-grid">
+            <input id="itemNameUz" placeholder="Nomi (UZ)" />
+            <input id="itemNameKo" placeholder="Nomi (KO)" />
+            <input id="itemNameEn" placeholder="Nomi (EN)" />
+            <input id="itemPrice" type="number" placeholder="Narx (won)" />
+            <input id="itemCategory" placeholder="Kategoriya" />
+            <input id="itemBadge" placeholder="Belgi: HOT / NEW / ..." />
+            <input id="itemImage" placeholder="Rasm URL (ixtiyoriy)" />
+            <label class="check"><input id="itemSoldOut" type="checkbox" /> Sotuvda yo‘q</label>
+          </div>
+          <button id="addItemBtn" class="primary-btn">Taom qo‘shish</button>
+          <div id="adminItems" class="admin-items"></div>
+        </div>
+
+        <div id="settingsTab" class="tab-content hidden">
+          <div class="form-grid one">
+            <label>Brend ostidagi yozuv<input id="setSubtitle" /></label>
+            <label>Asosiy belgi<input id="setHeroBadge" /></label>
+            <label>Asosiy sarlavha<input id="setHeroTitle" /></label>
+            <label>Asosiy izoh<input id="setHeroText" /></label>
+          </div>
+          <button id="saveSettingsBtn" class="primary-btn">Sozlamalarni saqlash</button>
+        </div>
+
+        <div id="securityTab" class="tab-content hidden">
+          <div class="form-grid one">
+            <label>Yangi parol<input id="newPassword" type="password" /></label>
+            <label>Yangi parolni qayta yozing<input id="confirmPassword" type="password" /></label>
+          </div>
+          <button id="savePasswordBtn" class="primary-btn">Parolni almashtirish</button>
+        </div>
+
+        <div class="danger-zone">
+          <button id="resetBtn" class="danger-btn">Boshlang‘ich holatga qaytarish</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

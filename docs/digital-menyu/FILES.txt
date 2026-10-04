@@ -1,0 +1,13 @@
+# FILES.txt
+.env.example
+API.md
+BOSHQARUV.md
+DIZAYN.md
+HALO-CONTROL-INTEGRATSIYA.md
+INCOMPLETE_SOURCE_NOTICE.md
+MALUMOT-TUZILMASI.md
+menu-export.json
+source-available/README.txt
+source-available/app.js
+source-available/index.html
+source-available/style.css
