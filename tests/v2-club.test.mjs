@@ -9,8 +9,11 @@ const sqlite = new DatabaseSync(':memory:');
 for (const file of fs.readdirSync(new URL('../drizzle/', import.meta.url)).filter((name) => name.endsWith('.sql')).sort()) {
   for (const sql of fs.readFileSync(new URL(`../drizzle/${file}`, import.meta.url), 'utf8').split('--> statement-breakpoint')) if (sql.trim()) sqlite.exec(sql);
 }
-const stmt = (q, p = []) => ({ bind: (...v) => stmt(q, v), all: async () => ({ results: sqlite.prepare(q).all(...p) }), first: async () => sqlite.prepare(q).get(...p) ?? null, run: async () => { const r = sqlite.prepare(q).run(...p); return { meta: { changes: Number(r.changes) } }; }, _exec: () => sqlite.prepare(q).run(...p) });
-globalThis.__HALO_CONTROL_DB__ = { prepare: (q) => stmt(q), batch: async (list) => { sqlite.exec('BEGIN'); try { const out = list.map((s) => s._exec()); sqlite.exec('COMMIT'); return out; } catch (error) { sqlite.exec('ROLLBACK'); throw error; } } };
+/* DB.trips — bazaga borilgan so'rovlar soni (bitta batch = bitta borish). batch() javobi haqiqiy D1'dagidek: har ifoda uchun { results, meta }. */
+const DB = { trips: 0 };
+const exec = (q, p) => { const prepared = sqlite.prepare(q); if (/^\s*SELECT/i.test(q)) return { results: prepared.all(...p), meta: { changes: 0 } }; const r = prepared.run(...p); return { results: [], meta: { changes: Number(r.changes) } }; };
+const stmt = (q, p = []) => ({ bind: (...v) => stmt(q, v), all: async () => { DB.trips += 1; return { results: sqlite.prepare(q).all(...p) }; }, first: async () => { DB.trips += 1; return sqlite.prepare(q).get(...p) ?? null; }, run: async () => { DB.trips += 1; const r = sqlite.prepare(q).run(...p); return { meta: { changes: Number(r.changes) } }; }, _exec: () => exec(q, p) });
+globalThis.__HALO_CONTROL_DB__ = { prepare: (q) => stmt(q), batch: async (list) => { DB.trips += 1; sqlite.exec('BEGIN'); try { const out = list.map((s) => s._exec()); sqlite.exec('COMMIT'); return out; } catch (error) { sqlite.exec('ROLLBACK'); throw error; } } };
 globalThis.__HALO_SELF_HOSTED__ = true;
 
 /* Soxta Telegram: haqiqiy xabar ketmaydi. */
@@ -396,4 +399,41 @@ test('yopilgan kun: buyurtma kutadi; rahbar bugungi sana bilan yozadi (faqat och
   const view = await ownerPost({ action: 'rewrite', orderId: late.id, useToday: true });
   assert.equal(view.outcome.state, 'waiting', 'bugun ham yopiq — baribir yozilmaydi');
   assert.equal((await state()).sales.length, count);
+});
+
+test('tezlik: do‘kon so‘rovi bazaga kam boradi (har borish ~0,2 soniya)', async () => {
+  const trips = async (run) => { const before = DB.trips; const out = await run(); return [out, DB.trips - before]; };
+  // Ikkala kalit-tugma o'chiq: kalitni tekshirish + bitta to'plam. Filial holati o'qilmaydi.
+  await ownerPost({ action: 'switch', priceSync: false, stockSync: false });
+  const [off, offTrips] = await trips(() => sync(CATALOG));
+  assert.deepEqual([off.ok, off.priceSync, off.stockSync, off.updatedAt], [true, false, false, '']);
+  assert.equal(offTrips, 2, 'kalit + bitta to‘plam');
+  assert.equal(off.products.find((item) => item.id === 'lavash').linked, true, 'bog‘lanish holati filial holatisiz ham ko‘rinadi');
+  assert.deepEqual(off.products.map((item) => [item.price, item.soldOut]), off.products.map(() => [null, false]));
+  // Yoqilgan: ustiga faqat filial holatini o'qish qo'shiladi.
+  await ownerPost({ action: 'switch', priceSync: true, stockSync: true });
+  const [on, onTrips] = await trips(() => sync(CATALOG));
+  assert.deepEqual([on.ok, on.priceSync, on.stockSync, Boolean(on.updatedAt)], [true, true, true, true]);
+  assert.equal(onTrips, 3, 'kalit + to‘plam + filial holati');
+  // 41 ta mahsulot: ikki to'plam, javob baribir to'liq.
+  const many = { products: Array.from({ length: 41 }, (_, index) => ({ id: `ko-p-${index}`, name: `Sinov ${index}`, category: 'Sinov', price: 1000 + index, active: true })), addons: [] };
+  const [big, bigTrips] = await trips(() => sync(many));
+  assert.deepEqual([big.ok, big.products.length, bigTrips], [true, 41, 4]);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM v2_club_products WHERE external_id LIKE 'ko-p-%'").get().n, 41);
+  sqlite.prepare("DELETE FROM v2_club_products WHERE external_id LIKE 'ko-p-%'").run();
+  // Bo'sh ro'yxat ham ishlaydi.
+  const [empty] = await trips(() => sync({ products: [], addons: [] }));
+  assert.deepEqual([empty.ok, empty.products.length], [true, 0]);
+  // Buyurtma hodisasi: yozish, shartli yangilash va o'qish — bitta to'plamda.
+  const fast = order();
+  const [first] = await trips(() => event(fast));
+  assert.deepEqual([first.ok, first.order.status], [true, 'new']);
+  const [again, againTrips] = await trips(() => event({ ...fast, status: 'accepted' }));
+  assert.deepEqual([again.ok, again.order.status], [true, 'accepted']);
+  assert.ok(againTrips <= 3, `oraliq holat: kalit + to‘plam + jurnal, chiqdi ${againTrips}`);
+  // Holat orqaga qaytmaydi, yopilgani o'zgarmaydi (endi bitta SQL shartida).
+  assert.equal((await event({ ...fast, status: 'new' })).order.status, 'accepted');
+  assert.equal((await event({ ...fast, status: 'cancelled' })).order.status, 'cancelled');
+  assert.equal((await event(complete(fast))).order.status, 'cancelled', 'bekor qilingan buyurtma topshirilganga aylanmaydi');
+  assert.equal((await event({ ...fast, status: 'ready' })).order.status, 'cancelled');
 });

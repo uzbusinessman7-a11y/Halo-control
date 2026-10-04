@@ -10,7 +10,7 @@ import { assertV2DayOpen, ClosedDayError } from "./closed-days";
 import {
   applyClubOrder, cancelClubSale, claimClubNotice, CLUB_ACTOR, ClubError, clubOrderMessage, clubPosOrderId, clubSalePlan, finishClubNotice, linkMap,
   listClubProducts, listWaitingClubOrders, normalizeClubOrder, PosTerminalError, readClubOrder, readClubSettings, recordClubOrder, setClubSaleState,
-  type ClubOrderRow,
+  type ClubOrderRow, type ClubSettings,
 } from "./club";
 
 declare global {
@@ -28,10 +28,12 @@ export interface ClubSaleOutcome { state: string; note: string; date: string; al
 /**
  * Topshirilgan buyurtmani savdoga yozadi. `force` — rahbar "Qayta yozish"ni bosgan (savdo yozuvi yo'q bo'lsa qayta yozadi);
  * `useToday` — yopilgan kun o'rniga bugungi sana bilan yozish (faqat rahbar tanlasa).
+ * `row` va `settings` — chaqiruvchi hozirgina o'qigan bo'lsa (do'kon hodisasi), bazadan qayta o'qilmaydi.
  */
-export async function writeClubSale(branchId: string, orderId: string, options: { force?: boolean; useToday?: boolean } = {}): Promise<ClubSaleOutcome> {
+export async function writeClubSale(branchId: string, orderId: string,
+  options: { force?: boolean; useToday?: boolean; row?: ClubOrderRow | null; settings?: ClubSettings | null } = {}): Promise<ClubSaleOutcome> {
   const db = clubDb();
-  const row = await readClubOrder(db, branchId, orderId);
+  const row = options.row && options.row.orderId === orderId ? options.row : await readClubOrder(db, branchId, orderId);
   if (!row || !row.order) throw new ClubError("Buyurtma topilmadi.", 404);
   const done = (state: string, note: string, date = ""): ClubSaleOutcome => ({ state, note, date, alreadySaved: false });
   if (row.status !== "completed") return done(row.saleState, "Buyurtma hali topshirilmagan.");
@@ -40,7 +42,7 @@ export async function writeClubSale(branchId: string, orderId: string, options: 
   if (row.saleState === "saved" && !options.force) return { state: "saved", note: row.saleNote, date: row.saleDate, alreadySaved: true };
   const order = row.order;
   const save = async (state: string, note: string, date = "") => { await setClubSaleState(db, branchId, orderId, state, note, date); return done(state, note, date); };
-  const settings = await readClubSettings(db, branchId);
+  const settings = options.settings || await readClubSettings(db, branchId);
   if (!settings.salesEnabled) return save("waiting", "Savdoga yozish o‘chirilgan. Yoqilgach «Kutayotganlarni yozish»ni bosing.");
   const links = linkMap(await listClubProducts(db, branchId));
   const plan = clubSalePlan(order, links);
@@ -100,10 +102,10 @@ export async function cancelClubOrderSale(branchId: string, orderId: string): Pr
 }
 
 /** Guruhga xabar (bir buyurtma — bir marta). Yuborilmasa sababi saqlanadi, buyurtmaning o'ziga ta'sir qilmaydi. */
-export async function notifyClubOrder(branchId: string, row: ClubOrderRow, kind: "new" | "cancel"): Promise<{ sent: boolean; reason: string }> {
+export async function notifyClubOrder(branchId: string, row: ClubOrderRow, kind: "new" | "cancel", known: ClubSettings | null = null): Promise<{ sent: boolean; reason: string }> {
   if (!row.order) return { sent: false, reason: "Buyurtma o‘qilmadi." };
   const db = clubDb();
-  const settings = await readClubSettings(db, branchId);
+  const settings = known || await readClubSettings(db, branchId);
   if (!settings.notifyEnabled || !settings.groupChatId) return { sent: false, reason: "Buyurtmalar guruhi ulanmagan." };
   const token = (await readTelegramSettings()).botToken;
   if (!token) return { sent: false, reason: "HALO Telegram boti ulanmagan." };
@@ -122,17 +124,20 @@ export async function notifyClubOrder(branchId: string, row: ClubOrderRow, kind:
   }
 }
 
-/** Do'kondan kelgan hodisa: buyurtma yoziladi, kerak bo'lsa guruhga xabar boradi, topshirilgan bo'lsa savdoga yoziladi. */
-export async function handleClubOrderEvent(branchId: string, body: unknown) {
+/**
+ * Do'kondan kelgan hodisa: buyurtma yoziladi, kerak bo'lsa guruhga xabar boradi, topshirilgan bo'lsa savdoga yoziladi.
+ * `settings` — kalit tekshirilganda o'qilgan sozlamalar (qayta o'qilmaydi).
+ */
+export async function handleClubOrderEvent(branchId: string, body: unknown, settings: ClubSettings | null = null) {
   const source = body && typeof body === "object" ? body as Row : {};
   const order = normalizeClubOrder(source.order);
   const row = await recordClubOrder(clubDb(), branchId, order);
   let notice = { sent: false, reason: "" };
   // "Yangi buyurtma" xabari: buyurtma birinchi marta ko'ringanda (do'kon uni qabul qilib ulgurgan bo'lsa ham) — bir marta.
   const open = row.status === "new" || row.status === "accepted" || row.status === "preparing" || row.status === "ready";
-  if (open && order.status === row.status && !row.notifiedNew) notice = await notifyClubOrder(branchId, row, "new");
-  if (order.status === "cancelled" && row.status === "cancelled" && row.notifiedNew) notice = await notifyClubOrder(branchId, row, "cancel");
+  if (open && order.status === row.status && !row.notifiedNew) notice = await notifyClubOrder(branchId, row, "new", settings);
+  if (order.status === "cancelled" && row.status === "cancelled" && row.notifiedNew) notice = await notifyClubOrder(branchId, row, "cancel", settings);
   let sale: ClubSaleOutcome = { state: row.saleState, note: row.saleNote, date: row.saleDate, alreadySaved: false };
-  if (order.status === "completed" && row.status === "completed") sale = await writeClubSale(branchId, order.id);
+  if (order.status === "completed" && row.status === "completed") sale = await writeClubSale(branchId, order.id, { row, settings });
   return { order: { id: row.orderId, number: row.number, status: row.status }, sale, notified: notice.sent, noticeReason: notice.reason };
 }
