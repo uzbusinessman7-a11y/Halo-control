@@ -267,10 +267,18 @@ export async function importImage(db: D1Like, branchId: string, config: DmConfig
   if (!target) throw new DigitalMenuError("Bu rasm allaqachon ko‘chirilgan yoki topilmadi.", 404);
   let response: Response;
   try {
-    response = await fetcher(target.url, { redirect: "error", signal: AbortSignal.timeout(20_000) });
-  } catch {
-    throw new DigitalMenuError("Eski saytdan rasm o‘qilmadi. Birozdan keyin qayta urinib ko‘ring.", 502);
+    // DIQQAT: Cloudflare Workers'da redirect faqat "follow" yoki "manual" bo'ladi — "error" yozilsa fetch darhol xato beradi
+    // (2026-10-05: shu sabab hech bir rasm ko'chmagan edi). "manual": boshqa manzilga yo'naltirish ergashilmaydi, xato sanaladi.
+    response = await fetcher(target.url, {
+      redirect: "manual", signal: AbortSignal.timeout(20_000),
+      headers: { "User-Agent": "HALO-Control monitor menyu (rasm ko'chirish)", Accept: "image/jpeg,image/png,image/webp" },
+    });
+  } catch (error) {
+    // Sabab ko'rinib tursin (masalan TimeoutError — eski sayt javob bermadi).
+    const why = error instanceof Error && /^[A-Za-z]{3,40}$/.test(error.name) ? error.name : "aloqa xatosi";
+    throw new DigitalMenuError(`Eski saytga ulanib bo‘lmadi (${why}). Birozdan keyin qayta urinib ko‘ring.`, 502);
   }
+  if (response.status >= 300 && response.status < 400) throw new DigitalMenuError(`Eski sayt rasm o‘rniga boshqa manzilga yo‘naltirdi (${response.status}).`, 502);
   if (!response.ok) throw new DigitalMenuError(`Eski sayt rasmni bermadi (${response.status}).`, 502);
   const mime = String(response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
   if (!IMAGE_TYPES.has(mime)) throw new DigitalMenuError("Eski saytdan rasm o‘rniga boshqa narsa keldi.", 502);
