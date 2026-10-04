@@ -163,7 +163,6 @@ function drawList(){
 }
 /* Narx odam o'qiydigan birlikda kiritiladi: g → 1 kg, ml → 1 litr, qolganlari — 1 birlik. */
 function priceMul(u){return u==='g'||u==='ml'?1000:1}
-function priceLabel(u){return 'Narxi — 1 '+(u==='g'?'kg':u==='ml'?'litr':u)+' uchun (₩)'}
 /* Qadoq o'lchovi: mahsulot g da yuritilsa ham qadoqni kg da (ml → litr) yozish mumkin; saqlashda hisob birligiga o'giriladi. */
 function packUnits(base){return base==='g'?['kg','g']:base==='ml'?['litr','ml']:base==='kg'?['kg','g']:base==='litr'?['litr','ml']:[base||'dona']}
 function packFactor(base,u){if(base===u)return 1;if((base==='g'&&u==='kg')||(base==='ml'&&u==='litr'))return 1000;if((base==='kg'&&u==='g')||(base==='litr'&&u==='ml'))return 0.001;return 1}
@@ -177,8 +176,9 @@ function productForm(p){
     +'<label class="field"><span>Nomi</span><input id="fName" maxlength="100" value="'+esc(p?p.name:'')+'"></label>'
     +'<div class="row"><label class="field" style="flex:1"><span>Hisob birligi</span><select id="fUnit"'+(p&&p.movements?' disabled':'')+'>'+units.map(function(u){return '<option'+(p&&p.unit===u?' selected':'')+'>'+u+'</option>'}).join('')+'</select></label>'
     +'<label class="field" style="flex:1"><span>Minimum qoldiq</span><input id="fMin" inputmode="decimal" value="'+esc(p?p.minStock:'')+'" placeholder="0"></label></div>'
-    +'<label class="field"><span id="fPriceL">'+priceLabel(p?p.unit:'g')+'</span><input id="fPrice" inputmode="numeric" placeholder="0" value="'+(p&&p.unitCost?Math.round(p.unitCost*priceMul(p.unit)).toLocaleString('en-US'):'')+'"></label>'
-    +'<p class="hint" style="margin-top:-6px">Retsept tannarxi shu narxdan hisoblanadi. Keyingi kirimda narx kirim narxiga o‘zi yangilanadi.</p>'
+    +'<div class="row"><label class="field" style="flex:1.2"><span>Narxi (₩)</span><input id="fPrice" inputmode="numeric" placeholder="0" value="'+(p&&p.unitCost?Math.round(p.unitCost*priceMul(p.unit)).toLocaleString('en-US'):'')+'"></label>'
+    +'<label class="field" style="flex:1"><span>Qancha uchun</span><span style="display:flex;gap:6px;flex-wrap:nowrap;margin:0;font-weight:400;font-size:16px"><input id="fPriceQ" inputmode="decimal" value="1" style="flex:1;min-width:0;width:auto"><select id="fPriceU" style="flex:0 0 auto;width:auto" aria-label="Narx qaysi o‘lchov uchun">'+packOptions(p?p.unit:'g',packUnits(p?p.unit:'g')[0])+'</select></span></label></div>'
+    +'<p class="hint" style="margin-top:-6px"><span id="fPriceH"></span>Masalan: 5,500 ₩ — 800 g uchun. Retsept tannarxi shu narxdan hisoblanadi; keyingi kirimda narx kirim narxiga o‘zi yangilanadi.</p>'
     +'<div class="row"><label class="field" style="flex:1"><span>Qadoq nomi (ixtiyoriy)</span><input id="fPack" maxlength="30" value="'+esc(p?p.packageName:'')+'" placeholder="quti, qop, banka…"></label>'
     +'<label class="field" style="flex:1"><span>1 qadoqda qancha</span><span style="display:flex;gap:6px;flex-wrap:nowrap;margin:0;font-weight:400;font-size:16px"><input id="fPer" inputmode="decimal" value="'+esc(pk.value)+'" placeholder="masalan 20" style="flex:1;min-width:0;width:auto"><select id="fPerU" style="flex:0 0 auto;width:auto" aria-label="Qadoq o‘lchov birligi">'+packOptions(p?p.unit:'g',pk.unit)+'</select></span></label></div>'
     +'<p class="hint" style="margin-top:-6px">Qadoq qaysi o‘lchovda kelsa, o‘shani tanlang. Masalan: 1 qop = 20 kg, 1 quti = 24 dona.</p>'
@@ -189,15 +189,21 @@ function productForm(p){
     +'<div class="row"><button id="fSave">Saqlash</button><button class="ghost" id="fCancel">Bekor</button>'+(p?'<button class="ghost" id="fArch" style="color:var(--bad)">Ro‘yxatdan olib tashlash</button>':'')+'</div><div id="fMsg"></div></div>';
   box.scrollIntoView({behavior:'smooth',block:'start'});
   document.getElementById('fCancel').addEventListener('click',function(){box.innerHTML=''});
-  var fp=document.getElementById('fPrice'),priceDirty=false;
-  fp.addEventListener('input',function(){priceDirty=true;var v=Number(fp.value.replace(/[^0-9]/g,''))||0;fp.value=v?v.toLocaleString('en-US'):''});
-  document.getElementById('fUnit').addEventListener('change',function(){document.getElementById('fPriceL').textContent=priceLabel(this.value);document.getElementById('fPerU').innerHTML=packOptions(this.value,packUnits(this.value)[0])});
+  var fp=document.getElementById('fPrice'),fq=document.getElementById('fPriceQ'),fu=document.getElementById('fPriceU'),priceDirty=false;
+  /* Narx "X ₩ — Y g uchun" ko'rinishida: 1 hisob birligi narxi = X ÷ (Y × o'lchov). */
+  var priceCost=function(){var q=Number(fq.value.replace(',','.'))||0,base=document.getElementById('fUnit').value;if(!(q>0))return null;return (Number(fp.value.replace(/[^0-9]/g,''))||0)/(q*packFactor(base,fu.value))};
+  var priceHint=function(){var c=priceCost(),base=document.getElementById('fUnit').value,big=packUnits(base)[0],h=document.getElementById('fPriceH');
+    h.textContent=c===null?'Narx qancha miqdor uchun ekanini yozing. ':(c>0&&(Number(fq.value.replace(',','.'))!==1||fu.value!==big)?'1 '+big+' ga '+Math.round(c*packFactor(base,big)).toLocaleString('en-US')+' ₩ to‘g‘ri keladi. ':'')};
+  fp.addEventListener('input',function(){priceDirty=true;var v=Number(fp.value.replace(/[^0-9]/g,''))||0;fp.value=v?v.toLocaleString('en-US'):'';priceHint()});
+  fq.addEventListener('input',function(){priceDirty=true;priceHint()});fu.addEventListener('change',function(){priceDirty=true;priceHint()});
+  document.getElementById('fUnit').addEventListener('change',function(){fu.innerHTML=packOptions(this.value,packUnits(this.value)[0]);priceHint();document.getElementById('fPerU').innerHTML=packOptions(this.value,packUnits(this.value)[0])});
   var fa=document.getElementById('fArch');if(fa)fa.addEventListener('click',function(){var why=prompt(p.name+' ro‘yxatdan olib tashlansinmi? Qoldiq va tarix saqlanadi, keyin tiklash mumkin.\\nSababi:');if(!why||why.trim().length<3)return;fa.disabled=true;
     post({action:'archiveProduct',branchId:sel.value,id:p.id,reason:why.trim()}).then(function(x){fa.disabled=false;if(!x.body.ok){document.getElementById('fMsg').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}PRODUCTS=x.body.products;ARCH=x.body.archived||[];drawList();document.getElementById('pForm').innerHTML='<div class="msg ok" style="margin-bottom:10px">✓ Ro‘yxatdan olib tashlandi</div>'})});
   document.getElementById('fSave').addEventListener('click',function(){
+    if(priceDirty&&priceCost()===null){document.getElementById('fMsg').innerHTML='<div class="msg bad">Narx qancha miqdor uchun ekanini yozing (masalan 800 g).</div>';return}
     var btn=this;btn.disabled=true;
     post({action:'saveProduct',branchId:sel.value,id:p?p.id:'',operationId:op,name:document.getElementById('fName').value,unit:document.getElementById('fUnit').value,minStock:Number(document.getElementById('fMin').value.replace(',','.')||0),packageName:document.getElementById('fPack').value,unitsPerPackage:Math.round(Number(document.getElementById('fPer').value.replace(',','.')||0)*packFactor(document.getElementById('fUnit').value,document.getElementById('fPerU').value)*1e6)/1e6,supplierId:document.getElementById('fSup').value,categoryId:document.getElementById('fCat').value,vegetable:document.getElementById('fVeg').checked,
-      unitCost:priceDirty?(Number(fp.value.replace(/[^0-9]/g,''))||0)/priceMul(document.getElementById('fUnit').value):undefined}).then(function(x){btn.disabled=false;
+      unitCost:priceDirty?Math.round(priceCost()*1e6)/1e6:undefined}).then(function(x){btn.disabled=false;
       if(!x.body.ok){document.getElementById('fMsg').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}
       PRODUCTS=x.body.products;CATS=x.body.categories||CATS;drawList();document.getElementById('pForm').innerHTML='<div class="msg ok" style="margin-bottom:10px">✓ '+(x.body.created?'Mahsulot qo‘shildi':'Saqlandi')+'</div>'});
   });
