@@ -71,6 +71,15 @@ const worker = {
       // HALO HISOB oynasi (naqd/hisob-raqam, delivery, oshxona, chiqit). Eski ko'rinish: /hisob?eski=1.
       if (url.pathname === "/ornatish" || url.pathname === "/app" || url.pathname === "/install") return Response.redirect(new URL(`/api/v2/ornatish${url.search}`, url).toString(), 302);
       if (url.pathname === "/pos" || url.pathname === "/kassa" || url.pathname === "/hisob") return Response.redirect(new URL("/api/v2/pos", url).toString(), 302);
+      // Monitor menyusi (televizor): /tv/kebab, /tv/chicken, /tv/pitsa — parolsiz ochiladi. Boshqa filial: ?b=<filial>.
+      const tv = url.pathname.match(/^\/tv(?:\/([a-z0-9-]{1,24}))?\/?$/);
+      if (tv) {
+        const target = new URL("/api/v2/tv", url);
+        if (tv[1]) target.searchParams.set("screen", tv[1]);
+        const branch = url.searchParams.get("b");
+        if (branch) target.searchParams.set("b", branch);
+        return Response.redirect(target.toString(), 302);
+      }
     }
     const response = await handler.fetch(auth.request, env, ctx);
     const secured = new Response(response.body, response);
