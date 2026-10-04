@@ -1,17 +1,80 @@
 import { isAdminRequest } from "../../../lib/integration-store";
-import { listHaloBranches } from "../../../lib/halo-store";
+import { listHaloBranches, readHaloState } from "../../../lib/halo-store";
+import { mezanaDebtActionLabel, mezanaTelegramDestination, normalizeMezanaDebtEntries, normalizeMezanaSettings } from "../../../lib/mezana-debts";
+import { readSettings, telegramCall } from "../../../lib/telegram-service";
 import { shell } from "../../../core/ui-shell";
 
 declare global {
   var __HALO_SELF_HOSTED__: boolean | undefined;
+  var __HALO_CONTROL_DB__: D1Database | undefined;
 }
 
 /**
- * HALO V2 — ulanishlar: Telegram bot (kunlik hisobot), Google Sheets (avtomatik jadval),
+ * HALO V2 — ulanishlar: Telegram bot (kunlik hisobot), MEZANA guruhi, Google Sheets (avtomatik jadval),
  * API kalitlar (boshqa dasturlar uchun). Hamma amal mavjud tekshirilgan API'lar orqali:
  * /api/telegram, /api/admin/integrations. Kalit faqat bir marta ko'rsatiladi, saqlanmaydi.
  */
 const PAGE_PATH = "/api/v2/ulanishlar";
+const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+
+/** MEZANA guruhi holati: qaysi guruh ulangan va oxirgi yozuvlar guruhga borganmi. Bot tokeni hech qachon qaytarilmaydi. */
+async function mezanaStatus(branchId: string) {
+  const [{ state }, telegram] = await Promise.all([readHaloState(branchId), readSettings()]);
+  const settings = normalizeMezanaSettings(state.mezanaSettings);
+  const entries = new Map(normalizeMezanaDebtEntries(state.mezanaEntries).map((entry) => [entry.id, entry]));
+  let recent: Array<{ label: string; status: string; error: string; at: string }> = [];
+  try {
+    const rows = await globalThis.__HALO_CONTROL_DB__!.prepare(
+      "SELECT entry_id, status, last_error, updated_at FROM mezana_telegram_deliveries WHERE branch_id = ? ORDER BY updated_at DESC LIMIT 5",
+    ).bind(branchId).all<{ entry_id: string; status: string; last_error: string; updated_at: string }>();
+    recent = (rows.results || []).map((row) => {
+      const entry = entries.get(row.entry_id);
+      return {
+        label: entry ? `${mezanaDebtActionLabel(entry.action)} · ${entry.productName}` : "O‘chirilgan yozuv",
+        status: row.status, error: row.last_error || "", at: row.updated_at,
+      };
+    });
+  } catch { /* Jadval hali yaratilmagan bo'lsa ro'yxat bo'sh qoladi. */ }
+  return {
+    botReady: Boolean(telegram.botToken), botName: telegram.botName,
+    borrowed: { chatId: settings.telegramChatId, chatName: settings.telegramChatName, threadId: settings.telegramThreadId },
+    purchased: { chatId: settings.purchasedTelegramChatId, chatName: settings.purchasedTelegramChatName, threadId: settings.purchasedTelegramThreadId },
+    recent,
+  };
+}
+
+export async function POST(request: Request) {
+  if (globalThis.__HALO_SELF_HOSTED__ !== true) return json({ error: "V2 faqat yangi saytda." }, 403);
+  if (!await isAdminRequest(request)) return json({ error: "Faqat rahbar uchun." }, 401);
+  try {
+    const body = await request.json() as Record<string, unknown>;
+    const branchId = String(body.branchId || "main");
+    if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(branchId)) return json({ error: "Noto‘g‘ri filial." }, 400);
+    if (body.action === "mezana") return json({ ok: true, ...(await mezanaStatus(branchId)) });
+    if (body.action === "mezanaTest") {
+      // Faqat sinov xabari: hisobga hech narsa yozilmaydi.
+      const purchased = body.destination === "purchased";
+      const [{ state }, telegram] = await Promise.all([readHaloState(branchId), readSettings()]);
+      const target = mezanaTelegramDestination(normalizeMezanaSettings(state.mezanaSettings), purchased ? "purchased" : "borrowed");
+      if (!telegram.botToken) return json({ error: "Avval yuqorida Telegram botni ulang." }, 400);
+      if (!target.chatId) return json({ error: "Avval shu yo‘nalish uchun guruhni ulang." }, 400);
+      try {
+        await telegramCall(telegram.botToken, "sendMessage", {
+          chat_id: target.chatId,
+          ...(target.threadId > 0 ? { message_thread_id: target.threadId } : {}),
+          text: `✅ HALO Control · MEZANA sinov xabari\n${purchased ? "SOTIB OLINDI va TO‘LOV" : "OLIB TURILDI va QAYTARILDI"} yozuvlari shu yerga keladi.`,
+        });
+      } catch (error) {
+        const reason = error instanceof Error && error.name !== "TimeoutError" ? error.message : "Telegram javobi kechikdi.";
+        return json({ error: `Guruhga yuborilmadi: ${reason} Bot guruhda borligini va yozish huquqini tekshiring.` }, 502);
+      }
+      return json({ ok: true, message: `Sinov xabari «${target.chatName || target.chatId}» guruhiga yuborildi.` });
+    }
+    return json({ error: "Noto‘g‘ri amal." }, 400);
+  } catch (error) {
+    return json({ error: error instanceof Error && /filial/i.test(error.message) ? error.message : "Xatolik yuz berdi." }, 500);
+  }
+}
 
 export async function GET(request: Request) {
   if (globalThis.__HALO_SELF_HOSTED__ !== true) return new Response("V2 faqat yangi saytda.", { status: 403 });
@@ -25,6 +88,7 @@ export async function GET(request: Request) {
     subtitle: "Telegram bot, Google Sheets va boshqa dasturlar bilan bog'lanish",
     headerRight: '<select id="branch"></select>',
     body: `<section class="card"><h2>✈️ Telegram bot</h2><p class="hint">Har kuni belgilangan vaqtda kunlik hisobot va qisqa “flash” hisobot shu chatga keladi.</p><div id="tg"></div></section>
+<section class="card"><h2>🤝 MEZANA guruhi</h2><p class="hint">MEZANA’dan olib turilgan, qaytarilgan, qarzga olingan mahsulot va to‘lovlar kiritilishi bilan shu Telegram guruhga yuboriladi.</p><div id="mz"></div></section>
 <section class="card"><h2>📊 Google Sheets</h2><p class="hint">Savdo, xarajat va hisobotlar Google jadvalga o‘zi tushib turadi.</p><div id="gs"></div></section>
 <section class="card"><h2>🔑 API kalitlar</h2><p class="hint">Boshqa dasturlar (POS, buxgalteriya) HALO ma’lumotini o‘qishi uchun. Kalit faqat yaratilganda bir marta ko‘rinadi.</p><div id="keys"></div></section>`,
     script: `
@@ -47,9 +111,41 @@ function loadTelegram(){var box=document.getElementById('tg');
       +'<p class="hint" style="margin-top:10px">To‘liq o‘tishgacha bu sayt o‘zi avtomatik yubormaydi (eski saytdan keladi).</p></div></details>';
     var m=document.getElementById('tM');
     document.getElementById('tD').addEventListener('click',function(){req('/api/telegram','POST',{action:'discover',branchId:sel.value,botToken:document.getElementById('tT').value.trim()||undefined}).then(function(r){if(r.body.ok){document.getElementById('tC').value=r.body.chatId;note(m,true,'Topildi: '+r.body.chatName)}else note(m,false,r.body.error)})});
-    document.getElementById('tS').addEventListener('click',function(){req('/api/telegram','POST',{action:'save',branchId:sel.value,botToken:document.getElementById('tT').value.trim()||undefined,chatId:document.getElementById('tC').value.trim(),reportTime:document.getElementById('tR').value,enabled:document.getElementById('tE').checked}).then(function(r){if(r.body.ok)loadTelegram();else note(m,false,r.body.error)})});
+    document.getElementById('tS').addEventListener('click',function(){req('/api/telegram','POST',{action:'save',branchId:sel.value,botToken:document.getElementById('tT').value.trim()||undefined,chatId:document.getElementById('tC').value.trim(),reportTime:document.getElementById('tR').value,enabled:document.getElementById('tE').checked}).then(function(r){if(r.body.ok){loadTelegram();loadMezana()}else note(m,false,r.body.error)})});
     document.getElementById('tX').addEventListener('click',function(){req('/api/telegram','POST',{action:'test',branchId:sel.value}).then(function(r){note(m,r.body.ok,r.body.ok?r.body.message:r.body.error)})});
     document.getElementById('tN').addEventListener('click',function(){req('/api/v2/bosh','POST',{action:'telegram',branchId:sel.value}).then(function(r){note(m,r.body.ok,r.body.ok?'✓ Qisqa hisobot yuborildi':r.body.error)})});
+  });
+}
+/* MEZANA guruhi: ulash mavjud /api/telegram amallari orqali (discover-mezana, save-mezana) */
+var MZ_LABEL={borrowed:'📥 Olib turildi · 📤 Qaytarildi',purchased:'🛒 Qarzga olindi · 💸 To‘lov'};
+function loadMezana(flash){var box=document.getElementById('mz');
+  req('/api/v2/ulanishlar','POST',{action:'mezana',branchId:sel.value}).then(function(x){var m=x.body||{};
+    if(!m.ok){box.innerHTML='<div class="msg bad">'+esc(m.error||'Yuklanmadi.')+'</div>';return}
+    var none=!m.borrowed.chatId&&!m.purchased.chatId;
+    var h=m.botReady?'':'<div class="msg warn">Avval yuqorida Telegram botni ulang — MEZANA xabarlarini o‘sha bot yuboradi.</div>';
+    ['borrowed','purchased'].forEach(function(k){var d=m[k];
+      h+='<div class="list-row"><div style="min-width:0"><b>'+MZ_LABEL[k]+'</b><br><small style="color:var(--'+(d.chatId?'ok':'muted')+')">'+(d.chatId?'✓ '+esc(d.chatName||'Guruh')+' · ID '+esc(d.chatId)+(d.threadId?' · mavzu '+esc(d.threadId):''):'Guruh ulanmagan — bu yozuvlar Telegramga bormaydi')+'</small></div>'
+        +'<div class="row" style="justify-content:flex-end;gap:6px">'+(d.chatId?'<button class="ghost" data-mt="'+k+'" style="min-height:36px;padding:4px 12px">Sinov</button><button class="ghost" data-mx="'+k+'" style="min-height:36px;padding:4px 12px">Uzish</button>':'')
+        +'<button data-mf="'+k+'" class="'+(d.chatId?'ghost':'')+'" style="min-height:36px;padding:4px 12px"'+(m.botReady?'':' disabled')+'>'+(d.chatId?'Almashtirish':'Guruhni topish')+'</button></div></div>'});
+    h+='<div id="mzM">'+(flash||'')+'</div>'
+      +'<details style="margin-top:12px"'+(none?' open':'')+'><summary>Qanday ulanadi</summary><ol class="hint" style="padding-left:18px;margin-top:10px;display:grid;gap:6px">'
+      +'<li>Telegram guruhiga '+(m.botName?'<b>'+esc(m.botName)+'</b> ':'hisobot ')+'botini a’zo qilib qo‘shing.</li>'
+      +'<li>O‘sha guruhda (mavzulari bo‘lsa — kerakli mavzuda) <b>/mezana_olib</b> deb yozing. Qarzga olish va to‘lov xabarlari uchun <b>/mezana_sotib</b> deb yozing — xohlasangiz o‘sha guruhning o‘zida.</li>'
+      +'<li>Shu yerda mos qatordagi «Guruhni topish»ni bosing. Guruhga «ulandi» degan xabar keladi.</li></ol>'
+      +'<label class="field"><span>Yoki guruhning Chat ID raqamini qo‘lda kiriting (minus bilan boshlanadi)</span><div class="row"><select id="mzK" style="flex:1"><option value="borrowed">Olib turildi / qaytarildi</option><option value="purchased">Qarzga olindi / to‘lov</option></select><input id="mzI" placeholder="-1001234567890" style="flex:1.4"><button class="ghost" id="mzS">Saqlash</button></div></label></details>'
+      +(m.recent&&m.recent.length?'<details style="margin-top:10px"><summary>Guruhga oxirgi yuborilganlar</summary>'+m.recent.map(function(r){return '<div class="list-row"><div style="min-width:0"><b>'+(r.status==='sent'?'✓':r.status==='sending'?'…':'✗')+'</b> '+esc(r.label)+' <small style="color:var(--muted)">'+esc(kst(r.at))+'</small>'+(r.status==='failed'&&r.error?'<br><small style="color:var(--bad)">'+esc(r.error)+'</small>':'')+'</div><span></span></div>'}).join('')+'</details>':'');
+    box.innerHTML=h;
+    var msg=document.getElementById('mzM');
+    box.querySelectorAll('[data-mf]').forEach(function(b){b.addEventListener('click',function(){b.disabled=true;
+      req('/api/telegram','POST',{action:'discover-mezana',branchId:sel.value,mezanaDestination:b.dataset.mf}).then(function(r){b.disabled=false;
+        if(!r.body.ok){note(msg,false,r.body.error||'Guruh topilmadi.');return}
+        loadMezana('<div class="msg '+(r.body.warning?'warn':'ok')+'" style="margin-top:10px">✓ Ulandi: '+esc(r.body.chatName)+(r.body.warning?' — '+esc(r.body.warning):'')+'</div>')})})});
+    box.querySelectorAll('[data-mt]').forEach(function(b){b.addEventListener('click',function(){b.disabled=true;
+      req('/api/v2/ulanishlar','POST',{action:'mezanaTest',branchId:sel.value,destination:b.dataset.mt}).then(function(r){b.disabled=false;note(msg,Boolean(r.body.ok),r.body.ok?'✓ '+r.body.message:r.body.error||'Yuborilmadi.')})})});
+    box.querySelectorAll('[data-mx]').forEach(function(b){b.addEventListener('click',function(){if(!confirm('Guruh uzilsinmi? Bu yozuvlar Telegramga yuborilmay qoladi.'))return;
+      req('/api/telegram','POST',{action:'save-mezana',branchId:sel.value,mezanaDestination:b.dataset.mx,chatId:''}).then(function(r){if(!r.body.ok){note(msg,false,r.body.error||'Bo‘lmadi.');return}loadMezana('<div class="msg ok" style="margin-top:10px">Guruh uzildi.</div>')})})});
+    document.getElementById('mzS').addEventListener('click',function(){var id=document.getElementById('mzI').value.trim();if(!id){note(msg,false,'Chat ID raqamini yozing.');return}
+      req('/api/telegram','POST',{action:'save-mezana',branchId:sel.value,mezanaDestination:document.getElementById('mzK').value,chatId:id}).then(function(r){if(!r.body.ok){note(msg,false,r.body.error||'Saqlanmadi.');return}loadMezana('<div class="msg ok" style="margin-top:10px">✓ Saqlandi. «Sinov»ni bosib tekshiring.</div>')})});
   });
 }
 /* Google Sheets va API kalitlar */
@@ -103,7 +199,7 @@ function drawKeys(){var box=document.getElementById('keys'),keys=(SNAP.keys||[])
       var o2=document.getElementById('kOut');o2.innerHTML='<div class="msg warn" style="margin-top:10px">Kalit (faqat hozir ko‘rinadi): <code>'+esc(key)+'</code></div><button class="ghost" id="kC">📋 Nusxa</button><div id="kM"></div>';document.getElementById('kC').addEventListener('click',function(){copy(key,document.getElementById('kM'))})});
   });
 }
-function loadAll(){loadTelegram();loadIntegrations()}
+function loadAll(){loadTelegram();loadMezana();loadIntegrations()}
 sel.addEventListener('change',loadAll);loadAll();
 `,
   }), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
