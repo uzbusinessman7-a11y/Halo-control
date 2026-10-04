@@ -190,6 +190,7 @@ function haloLoading(n){var s='';for(var i=0;i<(n||3);i++)s+='<div class="skelet
 /** "⋯" menyu: kam ishlatiladigan bo'limlar — ulanishlar, sozlamalar, nazorat va chiqish. */
 const MORE_MENU = [
   ["/pos", "🧾", "HALO HISOB oynasi", "Naqd, hisob-raqam, delivery, oshxona, chiqit"],
+  ["/api/v2/monitor", "📺", "Monitor menyu", "Televizordagi reklama menyu: taom, narx, rasm"],
   ["/api/v2/mezana", "🤝", "MEZANA", "Olib turish, qaytarish, qarz va to‘lov"],
   ["/api/v2/vazifalar", "✅", "Xodim vazifalari", "Vazifa yuborish va bajarilishi"],
   ["/api/v2/nazorat", "☑️", "Kunlik nazorat", "Ochilish/yopilish tekshiruvi, oshxona qoidalari"],
