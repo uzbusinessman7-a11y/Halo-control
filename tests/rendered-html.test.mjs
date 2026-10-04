@@ -6001,7 +6001,7 @@ test("Google Sheets report exports live sales, expenses, outflows, profit and pr
   assert.match(script, /https:\/\/halo-control\.example\/api\/integrations\/v1\/google-sheets/);
   assert.match(script, /halo_live_secret/);
   assert.match(script, /function HALO_SETUP/);
-  assert.match(script, /scriptVersion: "3\.4"/);
+  assert.match(script, /scriptVersion: "3\.5"/);
   assert.match(script, /addItem\("Sana oralig‘ini tanlash", "HALO_OPEN_DATE_RANGE"\)/);
   assert.match(script, /function HALO_OPEN_DATE_RANGE\(\)/);
   assert.match(script, /haloEnsureDateRange_\(sheet/);

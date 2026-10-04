@@ -418,15 +418,20 @@ export function deliverySoldAt(date: string, time: string) {
   return Number.isFinite(value.getTime()) ? value.toISOString() : "";
 }
 
+// Building a formatter is slow; the options never change, so one is kept for every call
+// (a year of delivery rows in the Google Sheets export formats thousands of times).
+let seoulTimeFormatter: Intl.DateTimeFormat | undefined;
+
 export function seoulTimeInputValue(value: unknown, fallback = "12:00") {
   const date = new Date(String(value || ""));
   if (!Number.isFinite(date.getTime())) return fallback;
-  const parts = new Intl.DateTimeFormat("en-GB", {
+  seoulTimeFormatter ||= new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Seoul",
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
-  }).formatToParts(date);
+  });
+  const parts = seoulTimeFormatter.formatToParts(date);
   const hour = parts.find((part) => part.type === "hour")?.value;
   const minute = parts.find((part) => part.type === "minute")?.value;
   return hour && minute ? `${hour}:${minute}` : fallback;

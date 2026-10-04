@@ -6,6 +6,7 @@
  */
 import { isParallelMode } from "./cutover";
 import { dispatchScheduledDailyReport } from "./telegram-scheduler";
+import { dispatchVegetableNotification } from "./vegetable-notifications";
 import { listHaloBranches, readHaloState } from "./halo-store";
 import { readSettings, telegramCall } from "./telegram-service";
 import { flashText, homeReport } from "../core/home";
@@ -28,6 +29,9 @@ export async function runScheduledJobs(now = new Date()) {
     } catch (error) {
       results.push({ branchId: branch.id, ok: false, error: error instanceof Error ? error.message : "xato" });
     }
+    // Zaxira eslatmasi va savdo tahlili: eski saytda buni Google Sheets'ning har daqiqalik so'rovi
+    // ishga tushirar edi; o'z hostingda shu cron bajaradi (jadval ulanmagan bo'lsa ham).
+    try { await dispatchVegetableNotification(branch.id, now, true); } catch { /* keyingi ishga tushishda qayta uriniladi */ }
   }
   return { skipped: null, branches: results };
 }

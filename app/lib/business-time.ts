@@ -1,7 +1,11 @@
 const SEOUL_TIME_ZONE = "Asia/Seoul";
 
+// Building a formatter costs far more than using it, and these options never change:
+// one instance serves every call (payroll alone asks for the Seoul date of each shift).
+let seoulFormatter: Intl.DateTimeFormat | undefined;
+
 function parts(date = new Date()) {
-  const values = new Intl.DateTimeFormat("en-CA", {
+  seoulFormatter ||= new Intl.DateTimeFormat("en-CA", {
     timeZone: SEOUL_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
@@ -9,7 +13,8 @@ function parts(date = new Date()) {
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
-  }).formatToParts(date);
+  });
+  const values = seoulFormatter.formatToParts(date);
   const value = (type: Intl.DateTimeFormatPartTypes) => (
     values.find((entry) => entry.type === type)?.value || ""
   );

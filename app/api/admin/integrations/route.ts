@@ -13,7 +13,9 @@ import {
   saveIntegrationSettings,
   saveProductMapping,
 } from "../../../lib/integration-store";
-import { createGoogleSheetsAppsScript } from "../../../lib/google-sheets-export";
+import { buildGoogleSheetsExport, createGoogleSheetsAppsScript } from "../../../lib/google-sheets-export";
+import { readHaloState } from "../../../lib/halo-store";
+import { seoulBusinessDate } from "../../../lib/business-time";
 
 async function snapshot(branchId: string) {
   const [keys, settings, mappings, logs] = await Promise.all([
@@ -73,6 +75,20 @@ export async function POST(request: Request) {
         days: 365,
       });
       return Response.json({ ok: true, createdKey, googleSheetsScript, ...(await snapshot(branchId)) });
+    }
+    if (action === "check-google-sheets") {
+      // Jadval so'raydigan hisobotning o'zini shu yerda tayyorlab ko'ramiz: ulanmasa, sababi rahbarga ko'rinadi.
+      const to = seoulBusinessDate();
+      const from = new Date(Date.parse(`${to}T00:00:00.000Z`) - 364 * 86_400_000).toISOString().slice(0, 10);
+      const current = await readHaloState(branchId);
+      let check: { ok: boolean; from: string; to: string; sheets?: Array<{ name: string; rows: number }>; error?: string };
+      try {
+        const exported = buildGoogleSheetsExport(current.state, from, to);
+        check = { ok: true, from, to, sheets: exported.sheets.map((sheet) => ({ name: sheet.name, rows: sheet.rows.length })) };
+      } catch (error) {
+        check = { ok: false, from, to, error: error instanceof Error ? error.message.slice(0, 300) : "Noma’lum xato" };
+      }
+      return Response.json({ ok: true, check, ...(await snapshot(branchId)) });
     }
     if (action === "revoke-key") {
       await revokeApiKey(String(body.keyId || ""), branchId);

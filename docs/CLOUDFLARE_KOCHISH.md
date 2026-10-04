@@ -68,7 +68,11 @@ Parol o'zgartirilsa, barcha eski kirishlar avtomatik bekor bo'ladi.
 2. Eski saytdan zaxira (Integratsiyalar → zaxira yuklab olish) + D1 jadvallari eksporti.
 3. Yangi bazaga import → har bir filial uchun sotuv, qarz, ombor, kassa qoldiqlari
    eski sayt bilan wonma-won solishtiriladi.
-4. Google Sheets `Code.gs` → `endpoint` yangi manzilga o'zgartiriladi.
+4. Google Sheets: yangi saytda «Ulanishlar → Google Sheets» tugmasi yangi skript beradi (manzil va kalit ichida).
+   Parallel ishlash paytida u **yangi bo'sh jadvalga** qo'yiladi — eski jadval eski saytga ulangan holda qoladi
+   (eski saytning kunlik Telegram hisoboti o'sha jadvalning har daqiqalik so'rovi orqali yuboriladi).
+   Yangi saytda avtomatik xabarlarni jadval emas, Cloudflare cron yuboradi (to'liq o'tishdan keyin).
+   Jadval ulanmasa: o'sha oynada «Hisobotni tekshirish» va «Jadvalning oxirgi so'rovlari» sababni ko'rsatadi.
 5. Telegram bot webhook yangi manzilga qayta ulanadi (bot boshqa tizimga
    ulanganini ilova o'zi tekshiradi — bu himoya).
 6. Xodimlarga yangi manzil beriladi. Eski sayt faqat o'qish uchun zaxira bo'lib qoladi.

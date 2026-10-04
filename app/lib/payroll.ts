@@ -747,17 +747,21 @@ export function calculatePayroll(
   };
 }
 
-export function calculatePayrollForDate(
+/**
+ * One member's payroll for one month, split over that member's activity dates (date → won).
+ * `canonicalShifts` may hold other members' rows as well: every step below filters by member.
+ * The result does not depend on which day of the month is asked for, so a multi-day report
+ * can compute it once per member and month (see createPayrollDateAllocator).
+ */
+function payrollMonthAllocations(
   member: StaffMember,
-  shifts: WorkShift[],
+  canonicalShifts: WorkShift[],
+  conflictingIds: Set<string>,
   adjustments: PayrollAdjustment[],
   attendanceDays: AttendanceDay[],
-  date: string,
+  month: string,
 ) {
-  if (!cleanDate(date)) return 0;
-  const month = date.slice(0, 7);
-  const canonicalShifts = canonicalWorkShifts(shifts);
-  const conflictingIds = new Set(conflictingWorkShiftIds(canonicalShifts));
+  const allocations = new Map<string, number>();
   const memberMonthShifts = canonicalShifts.filter((shift) => (
     shift.staffId === member.id && shift.date.startsWith(`${month}-`)
   ));
@@ -772,7 +776,7 @@ export function calculatePayrollForDate(
     ...memberMonthAdjustments.map((entry) => entry.date),
     ...memberMonthAttendance.map((day) => day.date),
   ])].sort();
-  if (!activityDates.includes(date)) return 0;
+  if (!activityDates.length) return allocations;
 
   // Allocate every member's monthly gross pay across its activity dates with
   // cumulative rounding. This keeps daily reports additive: bonuses increase
@@ -781,7 +785,6 @@ export function calculatePayrollForDate(
   // payroll result down to the last won.
   let cumulativeGross = 0;
   let allocatedGross = 0;
-  const allocations = new Map<string, number>();
   for (const activityDate of activityDates) {
     const dateHasConflict = memberMonthShifts.some((shift) => (
       shift.date === activityDate && conflictingIds.has(shift.id)
@@ -818,7 +821,72 @@ export function calculatePayrollForDate(
       (allocations.get(reconciliationDate) || 0) + monthlyGross - allocatedGross,
     );
   }
-  return allocations.get(date) || 0;
+  return allocations;
+}
+
+export function calculatePayrollForDate(
+  member: StaffMember,
+  shifts: WorkShift[],
+  adjustments: PayrollAdjustment[],
+  attendanceDays: AttendanceDay[],
+  date: string,
+) {
+  if (!cleanDate(date)) return 0;
+  const canonicalShifts = canonicalWorkShifts(shifts);
+  const conflictingIds = new Set(conflictingWorkShiftIds(canonicalShifts));
+  return payrollMonthAllocations(
+    member,
+    canonicalShifts,
+    conflictingIds,
+    adjustments,
+    attendanceDays,
+    date.slice(0, 7),
+  ).get(date) || 0;
+}
+
+/**
+ * The same amounts as calculatePayrollForDate, for reports that ask about many dates over
+ * the same payroll rows (a year of daily reports). Shift dates and overlaps are resolved
+ * once, and each member's month is allocated once and then reused for every day of it.
+ * The arrays must not change while the returned function is in use.
+ */
+export function createPayrollDateAllocator(
+  shifts: WorkShift[],
+  adjustments: PayrollAdjustment[],
+  attendanceDays: AttendanceDay[],
+) {
+  const canonicalShifts = canonicalWorkShifts(shifts);
+  const conflictingIds = new Set(conflictingWorkShiftIds(canonicalShifts));
+  const shiftsByStaff = new Map<string, WorkShift[]>();
+  for (const shift of canonicalShifts) {
+    const list = shiftsByStaff.get(shift.staffId);
+    if (list) list.push(shift);
+    else shiftsByStaff.set(shift.staffId, [shift]);
+  }
+  // Keyed by the member object: two staff rows sharing an id are still paid by their own rates.
+  const months = new WeakMap<StaffMember, Map<string, Map<string, number>>>();
+  return (member: StaffMember, date: string) => {
+    if (!cleanDate(date)) return 0;
+    const month = date.slice(0, 7);
+    let memberMonths = months.get(member);
+    if (!memberMonths) {
+      memberMonths = new Map();
+      months.set(member, memberMonths);
+    }
+    let allocations = memberMonths.get(month);
+    if (!allocations) {
+      allocations = payrollMonthAllocations(
+        member,
+        shiftsByStaff.get(member.id) || [],
+        conflictingIds,
+        adjustments,
+        attendanceDays,
+        month,
+      );
+      memberMonths.set(month, allocations);
+    }
+    return allocations.get(date) || 0;
+  };
 }
 
 export function validPayrollState(

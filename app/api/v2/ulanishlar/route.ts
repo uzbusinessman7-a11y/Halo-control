@@ -56,19 +56,39 @@ function loadTelegram(){var box=document.getElementById('tg');
 function loadIntegrations(){
   req('/api/admin/integrations?branch='+encodeURIComponent(sel.value),'GET').then(function(x){SNAP=x.body||{};drawSheets();drawKeys()});
 }
-function drawSheets(){var box=document.getElementById('gs'),s=SNAP.settings||{},sheetKeys=(SNAP.keys||[]).filter(function(k){return k.active&&/Google Sheets/i.test(k.name)});
-  box.innerHTML='<div class="msg '+(sheetKeys.length?'ok':'warn')+'">'+(sheetKeys.length?'✓ Google Sheets kaliti bor'+(sheetKeys[0].lastUsedAt?' · oxirgi ulanish: '+esc(String(sheetKeys[0].lastUsedAt).slice(0,16).replace('T',' ')):' · hali ulanmagan'):'Google Sheets ulanmagan')+'</div>'
-    +'<ol class="hint" style="padding-left:18px;margin-top:12px"><li>Pastdagi tugmani bosing — tayyor skript chiqadi.</li><li>Google Sheets → Kengaytmalar → Apps Script → hamma matnni o‘chirib, skriptni joylang → Saqlash.</li><li>Jadvalni yangilang: tepada “HALO” menyusi chiqadi → “1 daqiqalik avtomatik yangilashni yoqish” (ruxsat bering). Shundan keyin jadval o‘zi yangilanib turadi.</li></ol>'
-    +'<button id="gsGo">'+(sheetKeys.length?'Yangi skript olish (eski kalit o‘chiriladi)':'Google Sheets’ni ulash')+'</button><div id="gsOut"></div>';
+function kst(iso){var d=new Date(iso);if(isNaN(d))return String(iso||'');return d.toLocaleString('en-GB',{timeZone:'Asia/Seoul',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',','')}
+function drawSheets(){var box=document.getElementById('gs'),sheetKeys=(SNAP.keys||[]).filter(function(k){return k.active&&/Google Sheets/i.test(k.name)});
+  var used=sheetKeys.filter(function(k){return k.lastUsedAt}).map(function(k){return k.lastUsedAt}).sort().pop();
+  var tries=(SNAP.logs||[]).filter(function(l){return String(l.endpoint||'').indexOf('google-sheets')>=0}).slice(0,5);
+  box.innerHTML='<div class="msg '+(used?'ok':'warn')+'">'+(used?'✓ Jadval ulangan · oxirgi so‘rov: '+esc(kst(used)):sheetKeys.length?'Skript olingan, lekin jadval hali bir marta ham so‘ramagan — pastdagi 4–6-qadamlarni bajaring.':'Google Sheets ulanmagan')+'</div>'
+    +(tries.length?'<details style="margin-top:10px"'+(tries[0].status===200?'':' open')+'><summary>Jadvalning oxirgi so‘rovlari</summary>'+tries.map(function(l){return '<div class="list-row"><div style="min-width:0"><b>'+(l.status===200?'✓':'✗ '+esc(l.status))+'</b> <small style="color:var(--muted)">'+esc(kst(l.createdAt))+'</small><br><small>'+esc(l.message||'')+'</small></div><span></span></div>'}).join('')+'</details>':'')
+    +'<ol class="hint" style="padding-left:18px;margin-top:12px;display:grid;gap:6px"><li><b>Kompyuterda</b> bajaring: telefondagi Google Sheets ilovasida «Apps Script» yo‘q.</li>'
+    +'<li>Eski sayt uchun ulangan jadvalga tegmang — <b>yangi bo‘sh jadval</b> oching (eski saytning kunlik hisoboti o‘sha eski jadval orqali ishlaydi). Har filialga alohida jadval.</li>'
+    +'<li>Pastdagi tugmani bosing — tayyor skript chiqadi. «Nusxalash» yoki «Faylni yuklash»ni bosing.</li>'
+    +'<li>Yangi jadvalda: <b>Kengaytmalar (Extensions) → Apps Script</b> → u yerdagi hamma matnni o‘chirib, skriptni joylang → 💾 Saqlash.</li>'
+    +'<li>Jadvalni yangilang (F5). Tepada <b>«HALO CONTROL»</b> menyusi chiqadi → «1 daqiqalik avtomatik yangilashni yoqish». Google ruxsat so‘raydi: akkauntni tanlang → «Advanced / Qo‘shimcha» → «Go to … (unsafe)» → «Allow / Ruxsat berish».</li>'
+    +'<li>Ruxsat bergach, o‘sha menyudan <b>yana bir marta</b> «1 daqiqalik avtomatik yangilashni yoqish»ni bosing. «HALO ULANDI» yozuvi chiqsa — tayyor, jadval o‘zi yangilanib turadi.</li></ol>'
+    +'<div class="row"><button id="gsGo">'+(sheetKeys.length?'Yangi skript olish (eski kalit o‘chiriladi)':'Google Sheets’ni ulash')+'</button><button class="ghost" id="gsCheck">🔎 Hisobotni tekshirish</button></div><div id="gsOut"></div>';
+  document.getElementById('gsCheck').addEventListener('click',function(){var btn=this,out=document.getElementById('gsOut');btn.disabled=true;note(out,true,'Tekshirilmoqda…');
+    req('/api/admin/integrations','POST',{action:'check-google-sheets',branchId:sel.value}).then(function(r){btn.disabled=false;var c=r.body.check;
+      if(!c){note(out,false,r.body.error||'Tekshirib bo‘lmadi. Sahifani yangilab qayta urinib ko‘ring.');return}
+      if(c.ok){var rows=(c.sheets||[]).reduce(function(s,x){return s+x.rows},0);note(out,true,'✓ Sayt tomoni ishlayapti: '+c.from+' — '+c.to+' hisoboti tayyorlandi ('+(c.sheets||[]).length+' ta oyna, '+rows.toLocaleString('en-US')+' qator). Jadval ulanmasa, yuqoridagi 4–6-qadamlarni tekshiring.')}
+      else note(out,false,'✗ Hisobot tayyorlanmadi: '+c.error+' — jadval ham shu sababli ololmaydi. Avval shu yozuvni tuzating.')})});
   document.getElementById('gsGo').addEventListener('click',function(){
-    if(sheetKeys.length&&!confirm('Eski Google Sheets kaliti o‘chiriladi va yangisi beriladi. Davom etasizmi?'))return;
+    if(sheetKeys.length&&!confirm('Eski Google Sheets kaliti o‘chiriladi va yangisi beriladi. Eski skript qo‘yilgan jadval (shu sayt uchun) ishlamay qoladi. Davom etasizmi?'))return;
     var btn=this;btn.disabled=true;
     var revoke=Promise.all(sheetKeys.map(function(k){return req('/api/admin/integrations','POST',{action:'revoke-key',keyId:k.id,branchId:sel.value})}));
     revoke.then(function(){return req('/api/admin/integrations','POST',{action:'setup-google-sheets',branchId:sel.value})}).then(function(r){btn.disabled=false;
       var out=document.getElementById('gsOut');if(!r.body.ok){note(out,false,r.body.error||'Bo‘lmadi.');return}
       SNAP=r.body;var script=r.body.googleSheetsScript||'';
-      out.innerHTML='<div class="msg ok" style="margin-top:12px">✓ Tayyor. Skriptni nusxalab Apps Script’ga joylang. Bu oyna yopilgach kalit qayta ko‘rinmaydi.</div><pre style="max-height:220px;overflow:auto;margin-top:10px">'+esc(script.slice(0,1500))+(script.length>1500?'\\n…':'')+'</pre><button id="gsCopy">📋 Skriptni nusxalash</button><div id="gsM"></div>';
-      document.getElementById('gsCopy').addEventListener('click',function(){copy(script,document.getElementById('gsM'))});drawKeys()});
+      out.innerHTML='<div class="msg ok" style="margin-top:12px">✓ Skript tayyor ('+script.length.toLocaleString('en-US')+' belgi). To‘liq nusxalab Apps Script’ga joylang. Bu oyna yopilgach kalit qayta ko‘rinmaydi.</div>'
+        +'<textarea id="gsTxt" readonly rows="6" spellcheck="false" style="width:100%;margin-top:10px;font:12px/1.4 ui-monospace,Menlo,monospace"></textarea>'
+        +'<div class="row" style="margin-top:8px"><button id="gsCopy">📋 Skriptni nusxalash</button><button class="ghost" id="gsDl">↓ Faylni yuklash (Code.gs)</button></div><div id="gsM"></div>';
+      var txt=document.getElementById('gsTxt');txt.value=script;txt.addEventListener('focus',function(){txt.select()});
+      document.getElementById('gsCopy').addEventListener('click',function(){var m=document.getElementById('gsM'),ok=function(){note(m,true,'✓ Nusxa olindi — endi Apps Script’ga joylang (Ctrl+V).')},manual=function(){txt.focus();txt.select();var done=false;try{done=document.execCommand('copy')}catch(e){}if(done)ok();else note(m,false,'Matn belgilandi — Ctrl+C (Mac: ⌘C) bosing yoki «Faylni yuklash»dan foydalaning.')};
+        if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(script).then(ok,manual);else manual()});
+      document.getElementById('gsDl').addEventListener('click',function(){var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([script],{type:'text/plain;charset=utf-8'}));a.download='HALO-Code.gs';document.body.appendChild(a);a.click();a.remove();note(document.getElementById('gsM'),true,'✓ Fayl yuklandi. Uni matn muharririda ochib, hammasini nusxalang va Apps Script’ga joylang.')});
+      drawKeys()});
   });
 }
 function drawKeys(){var box=document.getElementById('keys'),keys=(SNAP.keys||[]);
