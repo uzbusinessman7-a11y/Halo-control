@@ -161,7 +161,8 @@ function rawQty(l){var q=num(l.quantity),y=num(l.yieldPct);return y>0&&y<100?Mat
 function drawEditor(){
   var box=document.getElementById('rec'),byId={};RD.products.forEach(function(p){byId[p.id]=p});
   var c=editorCost(),price=num(EDIT.salePrice),fc=price>0&&!c.missing?Math.round(c.total/price*1000)/10:null,sug=c.total>0?Math.ceil(c.total/RD.target/100)*100:null;
-  box.innerHTML='<section class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">'+(EDIT.id?'Taomni tahrirlash':'Yangi taom')+'</h2><button class="ghost" id="eBack">← Ro‘yxat</button></div>'
+  box.innerHTML='<section class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">'+(EDIT.id?'Taomni tahrirlash':'Yangi taom')+'</h2><div class="row" style="gap:8px">'+(EDIT.id?'<button class="ghost" id="eCopy">📄 Nusxa olish</button>':'')+'<button class="ghost" id="eBack">← Ro‘yxat</button></div></div>'
+    +(EDIT.copyOf?'<div class="msg warn" style="margin-top:12px">Bu «'+esc(EDIT.copyOf)+'» taomining nusxasi — hali saqlanmagan. Nomini (kerak bo‘lsa tarkibi va narxini) o‘zgartirib, “Saqlash”ni bosing. Asl taom o‘zgarmaydi.</div>':'')
     +'<label class="field" style="margin-top:12px"><span>Taom nomi</span><input id="eName" maxlength="120" value="'+esc(EDIT.name)+'"></label>'
     +(RD.categories.length?'<label class="field"><span>Kategoriya</span><select id="eCat">'+(EDIT.id?'':'<option value="">— avtomatik (nomiga qarab) —</option>')+RD.categories.map(function(k){return '<option value="'+esc(k.id)+'"'+(k.id===EDIT.categoryId?' selected':'')+'>'+esc(k.name)+'</option>'}).join('')+'</select></label>':'')
     +'</section>'
@@ -191,6 +192,7 @@ function drawEditor(){
   var cat=document.getElementById('eCat');if(cat)cat.addEventListener('change',function(){EDIT.categoryId=this.value});
   var pr=document.getElementById('ePrice');pr.addEventListener('input',function(){var v=money(pr.value);EDIT.salePrice=v;pr.value=v?v.toLocaleString('en-US'):'';refreshTotals()});
   document.getElementById('eBack').addEventListener('click',function(){EDIT=null;drawRecipes()});
+  var cp=document.getElementById('eCopy');if(cp)cp.addEventListener('click',copyEditor);
   document.getElementById('eSave').addEventListener('click',saveEditor);
   bindPriceHelper();
 }
@@ -217,6 +219,13 @@ function bindPriceHelper(){
   document.querySelectorAll('[data-pcset]').forEach(function(b){b.addEventListener('click',function(){EDIT.salePrice=Number(b.dataset.pcset);var y=window.scrollY;drawEditor();window.scrollTo(0,y);var pr=document.getElementById('ePrice');if(pr){pr.focus();pr.scrollIntoView({block:'center',behavior:'smooth'})}})});
 }
 ${PRICE_CALC_JS}
+/* Taomdan nusxa: tarkib, qo'shimcha xarajat, kategoriya va narxlar ko'chadi; yangi taom sifatida ochiladi (saqlanmaguncha hech narsa yozilmaydi). */
+function copyEditor(){
+  var from=EDIT.name;
+  EDIT={id:'',op:uuid(),name:from+' (nusxa)',copyOf:from,categoryId:EDIT.categoryId,salePrice:EDIT.salePrice,delivery:Object.assign({},EDIT.delivery),
+    lines:EDIT.lines.map(function(l){return {inventoryId:l.inventoryId,quantity:l.quantity,yieldPct:l.yieldPct}}),extras:EDIT.extras.map(function(e){return {name:e.name,amount:e.amount}})};
+  drawEditor();window.scrollTo({top:0,behavior:'smooth'});var n=document.getElementById('eName');if(n){n.focus();n.select()}
+}
 var refreshTimer=null;
 function refreshTotals(){clearTimeout(refreshTimer);refreshTimer=setTimeout(function(){var a=document.activeElement,k=a&&(a.dataset.lf?'[data-li="'+a.dataset.li+'"][data-lf="'+a.dataset.lf+'"]':a.dataset.xf?'[data-xi="'+a.dataset.xi+'"][data-xf="'+a.dataset.xf+'"]':a.id?'#'+a.id:null),pos=a&&a.selectionStart;var y=window.scrollY;drawEditor();window.scrollTo(0,y);if(k){var n=document.querySelector(k);if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}},500)}
 function saveEditor(){
