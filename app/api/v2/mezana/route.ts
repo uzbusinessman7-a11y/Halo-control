@@ -25,7 +25,7 @@ const seoulToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seou
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const clean = (value: unknown, max: number) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 const rows = (value: unknown): Row[] => (Array.isArray(value) ? value.filter((row): row is Row => Boolean(row) && typeof row === "object") : []);
-class MezanaError extends Error {
+export class MezanaError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
 }
 

@@ -1,7 +1,7 @@
 import { AssistantError, koreaDate, rows } from './assistant-engine.ts';
 import { localReadIntent } from './assistant-read-intent.ts';
 import { assistantServiceError } from './assistant-service-error.ts';
-declare global { var __HALO_ASSISTANT_AI__: {key:string;model:string}|undefined; }
+declare global { var __HALO_ASSISTANT_AI__: {key:string;model:string}|undefined; var __HALO_SELF_HOSTED__: boolean|undefined; }
 const nullableString={type:['string','null']};
 const nullableNumber={type:['number','null']};
 export const intentSchema={type:'object',additionalProperties:false,required:['kind','question','date','dateTo','supplierName','accountName','paidAmount','amount','invoiceNumber','query','lines'],properties:{
@@ -19,7 +19,8 @@ export async function understandCommand(text:string,state:Record<string,unknown>
  if(/^\/?qarzlar$/i.test(text.trim()))return {kind:'debts'};
  if(/^\/?ombor$/i.test(text.trim()))return {kind:'stock'};
  const ai=globalThis.__HALO_ASSISTANT_AI__;
- if(!ai?.key)throw new AssistantError('AI hali ulanmagan. Hozir «Hisobot», «Qarzlar», «Ombor» ishlaydi. Erkin buyruqlar uchun AI ulanishini yoqing.');
+ // Yangi saytda bot tugmalar bilan ishlaydi (app/core/bot.ts): AI yo'q bo'lsa, tugmalarga yo'naltiramiz.
+ if(!ai?.key)throw new AssistantError(globalThis.__HALO_SELF_HOSTED__===true?'Bu matnni tushunmadim. Pastdagi tugmalardan foydalaning: 📊 Bugun, 💰 Kassa, Qarzlar, Ombor, 🤝 MEZANA, ➕ Xarajat, ➕ MEZANA, ➕ Qarz to‘lovi. Tugmalar chiqmasa /start yozing. (Erkin matnli buyruqlar uchun AI ulanmagan.)':'AI hali ulanmagan. Hozir «Hisobot», «Qarzlar», «Ombor» ishlaydi. Erkin buyruqlar uchun AI ulanishini yoqing.');
  const catalog={inventory:rows(state.inventory).map(i=>({name:i.name,unit:i.unit})),suppliers:rows(state.suppliers).map(s=>({name:s.name})),accounts:rows(state.accounts).map(a=>({name:a.name}))};
  const response=await fetch('https://api.openai.com/v1/responses',{
   method:'POST',headers:{Authorization:`Bearer ${ai.key}`,'Content-Type':'application/json'},signal:AbortSignal.timeout(25000),

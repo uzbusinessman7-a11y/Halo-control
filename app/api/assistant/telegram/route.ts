@@ -2,6 +2,8 @@ import { readHaloState } from '../../../lib/halo-store';
 import { buildReportExport, exportKinds, validateExport } from '../../../lib/report-export';
 import { AssistantError } from '../../../lib/assistant-engine';
 import { assistantDb, decideCommand, getAssistantConfig, hashSecret, prepareCommand, telegramApi } from '../../../lib/assistant-store';
+import { handleBotUpdate } from '../../../core/bot';
+declare global { var __HALO_SELF_HOSTED__: boolean | undefined; }
 export async function POST(request:Request){
  try{
   const c=await getAssistantConfig();const secret=request.headers.get('x-telegram-bot-api-secret-token')||'';
@@ -13,18 +15,23 @@ export async function POST(request:Request){
   if(!m||m.chat?.type!=='private'||from?.is_bot||!Number.isSafeInteger(from?.id)||String(m.chat.id)!==String(from.id))return Response.json({ok:true});
   const chat=String(from.id);const text=String(m.text||'').trim();const db=assistantDb();
   const send=(text:string,extra:Record<string,unknown>={})=>telegramApi(c.bot_token,'sendMessage',{chat_id:chat,text,...extra});
+  // Yo'riqnoma matnida ulash oynasining joyi: yangi saytda «Ulanishlar → Yordamchi bot», eski sahifada «HALO yordamchi».
+  const where=globalThis.__HALO_SELF_HOSTED__===true?'HALO Control → ⋯ → Ulanishlar → Yordamchi bot':'HALO Control → HALO yordamchi';
   const pairCommand=text.match(/^\/start(?:@[A-Za-z0-9_]+)?\s+([a-f0-9]{32})$/i);
   if(u.message&&pairCommand){
    const hash=await hashSecret(pairCommand[1].toLowerCase());
    if(c.pair_hash===hash&&c.pair_expires>Date.now()){
     const claimed=await db.prepare("UPDATE halo_assistant_config SET candidate_id=?,candidate_name=?,pair_hash='' WHERE id='main' AND pair_hash=? AND pair_expires>?").bind(chat,[from.first_name,from.last_name,from.username?`@${from.username}`:''].filter(Boolean).join(' ').slice(0,150),hash,Date.now()).run();
-    if(claimed.meta.changes)await send('HALO Control → HALO yordamchi → Telegram ulanishiga qaytib, akkauntingizni tasdiqlang. Hozircha hisoblar ochilmagan.');
-   }else{await send('Bu bog‘lash havolasi eskirgan yoki yangisi yaratilgan. HALO yordamchida «O‘z Telegramimni bog‘lash»ni bosing va eng oxirgi havolani oching yoki shu yerda ko‘rsatilgan /start buyrug‘ini to‘liq yuboring.');}
+    if(claimed.meta.changes)await send(where+' oynasiga qaytib, akkauntingizni tasdiqlang. Hozircha hisoblar ochilmagan.');
+   }else{await send('Bu bog‘lash havolasi eskirgan yoki yangisi yaratilgan. '+where+' oynasida «O‘z Telegramimni bog‘lash»ni bosing va eng oxirgi havolani oching yoki shu yerda ko‘rsatilgan /start buyrug‘ini to‘liq yuboring.');}
    return Response.json({ok:true});
   }
-  if(u.message&&!c.enabled&&/^\/start(?:@[A-Za-z0-9_]+)?$/i.test(text)){await send('Akkaunt hali bog‘lanmagan. HALO Control → HALO yordamchi → «O‘z Telegramimni bog‘lash»ni bosing. Chiqqan Telegram havolasini oching yoki bog‘lash buyrug‘ini to‘liq nusxalab shu botga yuboring. Keyin HALO’da akkauntingizni tasdiqlang.');return Response.json({ok:true});}
+  if(u.message&&!c.enabled&&/^\/start(?:@[A-Za-z0-9_]+)?$/i.test(text)){await send('Akkaunt hali bog‘lanmagan. '+where+' → «O‘z Telegramimni bog‘lash»ni bosing. Chiqqan Telegram havolasini oching yoki bog‘lash buyrug‘ini to‘liq nusxalab shu botga yuboring. Keyin HALO’da akkauntingizni tasdiqlang.');return Response.json({ok:true});}
   if(!c.enabled||c.owner_id!==chat)return Response.json({ok:true});
   const actor=`tg:${chat}`;
+  // Yangi sayt: tugmali ma'lumot va kiritmalar (AI kerak emas) — app/core/bot.ts. U javob bermagan buyruqlar
+  // (Qarzlar, Ombor, Eksport, erkin matn, eski Tasdiqlash/Bekor tugmalari) pastdagi avvalgi yo'ldan o'tadi.
+  if(globalThis.__HALO_SELF_HOSTED__===true&&await handleBotUpdate({config:c,chat,actor,text,update:u,api:(method,body)=>telegramApi(c.bot_token,method,body)}))return Response.json({ok:true});
   if(u.message && /^(?:eksport|export|\/export)(?:\s|$)/i.test(text)) {
    const parts=text.split(/\s+/);const aliases:Record<string,string>={qarzlar:'suppliers',tolovlar:'transactions',ombor:'inventory',kirimlar:'movements',savdo:'sales',xarajatlar:'expenses'};const kind=aliases[String(parts[1]||'').toLowerCase()]||parts[1];
    if(!kind){await send('Qaysi hisobot kerak? Tugmani bosing. Sana bilan olish: /export savdo 2026-09-01 2026-09-30. Sana yozilmasa barcha yozuvlar olinadi. Qarz va ombor qoldig‘i har doim hozirgi holatni ko‘rsatadi.',{reply_markup:{keyboard:Object.keys(aliases).map(k=>[{text:'Eksport '+k}]),resize_keyboard:true}});return Response.json({ok:true});}
