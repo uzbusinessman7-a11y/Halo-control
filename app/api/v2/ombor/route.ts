@@ -7,6 +7,7 @@ import { VegetableExpenseError } from "../../../lib/vegetable-expenses";
 import { InventoryCountingError, saveAccountingCount } from "../../../lib/inventory-counting";
 import { LedgerError } from "../../../core/ledger";
 import { runStockBridge } from "../../../core/stock-bridge";
+import { applyOpeningCounts, resetStockToZero, STOCK_ZERO_WORD, StockResetError, stockZeroPreview } from "../../../core/stock-reset";
 import { avtReport } from "../../../core/stock";
 import type { D1Like } from "../../../lib/full-migration";
 import { shell } from "../../../core/ui-shell";
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
     const branchId = String(body.branchId || "main");
     const today = seoulToday();
     const extra = (st: Record<string, unknown>) => ({
-      archived: archivedProducts(st), categories: categoryList(st, "inventory"),
+      archived: archivedProducts(st), categories: categoryList(st, "inventory"), zero: stockZeroPreview(st),
       suppliers: (Array.isArray(st.suppliers) ? st.suppliers as Array<Record<string, unknown>> : []).map((s) => ({ id: String(s.id), name: String(s.name || s.id) })).sort((a, b) => a.name.localeCompare(b.name)),
     });
     if (body.action === "products") {
@@ -62,9 +63,21 @@ export async function POST(request: Request) {
       return json({ ok: true, today, ...mutation.result, products: productList(mutation.state as Record<string, unknown>, today), ...extra(mutation.state as Record<string, unknown>) });
     }
     if (body.action === "count") {
-      const mutation = await mutateHaloState((state) => saveAccountingCount(state as Record<string, unknown>, { counts: body.counts, date: today, operationId: body.operationId }, { id: "owner", name: "Rahbar" }),
-        5, branchId, "Rahbar", "Ombor sanog‘i saqlandi", "Ombor (yangi)");
-      return json({ ok: true, today, ...mutation.result, products: productList(mutation.state as Record<string, unknown>, today) });
+      const mutation = await mutateHaloState((state) => {
+        const out = saveAccountingCount(state as Record<string, unknown>, { counts: body.counts, date: today, operationId: body.operationId }, { id: "owner", name: "Rahbar" });
+        // Ombor nolga tushirilgandan keyingi birinchi sanoq — boshlang'ich qoldiq (ortiqcha/kamomad emas).
+        const marked = applyOpeningCounts(state as Record<string, unknown>, out.state as Record<string, unknown>, String(body.operationId || ""));
+        return { state: marked.state as typeof state, result: { ...out.result, opening: marked.opening } };
+      }, 5, branchId, "Rahbar", "Ombor sanog‘i saqlandi", "Ombor (yangi)");
+      return json({ ok: true, today, ...mutation.result, products: productList(mutation.state as Record<string, unknown>, today), zero: stockZeroPreview(mutation.state as Record<string, unknown>) });
+    }
+    if (body.action === "zeroStock") {
+      // Faqat qoldiq 0 bo'ladi: narx, retsept, menyu, savdo, kassa, qarz va maoshga tegilmaydi (core/stock-reset.ts).
+      const mutation = await mutateHaloState((state) => {
+        const out = resetStockToZero(state as Record<string, unknown>, body, today);
+        return { state: out.state as typeof state, result: out.result };
+      }, 5, branchId, "Rahbar", "Ombor nolga tushirildi — boshlang‘ich sanoq oldidan", "Ombor (yangi)");
+      return json({ ok: true, today, ...mutation.result, products: productList(mutation.state as Record<string, unknown>, today), ...extra(mutation.state as Record<string, unknown>) });
     }
     const to = String(body.to || today);
     const from = String(body.from || new Date(Date.parse(`${today}T00:00:00Z`) - 30 * 86_400_000).toISOString().slice(0, 10));
@@ -74,7 +87,7 @@ export async function POST(request: Request) {
     const avt = await avtReport(database(), scope, from, to);
     return json({ ok: true, from, to, bridge, avt });
   } catch (error) {
-    if (error instanceof CatalogError || error instanceof InventoryCountingError || error instanceof InventoryCatalogError || error instanceof VegetableExpenseError) return json({ error: error.message }, (error as { status?: number }).status || 400);
+    if (error instanceof CatalogError || error instanceof StockResetError || error instanceof InventoryCountingError || error instanceof InventoryCatalogError || error instanceof VegetableExpenseError) return json({ error: error.message }, (error as { status?: number }).status || 400);
     if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     if (error instanceof LedgerError || (error instanceof Error && /filial/i.test(error.message))) return json({ error: error.message }, 400);
     return json({ error: "Xatolik yuz berdi." }, 500);
@@ -125,14 +138,14 @@ function load(){
 }
 document.getElementById('go').addEventListener('click',load);sel.addEventListener('change',load);load();
 /* ---------- Mahsulotlar va sanoq ---------- */
-var PRODUCTS=[],ARCH=[],SUPS=[],CATS=[],CAT='',OTAB='list',Q='',CNT={},OPID='';
+var PRODUCTS=[],ARCH=[],SUPS=[],CATS=[],CAT='',OTAB='list',Q='',CNT={},OPID='',ZERO=null,ZOP='',ZWORD=${JSON.stringify(STOCK_ZERO_WORD)};
 function uuid(){return crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16)})}
 function post(b){return fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json().then(function(j){return {status:r.status,body:j}})}).catch(function(){return {status:0,body:{error:'Internet aloqasini tekshiring.'}}})}
 function showTab(t){OTAB=t;document.querySelectorAll('[data-o]').forEach(function(b){b.className=b.dataset.o===t?'':'ghost'});
   document.getElementById('oList').style.display=t==='list'?'grid':'none';document.getElementById('oCount').style.display=t==='count'?'grid':'none';document.getElementById('oAvt').style.display=t==='avt'?'grid':'none';
   if(t==='list')drawList();if(t==='count'){OPID=uuid();CNT={};drawCount()}}
 document.querySelectorAll('[data-o]').forEach(function(b){b.addEventListener('click',function(){showTab(b.dataset.o)})});
-function loadProducts(){post({action:'products',branchId:sel.value}).then(function(x){if(!x.body.ok){document.getElementById('oList').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}PRODUCTS=x.body.products;ARCH=x.body.archived||[];SUPS=x.body.suppliers||[];CATS=x.body.categories||[];if(CAT&&!CATS.some(function(c){return c.id===CAT}))CAT='';if(OTAB==='list')drawList();if(OTAB==='count')drawCount()})}
+function loadProducts(){post({action:'products',branchId:sel.value}).then(function(x){if(!x.body.ok){document.getElementById('oList').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}PRODUCTS=x.body.products;ARCH=x.body.archived||[];SUPS=x.body.suppliers||[];CATS=x.body.categories||[];ZERO=x.body.zero||null;if(CAT&&!CATS.some(function(c){return c.id===CAT}))CAT='';if(OTAB==='list')drawList();if(OTAB==='count')drawCount()})}
 function catOf(id){return CATS.find(function(c){return c.id===id})||{name:'',fallback:false}}
 function prodRow(p,showCat){var quick=catOf(p.categoryId).fallback&&CAT===p.categoryId;
   return '<div class="item" data-edit="'+esc(p.id)+'" style="cursor:pointer"><b>'+esc(p.name)+(p.low?'<span class="tag bad">kam qoldi</span>':'')+(p.vegetable?'<span class="tag warn">xarajat sifatida</span>':'')+'</b><span class="v'+(p.low?' bad':'')+'">'+(p.vegetable?'—':qty(p.stock,p.unit))+'</span>'
@@ -211,9 +224,12 @@ function productForm(p){
 function drawCount(){
   var box=document.getElementById('oCount'),list=PRODUCTS.filter(function(p){return !p.vegetable});
   var filled=Object.keys(CNT).filter(function(k){return CNT[k]!==''}).length;
-  box.innerHTML='<section class="card"><h2>Bugungi sanoq</h2><p class="hint">Tortib yoki sanab, haqiqiy qoldiqni yozing. Hamma mahsulotni birdan sanash shart emas. Saqlangach, farq ombor tuzatishi bo‘lib yoziladi va “Yo‘qotish nazorati”da ko‘rinadi.</p>'
-    +(function(){var row=function(p){return '<div class="list-row" style="grid-template-columns:1fr minmax(110px,150px)"><div><b>'+esc(p.name)+'</b><br><small style="color:var(--muted)">'+esc(p.unit)+(p.packageName&&p.unitsPerPackage>1?' · 1 '+esc(p.packageName)+' = '+p.unitsPerPackage+' '+esc(p.unit):'')+'</small></div><input data-c="'+esc(p.id)+'" inputmode="decimal" placeholder="'+esc(p.unit)+'" value="'+esc(CNT[p.id]||'')+'" style="text-align:right;font-weight:700;width:100%"></div>'};return CATS.map(function(c){var items=list.filter(function(p){return p.categoryId===c.id});return items.length?'<div class="cat-head">'+esc(c.name)+'</div>'+items.map(row).join(''):''}).join('')+list.filter(function(p){return !CATS.some(function(c){return c.id===p.categoryId})}).map(row).join('')})()
-    +'</section><section class="card sticky-total" style="position:sticky;bottom:calc(76px + env(safe-area-inset-bottom))"><div class="row" style="justify-content:space-between"><span><b id="cN">'+filled+'</b> ta mahsulot sanaldi</span><button id="cSave">Sanoqni saqlash</button></div><div id="cMsg"></div></section>';
+  var wait=list.filter(function(p){return p.openingPending}).length;
+  box.innerHTML='<div id="zDone"></div><section class="card"><h2>Bugungi sanoq</h2><p class="hint">Tortib yoki sanab, haqiqiy qoldiqni yozing. Hamma mahsulotni birdan sanash shart emas. Saqlangach, farq ombor tuzatishi bo‘lib yoziladi va “Yo‘qotish nazorati”da ko‘rinadi.</p>'
+    +(wait?'<div class="msg warn" style="margin-bottom:10px">Ombor nolga tushirilgan: <b>'+wait+'</b> ta mahsulot boshlang‘ich sanoqni kutyapti. Ularga yozgan miqdoringiz <b>boshlang‘ich qoldiq</b> bo‘ladi — ortiqcha yoki kamomad hisoblanmaydi.</div>':'')
+    +(function(){var row=function(p){return '<div class="list-row" style="grid-template-columns:1fr minmax(110px,150px)"><div><b>'+esc(p.name)+'</b>'+(p.openingPending?'<span class="tag warn">boshlang‘ich</span>':'')+'<br><small style="color:var(--muted)">'+esc(p.unit)+(p.packageName&&p.unitsPerPackage>1?' · 1 '+esc(p.packageName)+' = '+p.unitsPerPackage+' '+esc(p.unit):'')+'</small></div><input data-c="'+esc(p.id)+'" inputmode="decimal" placeholder="'+esc(p.unit)+'" value="'+esc(CNT[p.id]||'')+'" style="text-align:right;font-weight:700;width:100%"></div>'};return CATS.map(function(c){var items=list.filter(function(p){return p.categoryId===c.id});return items.length?'<div class="cat-head">'+esc(c.name)+'</div>'+items.map(row).join(''):''}).join('')+list.filter(function(p){return !CATS.some(function(c){return c.id===p.categoryId})}).map(row).join('')})()
+    +'</section><section class="card sticky-total" style="position:sticky;bottom:calc(76px + env(safe-area-inset-bottom))"><div class="row" style="justify-content:space-between"><span><b id="cN">'+filled+'</b> ta mahsulot sanaldi</span><button id="cSave">Sanoqni saqlash</button></div><div id="cMsg"></div></section>'+zeroBox();
+  bindZero();
   box.querySelectorAll('[data-c]').forEach(function(i){i.addEventListener('input',function(){CNT[i.dataset.c]=i.value.replace(',','.').replace(/[^0-9.]/g,'');document.getElementById('cN').textContent=Object.keys(CNT).filter(function(k){return CNT[k]!==''}).length})});
   document.getElementById('cSave').addEventListener('click',function(){
     var counts=Object.keys(CNT).filter(function(k){return CNT[k]!==''}).map(function(k){return {inventoryId:k,actualStock:Number(CNT[k])}});
@@ -223,11 +239,32 @@ function drawCount(){
     post({action:'count',branchId:sel.value,operationId:OPID,counts:counts}).then(function(x){btn.disabled=false;
       if(!x.body.ok){msg.innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}
       var adj=(x.body.adjustments||[]).filter(function(a){return Math.abs(a.quantity)>0.000001});
-      PRODUCTS=x.body.products;CNT={};OPID=uuid();drawCount();
-      document.getElementById('cMsg').innerHTML='<div class="msg '+(adj.length?'warn':'ok')+'">'+(adj.length?'Saqlandi. Farq chiqqan mahsulotlar: '+adj.map(function(a){var p=PRODUCTS.find(function(q){return q.id===a.inventoryId});return esc(p?p.name:a.inventoryId)+' '+qty(a.quantity,p?p.unit:'')}).join(', '):'✓ Saqlandi — hamma qoldiq mos')+'</div>'});
+      var open=x.body.opening||[];adj=adj.filter(function(a){return open.indexOf(a.inventoryId)<0});
+      PRODUCTS=x.body.products;ZERO=x.body.zero||ZERO;CNT={};OPID=uuid();drawCount();
+      document.getElementById('cMsg').innerHTML=(open.length?'<div class="msg ok">✓ Boshlang‘ich qoldiq yozildi: '+open.length+' ta mahsulot</div>':'')
+        +(adj.length?'<div class="msg warn">Saqlandi. Farq chiqqan mahsulotlar: '+adj.map(function(a){var p=PRODUCTS.find(function(q){return q.id===a.inventoryId});return esc(p?p.name:a.inventoryId)+' '+qty(a.quantity,p?p.unit:'')}).join(', ')+'</div>':(open.length?'':'<div class="msg ok">✓ Saqlandi — hamma qoldiq mos</div>'))});
   });
 }
-sel.addEventListener('change',loadProducts);loadProducts();
+/* ---------- Omborni nolga tushirish (boshlang'ich sanoq oldidan) ---------- */
+function zeroBox(){var z=ZERO||{items:0,negative:0,value:0,total:0,pending:0,last:null},br=sel.options[sel.selectedIndex]?sel.options[sel.selectedIndex].text:'';
+  return '<section class="card"><details id="zBox"><summary style="color:var(--bad);font-weight:700;font-size:15px">⚠️ Omborni nolga tushirish</summary>'
+    +'<p class="hint" style="margin-top:10px">Menyu va retseptlar tayyor bo‘lgach bir marta bosiladi: hamma mahsulot qoldig‘i <b>0</b> bo‘ladi, keyin omborni sanab ishni boshlaysiz. Birinchi sanoq boshlang‘ich qoldiq bo‘lib yoziladi.</p>'
+    +'<div class="msg ok">O‘zgarmaydi: mahsulot narxlari, qadoq, minimum, kategoriyalar, retseptlar, menyu, savdo, kassa, qarz, maosh va eski tarix.</div>'
+    +'<div class="msg warn">Filial: <b>'+esc(br)+'</b> · '+(z.items?'<b>'+z.items+'</b> ta mahsulot qoldig‘i 0 bo‘ladi'+(z.negative?' (shundan '+z.negative+' tasi manfiy)':'')+' · hozirgi ombor qiymati '+won(z.value):'hozir hamma qoldiq 0 — bosilsa, faqat keyingi sanoq boshlang‘ich qoldiq bo‘lib yoziladi')+'</div>'
+    +(z.last?'<p class="hint" style="margin-top:8px">Oxirgi marta nolga tushirilgan: '+esc(z.last.date)+' · '+z.last.items+' ta mahsulot · '+won(z.last.value)+'</p>':'')
+    +'<label class="field" style="margin-top:12px"><span>Tasdiqlash uchun '+ZWORD+' deb yozing</span><input id="zWord" autocomplete="off" autocapitalize="characters" maxlength="10" placeholder="'+ZWORD+'"></label>'
+    +'<button id="zGo" class="block" style="background:var(--bad);color:#fff">Omborni nolga tushirish</button><div id="zMsg"></div></details></section>'}
+function bindZero(){var go=document.getElementById('zGo');if(!go)return;if(!ZOP)ZOP=uuid();
+  go.addEventListener('click',function(){var msg=document.getElementById('zMsg'),word=document.getElementById('zWord').value.trim().toUpperCase();
+    if(word!==ZWORD){msg.innerHTML='<div class="msg bad">Tasdiqlash uchun '+ZWORD+' deb yozing.</div>';return}
+    go.disabled=true;msg.innerHTML='<p class="hint">Bajarilmoqda…</p>';
+    post({action:'zeroStock',branchId:sel.value,operationId:ZOP,confirm:word}).then(function(x){go.disabled=false;
+      if(!x.body.ok){msg.innerHTML='<div class="msg bad">'+esc(x.body.error||'Bo‘lmadi. Qayta urinib ko‘ring.')+'</div>';return}
+      PRODUCTS=x.body.products;ARCH=x.body.archived||[];ZERO=x.body.zero||null;CNT={};OPID=uuid();ZOP=uuid();drawCount();
+      document.getElementById('zDone').innerHTML='<div class="msg ok">✓ Ombor nolga tushirildi: '+(x.body.items||0)+' ta mahsulot qoldig‘i 0 bo‘ldi. Endi omborni sanang — pastda miqdorlarni yozib, «Sanoqni saqlash»ni bosing.</div>';
+      window.scrollTo(0,0)})});
+}
+sel.addEventListener('change',function(){ZOP='';loadProducts()});loadProducts();
 
 `,
   });

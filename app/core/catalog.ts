@@ -18,6 +18,8 @@ const nameKey = (value: unknown) => clean(value, 100).toLocaleLowerCase().replac
 export interface ProductRow {
   id: string; name: string; unit: string; stock: number; minStock: number; unitCost: number; value: number;
   packageName: string; unitsPerPackage: number; vegetable: boolean; low: boolean; lastReceipt: string | null; movements: number; supplierId: string; categoryId: string;
+  /** Ombor nolga tushirilgan, boshlang'ich sanoq hali kiritilmagan. */
+  openingPending: boolean;
 }
 
 export function productList(state: Row, today: string): ProductRow[] {
@@ -42,6 +44,7 @@ export function productList(state: Row, today: string): ProductRow[] {
         packageName: String(item.packageName || ""), unitsPerPackage: Number(item.unitsPerPackage) || 0,
         vegetable, low: !vegetable && minStock > 0 && stock <= minStock,
         lastReceipt: lastReceipt.get(String(item.id)) || null, movements: count.get(String(item.id)) || 0, supplierId: String(item.supplierId || ""), categoryId: categoryIdOf(state, "inventory", item),
+        openingPending: !vegetable && item.openingCountPending === true,
       };
     })
     .sort((left, right) => Number(right.low) - Number(left.low) || left.name.localeCompare(right.name));

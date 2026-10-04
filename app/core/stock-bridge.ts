@@ -30,6 +30,8 @@ export function moveKindOf(movement: Row): StockMoveKind {
   if (movement.type === "receipt") return "receipt";
   if (movement.type === "sale") return "sale";
   if (movement.type === "waste") return "waste";
+  // Nolga tushirilgandan keyingi birinchi sanoq — boshlang'ich qoldiq: ortiqcha/kamomad emas (core/stock-reset.ts).
+  if (movement.openingBalance === true) return "adjustment";
   if (String(movement.referenceId || "").startsWith("inventory-count:")) return "count";
   return "adjustment";
 }
