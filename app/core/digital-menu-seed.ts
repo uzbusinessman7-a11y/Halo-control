@@ -1,10 +1,12 @@
 /**
  * HALO monitor menyusi — boshlang'ich ma'lumot.
  * Manba: ChatGPT Sites'dagi eski digital menyu saytining 2026-10-04 dagi /api/menu javobi
- * (docs/digital-menyu/menu-live-2026-10-04.json). Monitor menyusi birinchi marta ochilganda shu yoziladi;
- * keyin rahbar «Monitor menyu» sahifasida o'zgartiradi. Rasm manzillari vaqtincha eski saytga qaragan —
- * rahbar o'z rasmini yuklaganda almashadi (eski sayt o'chsa, rasm o'rnida taom nomi ko'rinadi).
+ * (docs/digital-menyu/menu-live-2026-10-04.json). Matnlar eski ekrandagidek, o'zgartirilmagan:
+ * variantning `label` — eski "itemType" (ekranda TYPE ustuni), `size` — eski "grams" (SIZE ustuni).
+ * Taom ID'lari eski saytdagi bilan bir xil. Rasm manzillari eski saytga qaragan — rahbar «Monitor menyu»
+ * sahifasida "Rasmlarni ko'chirish"ni bosganda HALO Control bazasiga o'tadi.
  */
+export const DM_OLD_ORIGIN = "https://halo-digital-menu.uzbusinessman7.chatgpt.site";
 export const DIGITAL_MENU_SEED = {
   "restaurant": {
     "name": "HALO",
@@ -20,7 +22,14 @@ export const DIGITAL_MENU_SEED = {
       "itemsPerPage": 8,
       "spotlightSeconds": 8,
       "overviewSeconds": 15,
-      "design": "navbat"
+      "pageSeconds": 5,
+      "offerEnabled": false,
+      "offerItemId": "",
+      "offerLabel": "KUN AKSIYASI",
+      "offerIntervalSeconds": 30,
+      "offerDurationSeconds": 10,
+      "imageId": "",
+      "imageUrl": "https://halo-digital-menu.uzbusinessman7.chatgpt.site/images/kebab-tv.jpg"
     },
     {
       "id": "chicken",
@@ -28,7 +37,14 @@ export const DIGITAL_MENU_SEED = {
       "itemsPerPage": 8,
       "spotlightSeconds": 8,
       "overviewSeconds": 15,
-      "design": "navbat"
+      "pageSeconds": 5,
+      "offerEnabled": false,
+      "offerItemId": "",
+      "offerLabel": "KUN AKSIYASI",
+      "offerIntervalSeconds": 30,
+      "offerDurationSeconds": 10,
+      "imageId": "",
+      "imageUrl": "https://halo-digital-menu.uzbusinessman7.chatgpt.site/images/chicken-tv.jpg"
     },
     {
       "id": "pitsa",
@@ -36,7 +52,14 @@ export const DIGITAL_MENU_SEED = {
       "itemsPerPage": 8,
       "spotlightSeconds": 8,
       "overviewSeconds": 15,
-      "design": "navbat"
+      "pageSeconds": 5,
+      "offerEnabled": false,
+      "offerItemId": "",
+      "offerLabel": "KUN AKSIYASI",
+      "offerIntervalSeconds": 30,
+      "offerDurationSeconds": 10,
+      "imageId": "",
+      "imageUrl": "https://halo-digital-menu.uzbusinessman7.chatgpt.site/images/pitsa-upload-tv.jpg"
     }
   ],
   "items": [
@@ -54,9 +77,11 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1786013209296-qktxl4-v1",
-          "label": "Medium",
+          "label": "Cheese",
+          "size": "Medium",
           "recipeId": "",
-          "price": 11900
+          "price": 11900,
+          "active": true
         }
       ]
     },
@@ -74,9 +99,11 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1786013751522-0tg1xf-v1",
-          "label": "Medium",
+          "label": "Peperoni",
+          "size": "Medium",
           "recipeId": "",
-          "price": 13900
+          "price": 13900,
+          "active": true
         }
       ]
     },
@@ -94,9 +121,11 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1786015987195-7ih2wb-v1",
-          "label": "Medium",
+          "label": "Chicken pizza",
+          "size": "Medium",
           "recipeId": "",
-          "price": 13900
+          "price": 13900,
+          "active": true
         }
       ]
     },
@@ -114,9 +143,11 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1786015448967-rb1daw-v1",
-          "label": "Medium",
+          "label": "LAMB PIZZA",
+          "size": "Medium",
           "recipeId": "",
-          "price": 14900
+          "price": 14900,
+          "active": true
         }
       ]
     },
@@ -134,9 +165,11 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1786015698773-6aq6tf-v1",
-          "label": "Medium",
+          "label": "Mushroom chicken",
+          "size": "Medium",
           "recipeId": "",
-          "price": 13900
+          "price": 13900,
+          "active": true
         }
       ]
     },
@@ -154,9 +187,11 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1786013408248-om0ioy-v1",
-          "label": "Medium",
+          "label": "Vegetable",
+          "size": "Medium",
           "recipeId": "",
-          "price": 11900
+          "price": 11900,
+          "active": true
         }
       ]
     },
@@ -174,16 +209,18 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1786012927512-h3lxbf-v1",
-          "label": "Medium",
+          "label": "Hunter’s pizza",
+          "size": "Medium",
           "recipeId": "",
-          "price": 13900
+          "price": 13900,
+          "active": true
         }
       ]
     },
     {
       "id": "item-1786163282248-7aaatn",
       "name": "TANDIR LAVASH",
-      "description": "",
+      "description": "Taom haqida qisqa ma’lumot",
       "screen": "kebab",
       "badge": "NEW",
       "imageId": "",
@@ -194,27 +231,35 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1786163282248-7aaatn-v1",
-          "label": "Chicken",
+          "label": "Tandir lavash",
+          "size": "chicken",
           "recipeId": "",
-          "price": 12900
+          "price": 12900,
+          "active": true
         },
         {
           "id": "item-1786163282248-7aaatn-v2",
-          "label": "Lamb",
+          "label": "Tandir lavash",
+          "size": "lamb",
           "recipeId": "",
-          "price": 13900
+          "price": 13900,
+          "active": true
         },
         {
           "id": "item-1786163282248-7aaatn-v3",
-          "label": "Mix",
+          "label": "Tandir Lavash",
+          "size": "mix",
           "recipeId": "",
-          "price": 13900
+          "price": 13900,
+          "active": true
         },
         {
           "id": "item-1786163282248-7aaatn-v4",
-          "label": "Chicken cheese",
+          "label": "Tandir Lavash Chicken",
+          "size": "cheese",
           "recipeId": "",
-          "price": 13900
+          "price": 13900,
+          "active": true
         }
       ]
     },
@@ -232,27 +277,35 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1786158215360-9pfqst-v1",
-          "label": "Chicken",
+          "label": "HALO LAVASH",
+          "size": "CHICKEN",
           "recipeId": "",
-          "price": 11900
+          "price": 11900,
+          "active": true
         },
         {
           "id": "item-1786158215360-9pfqst-v2",
-          "label": "Lamb",
+          "label": "HALO LAVASH",
+          "size": "LAMB",
           "recipeId": "",
-          "price": 12900
+          "price": 12900,
+          "active": true
         },
         {
           "id": "item-1786158215360-9pfqst-v3",
-          "label": "Mix",
+          "label": "HALO LAVASH",
+          "size": "MIX",
           "recipeId": "",
-          "price": 12900
+          "price": 12900,
+          "active": true
         },
         {
           "id": "item-1786158215360-9pfqst-v4",
-          "label": "Lamb cheese",
+          "label": "HALO LAVASH lamb",
+          "size": "CHEESE",
           "recipeId": "",
-          "price": 13900
+          "price": 13900,
+          "active": true
         }
       ]
     },
@@ -270,21 +323,27 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1786081846559-7zcaho-v1",
-          "label": "Chicken",
+          "label": "Haggi",
+          "size": "Chicken",
           "recipeId": "",
-          "price": 10900
+          "price": 10900,
+          "active": true
         },
         {
           "id": "item-1786081846559-7zcaho-v2",
-          "label": "Lamb",
+          "label": "Haggi",
+          "size": "Lamb",
           "recipeId": "",
-          "price": 11900
+          "price": 11900,
+          "active": true
         },
         {
           "id": "item-1786081846559-7zcaho-v3",
-          "label": "Cheesse",
+          "label": "Haggi",
+          "size": "Cheesse",
           "recipeId": "",
-          "price": 12900
+          "price": 12900,
+          "active": true
         }
       ]
     },
@@ -302,27 +361,35 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1786073084253-8qai7e-v1",
-          "label": "Chicken",
+          "label": "Kebab",
+          "size": "Chicken",
           "recipeId": "",
-          "price": 7900
+          "price": 7900,
+          "active": true
         },
         {
           "id": "item-1786073084253-8qai7e-v2",
-          "label": "Lamb",
+          "label": "Kebab",
+          "size": "Lamb",
           "recipeId": "",
-          "price": 8900
+          "price": 8900,
+          "active": true
         },
         {
           "id": "item-1786073084253-8qai7e-v3",
-          "label": "Mix",
+          "label": "Kebab",
+          "size": "Mix",
           "recipeId": "",
-          "price": 8900
+          "price": 8900,
+          "active": true
         },
         {
           "id": "item-1786073084253-8qai7e-v4",
-          "label": "Lamb cheese",
+          "label": "Kebab Lamb",
+          "size": "Cheese",
           "recipeId": "",
-          "price": 9900
+          "price": 9900,
+          "active": true
         }
       ]
     },
@@ -340,22 +407,26 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1785998700059-yn27yt-v1",
-          "label": "Classic",
+          "label": "HOT DOG",
+          "size": "CLASSIC",
           "recipeId": "",
-          "price": 8500
+          "price": 8500,
+          "active": true
         },
         {
           "id": "item-1785998700059-yn27yt-v2",
-          "label": "Cheese",
+          "label": "HOT DOG",
+          "size": "CHEESE",
           "recipeId": "",
-          "price": 9500
+          "price": 9500,
+          "active": true
         }
       ]
     },
     {
       "id": "item-1790827715816-16xfg6",
       "name": "NON KABOB",
-      "description": "Bread · Meat · Lettuce · Tomato · Cabbage · Onion",
+      "description": "Bread· Meat · Lettuce · Tomato · Cabbage · Onion",
       "screen": "kebab",
       "badge": "NEW",
       "imageId": "",
@@ -366,27 +437,35 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1790827715816-16xfg6-v1",
-          "label": "Chicken",
+          "label": "Non kabob",
+          "size": "Chicken",
           "recipeId": "",
-          "price": 8900
+          "price": 8900,
+          "active": true
         },
         {
           "id": "item-1790827715816-16xfg6-v2",
-          "label": "Lamb",
+          "label": "Non kabob",
+          "size": "Lamb",
           "recipeId": "",
-          "price": 9900
+          "price": 9900,
+          "active": true
         },
         {
           "id": "item-1790827715816-16xfg6-v3",
-          "label": "Mix",
+          "label": "Non kabob",
+          "size": "Mix",
           "recipeId": "",
-          "price": 9900
+          "price": 9900,
+          "active": true
         },
         {
           "id": "item-1790827715816-16xfg6-v4",
-          "label": "Lamb cheese",
+          "label": "Non kabob Lamb",
+          "size": "Cheese",
           "recipeId": "",
-          "price": 10900
+          "price": 10900,
+          "active": true
         }
       ]
     },
@@ -404,28 +483,34 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1786085727829-cjfwj0-v1",
-          "label": "Suyaksiz 450 gram",
+          "label": "Suyaksiz",
+          "size": "450 gram",
           "recipeId": "",
-          "price": 11900
+          "price": 11900,
+          "active": true
         },
         {
           "id": "item-1786085727829-cjfwj0-v2",
-          "label": "Suyaksiz 800 gram",
+          "label": "Suyaksiz",
+          "size": "800 gram",
           "recipeId": "",
-          "price": 19900
+          "price": 19900,
+          "active": true
         },
         {
           "id": "item-1786085727829-cjfwj0-v3",
-          "label": "Suyakli 1kg",
+          "label": "Suyakli",
+          "size": "1kg",
           "recipeId": "",
-          "price": 19900
+          "price": 19900,
+          "active": true
         }
       ]
     },
     {
       "id": "item-1786080367984-33bpgn",
       "name": "SWEET CHILI",
-      "description": "Chicken · Sweet Chili sauce · Sesame Seeds",
+      "description": "Chicken · Sweet Chili sauce· Sesame Seeds",
       "screen": "chicken",
       "badge": "NEW",
       "imageId": "",
@@ -436,21 +521,27 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1786080367984-33bpgn-v1",
-          "label": "Suyaksiz 450 gram",
+          "label": "Suyaksiz",
+          "size": "450 gram",
           "recipeId": "",
-          "price": 13900
+          "price": 13900,
+          "active": true
         },
         {
           "id": "item-1786080367984-33bpgn-v2",
-          "label": "Suyaksiz 800 gram",
+          "label": "Suyaksiz",
+          "size": "800 gram",
           "recipeId": "",
-          "price": 22900
+          "price": 22900,
+          "active": true
         },
         {
           "id": "item-1786080367984-33bpgn-v3",
-          "label": "Suyakli 1kg",
+          "label": "Suyakli",
+          "size": "1kg",
           "recipeId": "",
-          "price": 22900
+          "price": 22900,
+          "active": true
         }
       ]
     },
@@ -468,21 +559,27 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1786079947244-hoo8yv-v1",
-          "label": "Suyaksiz 450 gram",
+          "label": "suyaksiz",
+          "size": "450 gram",
           "recipeId": "",
-          "price": 12900
+          "price": 12900,
+          "active": true
         },
         {
           "id": "item-1786079947244-hoo8yv-v2",
-          "label": "Suyaksiz 800 gram",
+          "label": "suyaksiz",
+          "size": "800 gram",
           "recipeId": "",
-          "price": 22900
+          "price": 22900,
+          "active": true
         },
         {
           "id": "item-1786079947244-hoo8yv-v3",
-          "label": "Suyakli 1kg",
+          "label": "suyakli",
+          "size": "1kg",
           "recipeId": "",
-          "price": 22900
+          "price": 22900,
+          "active": true
         }
       ]
     },
@@ -500,28 +597,34 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1786018287105-150115-v1",
-          "label": "Suyaksiz 450 gram",
+          "label": "Suyaksiz",
+          "size": "450 gram",
           "recipeId": "",
-          "price": 12900
+          "price": 12900,
+          "active": true
         },
         {
           "id": "item-1786018287105-150115-v2",
-          "label": "Suyaksiz 800 gram",
+          "label": "Suyaksiz",
+          "size": "800 gram",
           "recipeId": "",
-          "price": 20900
+          "price": 20900,
+          "active": true
         },
         {
           "id": "item-1786018287105-150115-v3",
-          "label": "Suyakli 1kg",
+          "label": "Suyakli",
+          "size": "1kg",
           "recipeId": "",
-          "price": 20900
+          "price": 20900,
+          "active": true
         }
       ]
     },
     {
       "id": "item-1786169347086-zccwfa",
       "name": "Chicken wings",
-      "description": "",
+      "description": "Taom haqida qisqa ma’lumot",
       "screen": "chicken",
       "badge": "NEW",
       "imageId": "",
@@ -532,15 +635,19 @@ export const DIGITAL_MENU_SEED = {
       "variants": [
         {
           "id": "item-1786169347086-zccwfa-v1",
-          "label": "Wings 4pcs",
+          "label": "Wings",
+          "size": "4pcs",
           "recipeId": "",
-          "price": 3900
+          "price": 3900,
+          "active": true
         },
         {
           "id": "item-1786169347086-zccwfa-v2",
-          "label": "Wings 8pcs",
+          "label": "Wings",
+          "size": "8pcs",
           "recipeId": "",
-          "price": 7900
+          "price": 7900,
+          "active": true
         }
       ]
     }
@@ -575,4 +682,50 @@ export const DIGITAL_MENU_SEED = {
     "intervalSeconds": 15,
     "durationSeconds": 10
   }
+};
+
+/** 2026-10-05 gacha saqlangan yozuvlarda variantda faqat bitta yozuv bo'lgan (masalan "Chicken"). Shu ro'yxat bo'yicha eski yozuv tanilib, TYPE/SIZE ga ajratiladi. */
+export const DM_LEGACY_LABELS: Record<string, string> = {
+  "item-1786013209296-qktxl4-v1": "Medium",
+  "item-1786013751522-0tg1xf-v1": "Medium",
+  "item-1786015987195-7ih2wb-v1": "Medium",
+  "item-1786015448967-rb1daw-v1": "Medium",
+  "item-1786015698773-6aq6tf-v1": "Medium",
+  "item-1786013408248-om0ioy-v1": "Medium",
+  "item-1786012927512-h3lxbf-v1": "Medium",
+  "item-1786163282248-7aaatn-v1": "Chicken",
+  "item-1786163282248-7aaatn-v2": "Lamb",
+  "item-1786163282248-7aaatn-v3": "Mix",
+  "item-1786163282248-7aaatn-v4": "Chicken cheese",
+  "item-1786158215360-9pfqst-v1": "Chicken",
+  "item-1786158215360-9pfqst-v2": "Lamb",
+  "item-1786158215360-9pfqst-v3": "Mix",
+  "item-1786158215360-9pfqst-v4": "Lamb cheese",
+  "item-1786081846559-7zcaho-v1": "Chicken",
+  "item-1786081846559-7zcaho-v2": "Lamb",
+  "item-1786081846559-7zcaho-v3": "Cheesse",
+  "item-1786073084253-8qai7e-v1": "Chicken",
+  "item-1786073084253-8qai7e-v2": "Lamb",
+  "item-1786073084253-8qai7e-v3": "Mix",
+  "item-1786073084253-8qai7e-v4": "Lamb cheese",
+  "item-1785998700059-yn27yt-v1": "Classic",
+  "item-1785998700059-yn27yt-v2": "Cheese",
+  "item-1790827715816-16xfg6-v1": "Chicken",
+  "item-1790827715816-16xfg6-v2": "Lamb",
+  "item-1790827715816-16xfg6-v3": "Mix",
+  "item-1790827715816-16xfg6-v4": "Lamb cheese",
+  "item-1786085727829-cjfwj0-v1": "Suyaksiz 450 gram",
+  "item-1786085727829-cjfwj0-v2": "Suyaksiz 800 gram",
+  "item-1786085727829-cjfwj0-v3": "Suyakli 1kg",
+  "item-1786080367984-33bpgn-v1": "Suyaksiz 450 gram",
+  "item-1786080367984-33bpgn-v2": "Suyaksiz 800 gram",
+  "item-1786080367984-33bpgn-v3": "Suyakli 1kg",
+  "item-1786079947244-hoo8yv-v1": "Suyaksiz 450 gram",
+  "item-1786079947244-hoo8yv-v2": "Suyaksiz 800 gram",
+  "item-1786079947244-hoo8yv-v3": "Suyakli 1kg",
+  "item-1786018287105-150115-v1": "Suyaksiz 450 gram",
+  "item-1786018287105-150115-v2": "Suyaksiz 800 gram",
+  "item-1786018287105-150115-v3": "Suyakli 1kg",
+  "item-1786169347086-zccwfa-v1": "Wings 4pcs",
+  "item-1786169347086-zccwfa-v2": "Wings 8pcs"
 };

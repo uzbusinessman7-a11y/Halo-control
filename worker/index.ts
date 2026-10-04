@@ -71,16 +71,17 @@ const worker = {
       // HALO HISOB oynasi (naqd/hisob-raqam, delivery, oshxona, chiqit). Eski ko'rinish: /hisob?eski=1.
       if (url.pathname === "/ornatish" || url.pathname === "/app" || url.pathname === "/install") return Response.redirect(new URL(`/api/v2/ornatish${url.search}`, url).toString(), 302);
       if (url.pathname === "/pos" || url.pathname === "/kassa" || url.pathname === "/hisob") return Response.redirect(new URL("/api/v2/pos", url).toString(), 302);
-      // Monitor menyusi (televizor): /tv/kebab, /tv/chicken, /tv/pitsa — parolsiz ochiladi. Boshqa filial: ?b=<filial>.
+      // Monitor menyusi (televizor) — parolsiz ochiladi, faqat o'qiydi:
+      //   /menu?screen=kebab | chicken | pitsa   (eski saytdagi "?screen=…" bilan bir xil)
+      //   /tv/kebab                              (qisqa manzil)
+      // Boshqa filial: &branch=<filial> yoki &b=<filial>.
       const tv = url.pathname.match(/^\/tv(?:\/([a-z0-9-]{1,24}))?\/?$/);
-      if (tv) {
+      if (tv || url.pathname === "/menu" || url.pathname === "/menu/") {
         const target = new URL("/api/v2/tv", url);
-        if (tv[1]) target.searchParams.set("screen", tv[1]);
-        // b — filial, d — ko'rinishni vaqtincha sinab ko'rish (navbat, kino, vitrina, yorliq, halqa).
-        for (const key of ["b", "d"]) {
-          const value = url.searchParams.get(key);
-          if (value) target.searchParams.set(key, value);
-        }
+        const screen = tv?.[1] || url.searchParams.get("screen");
+        if (screen) target.searchParams.set("screen", screen);
+        const branch = url.searchParams.get("branch") || url.searchParams.get("b");
+        if (branch) target.searchParams.set("b", branch);
         return Response.redirect(target.toString(), 302);
       }
     }
