@@ -128,7 +128,9 @@ export async function handleClubOrderEvent(branchId: string, body: unknown) {
   const order = normalizeClubOrder(source.order);
   const row = await recordClubOrder(clubDb(), branchId, order);
   let notice = { sent: false, reason: "" };
-  if (order.status === "new" && row.status === "new") notice = await notifyClubOrder(branchId, row, "new");
+  // "Yangi buyurtma" xabari: buyurtma birinchi marta ko'ringanda (do'kon uni qabul qilib ulgurgan bo'lsa ham) — bir marta.
+  const open = row.status === "new" || row.status === "accepted" || row.status === "preparing" || row.status === "ready";
+  if (open && order.status === row.status && !row.notifiedNew) notice = await notifyClubOrder(branchId, row, "new");
   if (order.status === "cancelled" && row.status === "cancelled" && row.notifiedNew) notice = await notifyClubOrder(branchId, row, "cancel");
   let sale: ClubSaleOutcome = { state: row.saleState, note: row.saleNote, date: row.saleDate, alreadySaved: false };
   if (order.status === "completed" && row.status === "completed") sale = await writeClubSale(branchId, order.id);
