@@ -109,6 +109,8 @@ var RD=null,RQ='',EDIT=null;
 function uuid(){return crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16)})}
 function rpost(b){return fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json().then(function(j){return {status:r.status,body:j}})}).catch(function(){return {status:0,body:{error:'Internet aloqasini tekshiring.'}}})}
 function num(v){var n=Number(String(v==null?'':v).replace(',','.').replace(/[^0-9.]/g,''));return isFinite(n)?n:0}
+/* Pul maydonlari uchun: faqat raqamlar (minglik vergulini o'nlik nuqta deb o'qimaslik uchun). */
+function money(v){return Number(String(v==null?'':v).replace(/[^0-9]/g,''))||0}
 function pct(n){return n==null?'—':n+'%'}
 function fcColor(n){return n==null?'var(--muted)':n<=30?'var(--ok)':n<=35?'var(--warn)':'var(--bad)'}
 document.querySelectorAll('[data-m]').forEach(function(b){b.addEventListener('click',function(){var r=b.dataset.m==='rec';document.querySelectorAll('[data-m]').forEach(function(x){x.className=x===b?'':'ghost'});document.getElementById('rec').style.display=r?'grid':'none';document.getElementById('body').style.display=r?'none':'grid';document.getElementById('days').style.display=r?'none':''})});
@@ -182,12 +184,12 @@ function drawEditor(){
   box.querySelectorAll('[data-ld]').forEach(function(b){b.addEventListener('click',function(){EDIT.lines.splice(Number(b.dataset.ld),1);drawEditor()})});
   box.querySelectorAll('[data-xf]').forEach(function(el){el.addEventListener('input',function(){EDIT.extras[Number(el.dataset.xi)][el.dataset.xf]=el.value;refreshTotals()})});
   box.querySelectorAll('[data-xd]').forEach(function(b){b.addEventListener('click',function(){EDIT.extras.splice(Number(b.dataset.xd),1);drawEditor()})});
-  box.querySelectorAll('[data-dp]').forEach(function(el){el.addEventListener('input',function(){var v=num(el.value);EDIT.delivery[el.dataset.dp]=v;el.value=v?v.toLocaleString('en-US'):''})});
+  box.querySelectorAll('[data-dp]').forEach(function(el){el.addEventListener('input',function(){var v=money(el.value);EDIT.delivery[el.dataset.dp]=v;el.value=v?v.toLocaleString('en-US'):''})});
   document.getElementById('eAdd').addEventListener('click',function(){EDIT.lines.push({inventoryId:'',quantity:'',yieldPct:''});drawEditor()});
   document.getElementById('eXadd').addEventListener('click',function(){EDIT.extras.push({name:'',amount:''});drawEditor()});
   document.getElementById('eName').addEventListener('input',function(){EDIT.name=this.value});
   var cat=document.getElementById('eCat');if(cat)cat.addEventListener('change',function(){EDIT.categoryId=this.value});
-  var pr=document.getElementById('ePrice');pr.addEventListener('input',function(){var v=num(pr.value);EDIT.salePrice=v;pr.value=v?v.toLocaleString('en-US'):'';refreshTotals()});
+  var pr=document.getElementById('ePrice');pr.addEventListener('input',function(){var v=money(pr.value);EDIT.salePrice=v;pr.value=v?v.toLocaleString('en-US'):'';refreshTotals()});
   document.getElementById('eBack').addEventListener('click',function(){EDIT=null;drawRecipes()});
   document.getElementById('eSave').addEventListener('click',saveEditor);
   bindPriceHelper();

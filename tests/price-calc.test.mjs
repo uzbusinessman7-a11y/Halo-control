@@ -45,3 +45,13 @@ test('o‘z narxim: yozilgan narxdan tannarx foizi va foyda', () => {
   assert.equal(C.pcForPrice(5000, 4000, 0).profit, -1000); // tannarxdan past narx — zarar ko'rinadi
   assert.equal(C.pcForPrice(5000, '', 0), null);
 });
+
+test('menyu muharriri: narx maydonlari minglik vergulini o‘nlik nuqta deb o‘qimaydi', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../app/api/v2/menyu/route.ts', import.meta.url), 'utf8');
+  assert.match(src, /\[data-dp\][^\n]*var v=money\(el\.value\)/);
+  assert.match(src, /getElementById\('ePrice'\)[^\n]*var v=money\(pr\.value\)/);
+  const money = new Function('v', "return Number(String(v==null?'':v).replace(/[^0-9]/g,''))||0");
+  assert.equal(money('1,3900'), 13900); // "1,390" ga yana "0" yozilganda
+  assert.equal(money('125,000'), 125000);
+});
