@@ -5,9 +5,12 @@ import { expenseOnlyOnDate } from "../../../lib/vegetable-expenses";
 import { costRuleCoversCategory } from "../../../lib/daily-report";
 import { seoulBusinessDate } from "../../../lib/business-time";
 import { categoryIdOf, categoryList } from "../../../core/categories";
+import { mezanaBorrowedQuantityBalance, normalizeMezanaDebtEntries, normalizeMezanaSettings } from "../../../lib/mezana-debts";
+import { normalizeMezanaCatalog } from "../../../lib/mezana-catalog";
 
 declare global {
   var __HALO_SELF_HOSTED__: boolean | undefined;
+  var __HALO_CONTROL_BUCKET__: R2Bucket | undefined;
 }
 
 /**
@@ -16,13 +19,33 @@ declare global {
  *  - davomat: ISHNI BOSHLADIM / TUGATDIM, shu oy kun/soat/summa va har kun;
  *  - rahbardan vazifalar: boshladim / bajarildi;
  *  - amallar: HALO HISOB (savdo, delivery, oshxona, chiqit), POS hisobot (Excel), mahsulot kirimi,
- *    xarajat, minus tavar, kassani sanash.
+ *    xarajat, MEZANA (olib turildi / qaytarildi / qarzga olindi — Telegram guruhga boradi), minus tavar, kassani sanash.
  * Yozuvlar mavjud tekshirilgan API'lar orqali: /api/worker-auth, /api/attendance, /api/worker-tasks,
- * /api/v2/pos-excel, /api/worker-deliveries, /api/worker-expenses, /api/v2/pos, /api/v2/kassa.
+ * /api/v2/pos-excel, /api/worker-deliveries, /api/worker-expenses, /api/worker-mezana, /api/v2/pos, /api/v2/kassa.
  */
 const WORKER_EXPENSE_CATEGORIES = ["Mahsulot xaridi", "Do‘kon / omborsiz mahsulot", "Elektr / gaz / suv", "Wi-Fi / telefon", "Ta’mirlash", "Reklama", "Ijara", "POS abonent to‘lovi", "Sug‘urta", "Soliq", "Boshqa"];
 type Row = Record<string, unknown>;
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+
+/** MEZANA oynasi: rahbar belgilagan mahsulotlar, hozir olib turilgan soni, xodimning o'z oxirgi yozuvlari. */
+export function mezanaForWorker(state: Row, workerId: string) {
+  const entries = normalizeMezanaDebtEntries(state.mezanaEntries);
+  const settings = normalizeMezanaSettings(state.mezanaSettings);
+  return {
+    catalog: normalizeMezanaCatalog(state.mezanaCatalog).filter((item) => item.active)
+      .map((item) => ({
+        id: item.id, name: item.name, mode: item.mode, price: item.price,
+        borrowed: item.mode === "borrowed" ? Math.max(0, mezanaBorrowedQuantityBalance(entries, item.name)) : 0,
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name)),
+    // Rasm faqat rasm ombori (R2) ulangan bo'lsa qabul qilinadi.
+    photos: Boolean(globalThis.__HALO_CONTROL_BUCKET__),
+    group: { borrowed: Boolean(settings.telegramChatId), purchased: Boolean(settings.purchasedTelegramChatId) },
+    mine: entries.filter((entry) => entry.createdByWorkerId === workerId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 8)
+      .map((entry) => ({ id: entry.id, action: entry.action, name: entry.productName, quantity: entry.quantity || entry.itemCount || 0, amount: entry.amount, date: entry.date })),
+  };
+}
 
 /** Xodim ilovasi uchun ma'lumot: mahsulotlar (birliklari bilan), yetkazuvchilar, hisoblar, xarajat turlari. */
 export async function POST(request: Request) {
@@ -49,6 +72,7 @@ export async function POST(request: Request) {
   return json({
     ok: true, today, updatedAt: current.updatedAt,
     canReceive: Boolean(session.canSupplierDelivery), canExpense: Boolean(session.canWarehouseReceipt),
+    mezana: session.canWarehouseReceipt ? mezanaForWorker(state, session.userId) : null,
     inventory, accounts, suppliers,
     categories: categoryList(state, "inventory").map((category) => ({ id: category.id, name: category.name })),
     expenseCategories: WORKER_EXPENSE_CATEGORIES.filter((category) => !costRuleCoversCategory(category, state.costRules as never)),
@@ -85,16 +109,16 @@ export async function GET() {
 var T={
  uz:{check:'Nazorat ro‘yxati',install:'Telefonga ilova qilib o‘rnatish',hello:'Salom',login:'Kirish',branch:'Filial',user:'Login',pin:'PIN',start:'ISHNI BOSHLADIM',finish:'ISHNI TUGATDIM',working:'Ishdasiz',month:'Mening hisobim — bu oy',days:'kun',hours:'soat',earned:'Hisoblangan',logout:'Chiqish',notLinked:'Rahbar akkauntingizni xodim profiliga bog‘lamagan. Davomat uchun rahbarga ayting.',sureOut:'Ishni tugatasizmi?',off:'Bugun sizga dam belgilangan',err:'Xatolik. Qayta urinib ko‘ring.',net:'Internet aloqasini tekshiring.',back:'← Orqaga',
   actions:'Nima kiritmoqchisiz?',tasks:'Rahbardan vazifalar',noTasks:'Yangi vazifa yo‘q',taskStart:'Boshladim',taskDone:'✓ Bajarildi',due:'Muddat',
-  aHisob:'HALO HISOB',aHisobD:'Naqd, hisob-raqam, delivery, oshxona',aPos:'POS hisobot',aPosD:'Kunlik POS Excel faylini yuklash',aIn:'Mahsulot kirimi',aInD:'Miqdor va narx · qarz yozilmaydi',aExp:'Xarajat',aExpD:'Bugungi xarajatni yozish',aWaste:'Minus tavar',aWasteD:'Buzilgan yoki yo‘qolgan mahsulot',aCount:'Kassani sanash',aCountD:'Kun oxiri, summa ko‘rinmaydi',locked:'Rahbar ruxsat bermagan',allDays:'Hamma kunlar'},
+  aHisob:'HALO HISOB',aHisobD:'Naqd, hisob-raqam, delivery, oshxona',aPos:'POS hisobot',aPosD:'Kunlik POS Excel faylini yuklash',aIn:'Mahsulot kirimi',aInD:'Miqdor va narx · qarz yozilmaydi',aExp:'Xarajat',aExpD:'Bugungi xarajatni yozish',aMez:'MEZANA',aMezD:'Olib turildi, qaytarildi, qarzga olindi',aWaste:'Minus tavar',aWasteD:'Buzilgan yoki yo‘qolgan mahsulot',aCount:'Kassani sanash',aCountD:'Kun oxiri, summa ko‘rinmaydi',locked:'Rahbar ruxsat bermagan',allDays:'Hamma kunlar'},
  ru:{install:'Установить как приложение',hello:'Привет',login:'Войти',branch:'Филиал',user:'Логин',pin:'PIN',start:'НАЧАЛ РАБОТУ',finish:'ЗАКОНЧИЛ РАБОТУ',working:'Вы на работе',month:'Мой учёт — этот месяц',days:'дн.',hours:'ч',earned:'Начислено',logout:'Выйти',notLinked:'Руководитель не привязал ваш аккаунт к профилю сотрудника.',sureOut:'Закончить работу?',off:'Сегодня у вас выходной',err:'Ошибка. Попробуйте ещё раз.',net:'Проверьте интернет.',back:'← Назад',
   actions:'Что вводим?',tasks:'Задачи от руководителя',noTasks:'Новых задач нет',taskStart:'Начал',taskDone:'✓ Готово',due:'Срок',
-  aHisob:'HALO HISOB',aHisobD:'Наличные, счёт, доставка, кухня',aPos:'POS отчёт',aPosD:'Загрузить дневной Excel с POS',aIn:'Приход товара',aInD:'Количество и цена',aExp:'Расход',aExpD:'Внести расход',aWaste:'Списание',aWasteD:'Испорченный или потерянный товар',aCount:'Пересчёт кассы',aCountD:'В конце дня',locked:'Нет разрешения',allDays:'Все дни'},
+  aHisob:'HALO HISOB',aHisobD:'Наличные, счёт, доставка, кухня',aPos:'POS отчёт',aPosD:'Загрузить дневной Excel с POS',aIn:'Приход товара',aInD:'Количество и цена',aExp:'Расход',aExpD:'Внести расход',aMez:'MEZANA',aMezD:'Взяли, вернули, купили в долг',aWaste:'Списание',aWasteD:'Испорченный или потерянный товар',aCount:'Пересчёт кассы',aCountD:'В конце дня',locked:'Нет разрешения',allDays:'Все дни'},
  en:{install:'Install as an app',hello:'Hi',login:'Log in',branch:'Branch',user:'Login',pin:'PIN',start:'STARTED WORK',finish:'FINISHED WORK',working:'You are at work',month:'My account — this month',days:'days',hours:'h',earned:'Earned',logout:'Log out',notLinked:'The manager has not linked your account to a staff profile.',sureOut:'Finish work?',off:'Today is your day off',err:'Error. Please try again.',net:'Check your internet.',back:'← Back',
   actions:'What do you want to enter?',tasks:'Tasks from the manager',noTasks:'No new tasks',taskStart:'Started',taskDone:'✓ Done',due:'Due',
-  aHisob:'HALO HISOB',aHisobD:'Cash, transfer, delivery, kitchen',aPos:'POS report',aPosD:'Upload the daily POS Excel',aIn:'Goods receipt',aInD:'Quantity and price',aExp:'Expense',aExpD:'Enter an expense',aWaste:'Stock deduction',aWasteD:'Damaged or missing product',aCount:'Count the cash',aCountD:'End of day',locked:'Not permitted',allDays:'All days'},
+  aHisob:'HALO HISOB',aHisobD:'Cash, transfer, delivery, kitchen',aPos:'POS report',aPosD:'Upload the daily POS Excel',aIn:'Goods receipt',aInD:'Quantity and price',aExp:'Expense',aExpD:'Enter an expense',aMez:'MEZANA',aMezD:'Borrowed, returned, bought on credit',aWaste:'Stock deduction',aWasteD:'Damaged or missing product',aCount:'Count the cash',aCountD:'End of day',locked:'Not permitted',allDays:'All days'},
  ko:{install:'앱으로 설치',hello:'안녕하세요',login:'로그인',branch:'지점',user:'아이디',pin:'PIN',start:'업무 시작',finish:'업무 종료',working:'근무 중',month:'내 근무 — 이번 달',days:'일',hours:'시간',earned:'누적 급여',logout:'로그아웃',notLinked:'관리자가 계정을 직원 프로필에 연결하지 않았습니다.',sureOut:'업무를 종료할까요?',off:'오늘은 휴무입니다',err:'오류가 발생했습니다.',net:'인터넷을 확인하세요.',back:'← 뒤로',
   actions:'무엇을 입력할까요?',tasks:'관리자 업무',noTasks:'새 업무 없음',taskStart:'시작',taskDone:'✓ 완료',due:'마감',
-  aHisob:'HALO HISOB',aHisobD:'현금, 계좌, 배달, 주방',aPos:'POS 보고서',aPosD:'일일 POS 엑셀 업로드',aIn:'상품 입고',aInD:'수량과 금액',aExp:'지출',aExpD:'지출 입력',aWaste:'재고 차감',aWasteD:'파손 또는 분실',aCount:'현금 세기',aCountD:'마감 시',locked:'권한 없음',allDays:'전체'}};
+  aHisob:'HALO HISOB',aHisobD:'현금, 계좌, 배달, 주방',aPos:'POS 보고서',aPosD:'일일 POS 엑셀 업로드',aIn:'상품 입고',aInD:'수량과 금액',aExp:'지출',aExpD:'지출 입력',aMez:'MEZANA',aMezD:'빌림, 반납, 외상 구매',aWaste:'재고 차감',aWasteD:'파손 또는 분실',aCount:'현금 세기',aCountD:'마감 시',locked:'권한 없음',allDays:'전체'}};
 var L='uz';try{L=localStorage.getItem('halo-lang')||'uz'}catch(e){}if(!T[L])L='uz';
 function t(k){return T[L][k]||T.uz[k]||k}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -153,6 +177,7 @@ function home(){
       +tile('pos','📊',t('aPos'),t('aPosD'))
       +tile('in','📦',t('aIn'),t('aInD'),null,!SESSION.canSupplierDelivery)
       +tile('exp','💸',t('aExp'),t('aExpD'),null,!SESSION.canWarehouseReceipt)
+      +tile('mez','🤝',t('aMez'),t('aMezD'),null,!SESSION.canWarehouseReceipt)
       +tile('waste','🗑',t('aWaste'),t('aWasteD'),'/api/v2/pos#chiqit')
       +tile('count','💵',t('aCount'),t('aCountD'),'/api/v2/kassa')+'</div></section>';
     var e=a.earnings||{},days=(e.days||[]);
@@ -164,7 +189,7 @@ function home(){
     document.getElementById('out').addEventListener('click',function(){req('/api/worker-auth','POST',{action:'logout'}).then(start)});
     var more=document.getElementById('more');if(more)more.addEventListener('click',function(){document.getElementById('dl').innerHTML=days.map(dayRow).join('');more.remove()});
     app.querySelectorAll('[data-ts]').forEach(function(b){b.addEventListener('click',function(){b.disabled=true;req('/api/worker-tasks','PATCH',{taskId:b.dataset.ts,status:b.dataset.to}).then(function(x){if(x.status>=400){toast(x.body.error||t('err'),true);b.disabled=false;return}toast('✓');home()})})});
-    app.querySelectorAll('[data-act]').forEach(function(b){b.addEventListener('click',function(){if(b.dataset.act==='pos')posScreen();else if(b.dataset.act==='in')intakeScreen();else if(b.dataset.act==='exp')expenseScreen()})});
+    app.querySelectorAll('[data-act]').forEach(function(b){b.addEventListener('click',function(){if(b.dataset.act==='pos')posScreen();else if(b.dataset.act==='in')intakeScreen();else if(b.dataset.act==='exp')expenseScreen();else if(b.dataset.act==='mez')mezanaScreen()})});
     if(chk)loadChecklist();
     if(a.linked){var open2=a.openShift;
       if(open2){var tick=function(){var ms=Date.now()-Date.parse(open2.clockIn),h=Math.floor(ms/3600000),m=Math.floor(ms%3600000/60000);var el=document.getElementById('el');if(el)el.textContent=h+':'+String(m).padStart(2,'0')};tick();TIMER=setInterval(tick,30000)}
@@ -263,6 +288,51 @@ function expenseScreen(){
       btn.disabled=true;var send=function(){return req('/api/worker-expenses','POST',{operationId:op,category:document.getElementById('ec').value,itemName:document.getElementById('en').value.trim(),amount:amount,accountId:document.getElementById('eacc').value,note:document.getElementById('eno').value,date:DATA.today,updatedAt:DATA.updatedAt})};
       send().then(function(r){if(r.status===409){return loadData().then(send)}return r}).then(function(r){btn.disabled=false;if(r.body.error){toast(r.body.error,true);return}toast('✓ Xarajat saqlandi');home()})});
   });
+}
+/* ---------- MEZANA: olib turildi / qaytarildi / qarzga olindi ---------- */
+/* Telefon rasmi katta bo'ladi: yuborishdan oldin 1600 pikselgacha kichraytiriladi (bo'lmasa asl fayl ketadi). */
+function shrinkPhoto(file,done){if(!file||!window.URL||!document.createElement('canvas').getContext){done(file);return}
+  var img=new Image(),url=URL.createObjectURL(file);
+  img.onload=function(){URL.revokeObjectURL(url);var k=Math.min(1,1600/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);
+    try{c.getContext('2d').drawImage(img,0,0,c.width,c.height);c.toBlob(function(b){done(b?new File([b],'mezana.jpg',{type:'image/jpeg'}):file)},'image/jpeg',0.85)}catch(e){done(file)}};
+  img.onerror=function(){URL.revokeObjectURL(url);done(file)};img.src=url}
+function mezanaScreen(){
+  var M={act:'borrowed',op:uuid(),msg:''},AL={borrowed:'📥 Olib turildi',returned:'📤 Qaytarildi',purchased:'🛒 Qarzga olindi'};
+  screen('🤝 MEZANA','<div id="mb" style="display:grid;gap:16px"><section class="card">'+haloLoading(3)+'</section></div>');
+  loadData().then(function(d){if(d)draw()});
+  function draw(){var z=DATA.mezana,box=document.getElementById('mb');if(!box)return;
+    if(!z){box.innerHTML='<div class="msg warn">'+t('locked')+'</div>';return}
+    var list=z.catalog.filter(function(c){return M.act==='purchased'?c.mode==='purchased':M.act==='returned'?(c.mode==='borrowed'&&c.borrowed>0):c.mode==='borrowed'});
+    var ready=M.act==='purchased'?z.group.purchased:z.group.borrowed;
+    box.innerHTML='<section class="card"><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'+Object.keys(AL).map(function(a){return '<button class="'+(M.act===a?'':'ghost')+'" data-ma="'+a+'" style="padding:8px 6px;font-size:14px">'+AL[a]+'</button>'}).join('')+'</div>'
+      +(list.length?'<label class="field" style="margin-top:14px"><span>Mahsulot</span><select id="mzP">'+list.map(function(c){return '<option value="'+esc(c.id)+'">'+esc(c.name)+(M.act==='purchased'?' · '+won(c.price):M.act==='returned'?' (olingan: '+c.borrowed+')':c.borrowed?' (hozir: '+c.borrowed+')':'')+'</option>'}).join('')+'</select></label>'
+        +'<label class="field"><span>Soni</span><input id="mzQ" inputmode="numeric" placeholder="1" style="font-size:22px;font-weight:800"></label>'
+        +(M.act==='purchased'?'<p class="hint" id="mzSum"></p><label class="field"><span>Izoh (ixtiyoriy)</span><input id="mzN" maxlength="300"></label>':'')
+        +(z.photos?'<label class="filebtn"><span>📷</span><span id="mzFn">Rasm (ixtiyoriy)</span><input type="file" id="mzF" accept="image/*" hidden></label>':'')
+        +'<button class="block" id="mzGo" style="margin-top:12px">✓ Saqlash</button>'
+        :'<p class="hint" style="margin:14px 0 0">'+(M.act==='returned'?'Qaytariladigan olib turilgan mahsulot yo‘q.':'Rahbar bu amal uchun MEZANA mahsulotlarini hali belgilamagan.')+'</p>')
+      +(ready?'':'<p class="hint" style="margin:10px 0 0">Telegram guruhi ulanmagan: yozuv saqlanadi, lekin guruhga bormaydi. Rahbarga ayting.</p>')
+      +'<div id="mzMsg">'+M.msg+'</div></section>'
+      +(z.mine.length?'<section class="card"><h2>Oxirgi yozuvlarim</h2>'+z.mine.map(function(e){return '<div class="list-row"><div style="min-width:0"><b>'+(AL[e.action]||'💸 To‘lov')+' · '+esc(e.name)+'</b><br><small style="color:var(--muted)">'+esc(e.date)+'</small></div><b>'+(e.action==='purchased'?won(e.amount):e.quantity+' ta')+'</b></div>'}).join('')+'</section>':'');
+    box.querySelectorAll('[data-ma]').forEach(function(b){b.addEventListener('click',function(){M.act=b.dataset.ma;M.msg='';draw()})});
+    var q=document.getElementById('mzQ'),p=document.getElementById('mzP'),sum=document.getElementById('mzSum');
+    var total=function(){if(!sum)return;var c=z.catalog.find(function(x){return x.id===p.value}),n=Number(String(q.value).replace(/[^0-9]/g,''))||0;sum.textContent=c&&n?'Jami: '+won(c.price*n)+' (1 dona '+won(c.price)+')':''};
+    if(q){q.addEventListener('input',function(){q.value=q.value.replace(/[^0-9]/g,'');total()});p.addEventListener('change',total)}
+    var f=document.getElementById('mzF');if(f)f.addEventListener('change',function(){document.getElementById('mzFn').textContent=f.files[0]?'✓ '+f.files[0].name:'Rasm (ixtiyoriy)'});
+    var go=document.getElementById('mzGo');if(go)go.addEventListener('click',function(){var n=Number(q.value)||0,c=z.catalog.find(function(x){return x.id===p.value});
+      if(!c||!(n>0)){toast('Mahsulot va sonini yozing.',true);return}
+      if(M.act==='returned'&&n>c.borrowed){toast(c.name+'dan faqat '+c.borrowed+' ta olib turilgan.',true);return}
+      if(!confirm(AL[M.act]+' · '+c.name+' · '+n+' ta'+(M.act==='purchased'?' · '+won(c.price*n):'')+'. Saqlansinmi?'))return;
+      go.disabled=true;shrinkPhoto(f&&f.files[0],function(photo){
+        var fd=new FormData();fd.set('operationId',M.op);fd.set('action',M.act);fd.set('catalogItemId',c.id);fd.set('date',DATA.today);
+        if(M.act==='purchased'){fd.set('itemCount',String(n));var nt=document.getElementById('mzN');fd.set('note',nt?nt.value:'')}else fd.set('quantity',String(n));
+        if(photo)fd.set('fileTop',photo,photo.name||'mezana.jpg');
+        form('/api/worker-mezana',fd).then(function(r){go.disabled=false;
+          if(r.body.error){toast(r.body.error,true);return}
+          var tg=r.body.telegram||{};M.op=uuid();
+          M.msg=tg.sent?'<div class="msg ok" style="margin-top:12px">✓ Saqlandi va Telegram guruhga yuborildi</div>':'<div class="msg warn" style="margin-top:12px">✓ Saqlandi. Telegram guruhga yuborilmadi: '+esc(tg.reason||'sabab noma’lum')+'</div>';
+          toast('✓ '+AL[M.act]+' · '+c.name);loadData().then(function(d){if(d)draw()})})})});
+  }
 }
 start();
 `,

@@ -1,7 +1,7 @@
 import { isAdminRequest } from "../../../lib/integration-store";
 import { HaloStateConflictError, listHaloBranches, mutateHaloState, readHaloState } from "../../../lib/halo-store";
 import {
-  mezanaBorrowedQuantityBalance, mezanaDebtActionLabel, mezanaDebtBalance, normalizeMezanaDebtEntries, validMezanaDebtEntry,
+  mezanaBorrowedQuantityBalance, mezanaDebtActionLabel, mezanaDebtBalance, normalizeMezanaDebtEntries, normalizeMezanaSettings, validMezanaDebtEntry,
   type MezanaDebtAction, type MezanaDebtEntry,
 } from "../../../lib/mezana-debts";
 import { mezanaCatalogItemForAction, normalizeMezanaCatalog } from "../../../lib/mezana-catalog";
@@ -17,6 +17,7 @@ import { shell } from "../../../core/ui-shell";
  */
 declare global {
   var __HALO_SELF_HOSTED__: boolean | undefined;
+  var __HALO_CONTROL_DB__: D1Database | undefined;
 }
 type Row = Record<string, unknown>;
 const PAGE_PATH = "/api/v2/mezana";
@@ -35,6 +36,24 @@ export async function GET(request: Request) {
   }
   const branches = (await listHaloBranches()).map((branch) => ({ id: branch.id, name: branch.name }));
   return new Response(page(branches), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+}
+
+/** Qaysi yozuv Telegram guruhga yuborilgan, qaysi biri yuborilmagan (sababi bilan). Faqat o'qiydi. */
+async function telegramStatuses(branchId: string): Promise<Record<string, { status: string; error: string }>> {
+  try {
+    const result = await globalThis.__HALO_CONTROL_DB__!.prepare(
+      "SELECT entry_id, status, last_error FROM mezana_telegram_deliveries WHERE branch_id = ? ORDER BY updated_at DESC LIMIT 400",
+    ).bind(branchId).all<{ entry_id: string; status: string; last_error: string }>();
+    return Object.fromEntries((result.results || []).map((row) => [row.entry_id, { status: row.status, error: row.last_error || "" }]));
+  } catch {
+    return {};
+  }
+}
+
+/** Har yo'nalish uchun guruh ulanganmi (ulash: Ulanishlar → MEZANA guruhi). */
+function telegramGroups(state: Row) {
+  const settings = normalizeMezanaSettings(state.mezanaSettings);
+  return { borrowed: Boolean(settings.telegramChatId), purchased: Boolean(settings.purchasedTelegramChatId) };
 }
 
 export function mezanaView(state: Row, today: string) {
@@ -123,10 +142,10 @@ export async function POST(request: Request) {
       if (body.entryAction === "paid" && body.accountId) await assertV2DayOpen(branchId, clean(body.date, 10));
       const mutation = await mutateHaloState((state) => { const out = addMezanaEntry(state as Row, { ...body, action: body.entryAction }, today); return { state: out.state as Row, result: out.result.entryId }; }, 5, branchId, "Rahbar",
         `MEZANA · ${clean(body.entryAction, 20)} · ${clean(body.productName || body.catalogItemId, 60)}`, "MEZANA");
-      return json({ ok: true, today, entryId: mutation.result, ...mezanaView(mutation.state as Row, today) });
+      return json({ ok: true, today, entryId: mutation.result, ...mezanaView(mutation.state as Row, today), sent: await telegramStatuses(branchId), group: telegramGroups(mutation.state as Row) });
     }
     const { state } = await readHaloState(branchId);
-    return json({ ok: true, today, ...mezanaView(state as Row, today) });
+    return json({ ok: true, today, ...mezanaView(state as Row, today), sent: await telegramStatuses(branchId), group: telegramGroups(state as Row) });
   } catch (error) {
     if (error instanceof MezanaError) return json({ error: error.message }, error.status);
     if (error instanceof MezanaPostingError || error instanceof ClosedDayError) return json({ error: error.message }, 409);
@@ -142,7 +161,7 @@ function page(branches: Array<{ id: string; name: string }>): string {
     subtitle: "Olib turilgan, qaytarilgan, qarzga olingan mahsulot va to‘lovlar",
     headerRight: '<div class="row"><input type="date" id="date"><select id="branch"></select></div>',
     back: "/api/v2/qarz",
-    body: `<section class="card"><div class="grid" id="kpi"></div></section>
+    body: `<section class="card"><div class="grid" id="kpi"></div><div id="tgNote"></div></section>
 <section class="card"><h2>Yangi yozuv</h2><div class="row" id="acts" style="gap:8px;margin-bottom:12px"></div><div id="form"></div></section>
 <section class="card"><h2>Oxirgi 90 kun</h2><div id="list"></div></section>`,
     script: `
@@ -158,6 +177,8 @@ var LABEL={borrowed:'📥 Olib turildi',returned:'📤 Qaytarildi',purchased:'�
 function load(){document.getElementById('list').innerHTML=haloLoading(3);api({branchId:sel.value}).then(function(x){if(!x.ok){document.getElementById('list').innerHTML='<div class="msg bad">'+esc(x.error)+'</div>';return}D=x;if(!dt.value)dt.value=x.today;dt.max=x.today;OP=uuid();draw()})}
 function draw(){
   document.getElementById('kpi').innerHTML='<div class="kpi"><small>MEZANA’ga qarz</small><b style="color:var(--'+(D.debt?'bad':'ok')+')">'+won(D.debt)+'</b></div><div class="kpi"><small>Olib turilgan (qaytarilmagan)</small><b>'+D.borrowed.reduce(function(s,b){return s+b.quantity},0)+' ta</b><span class="hint">'+(D.borrowed.map(function(b){return esc(b.name)+' '+b.quantity}).join(' · ')||'—')+'</span></div>';
+  var g=D.group||{},miss=[];if(!g.borrowed)miss.push('olib turildi / qaytarildi');if(!g.purchased)miss.push('qarzga olindi / to‘lov');
+  document.getElementById('tgNote').innerHTML=miss.length?'<div class="msg warn" style="margin-top:12px">Telegram guruhi ulanmagan ('+miss.join(', ')+') — bu yozuvlar guruhga bormaydi. <a href="/api/v2/ulanishlar">Ulanishlar → MEZANA guruhi ›</a></div>':'';
   document.getElementById('acts').innerHTML=Object.keys(LABEL).map(function(a){return '<button class="'+(ACT===a?'':'ghost')+'" data-a="'+a+'" style="min-height:40px;padding:8px 12px">'+LABEL[a]+'</button>'}).join('');
   document.querySelectorAll('[data-a]').forEach(function(b){b.addEventListener('click',function(){ACT=b.dataset.a;OP=uuid();draw()})});
   drawForm();drawList();
@@ -186,12 +207,19 @@ function save(){var msg=document.getElementById('mMsg'),btn=document.getElementB
   var n=document.getElementById('mNote');if(n)b.note=n.value;
   if(!confirm(LABEL[ACT]+(b.productName?' · '+b.productName:'')+(b.amount?' · '+won(b.amount):'')+(b.quantity||b.itemCount?' · '+(b.quantity||b.itemCount)+' ta':'')+' · '+dt.value+'. Saqlansinmi?'))return;
   btn.disabled=true;
-  api(b).then(function(x){btn.disabled=false;if(!x.ok){msg.innerHTML='<div class="msg bad">'+esc(x.error)+'</div>';return}
-    var id=x.entryId;D=x;OP=uuid();draw();document.getElementById('mMsg').innerHTML='<div class="msg ok">✓ Saqlandi</div>';
-    fetch('/api/owner-mezana',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({branchId:sel.value,entryId:id})}).catch(function(){})});
+  api(b).then(function(x){btn.disabled=false;if(!x.ok){msg.innerHTML='<div class="msg bad" style="margin-top:10px">'+esc(x.error)+'</div>';return}
+    var id=x.entryId;D=x;OP=uuid();draw();document.getElementById('mMsg').innerHTML='<div class="msg ok" style="margin-top:10px">✓ Saqlandi · Telegram guruhga yuborilmoqda…</div>';
+    sendTg(id,function(t){var mm=document.getElementById('mMsg');if(mm)mm.innerHTML=t.sent?'<div class="msg ok" style="margin-top:10px">✓ Saqlandi va Telegram guruhga yuborildi</div>':'<div class="msg warn" style="margin-top:10px">✓ Saqlandi. Telegram guruhga yuborilmadi: '+esc(t.reason)+'</div>'})});
 }
-function drawList(){var box=document.getElementById('list');
-  box.innerHTML=D.entries.length?D.entries.map(function(e){var money=e.action==='purchased'||e.action==='paid';return '<div class="list-row"><div style="min-width:0"><b>'+LABEL[e.action]+(e.action==='paid'?'':' · '+esc(e.name))+'</b><br><small style="color:var(--muted)">'+esc(e.date)+' · '+esc(e.by)+(e.paidFrom?' · to‘landi: '+esc(e.paidFrom):'')+(e.note?' · '+esc(e.note):'')+'</small></div><div style="text-align:right"><b>'+(money?won(e.amount):e.quantity+' ta')+'</b><br><button class="ghost" data-rm="'+esc(e.id)+'" style="min-height:30px;padding:2px 10px;margin-top:4px">Olib tashlash</button></div></div>'}).join(''):'<p class="hint">Yozuv yo‘q.</p>';
+/* Yozuvni Telegram guruhga yuborish (bir yozuv bir marta boradi; yuborilmagan bo'lsa qayta urinish mumkin). */
+function sendTg(id,done){fetch('/api/owner-mezana',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({branchId:sel.value,entryId:id})}).then(function(r){return r.json()}).catch(function(){return {error:'Internet aloqasini tekshiring.'}})
+  .then(function(j){var t=j&&j.telegram?j.telegram:{sent:false,reason:(j&&j.error)||'Yuborilmadi.'};if(!D.sent)D.sent={};D.sent[id]={status:t.sent?'sent':'failed',error:t.reason||''};drawList();if(done)done(t)})}
+function drawList(){var box=document.getElementById('list'),sent=D.sent||{},cut=new Date(Date.parse(D.today+'T00:00:00Z')-2*86400000).toISOString().slice(0,10);
+  box.innerHTML=D.entries.length?D.entries.map(function(e){var money=e.action==='purchased'||e.action==='paid',d=sent[e.id];
+    var tg=d&&d.status==='sent'?'<span class="tag ok">📨 guruhda</span>':d&&d.status==='failed'?'<span class="tag warn">guruhga bormadi</span>':'';
+    var again=(d&&d.status==='failed')||(!d&&e.date>=cut);
+    return '<div class="list-row"><div style="min-width:0"><b>'+LABEL[e.action]+(e.action==='paid'?'':' · '+esc(e.name))+'</b>'+tg+'<br><small style="color:var(--muted)">'+esc(e.date)+' · '+esc(e.by)+(e.paidFrom?' · to‘landi: '+esc(e.paidFrom):'')+(e.note?' · '+esc(e.note):'')+(d&&d.status==='failed'&&d.error?' · '+esc(d.error):'')+'</small></div><div style="text-align:right"><b>'+(money?won(e.amount):e.quantity+' ta')+'</b><br>'+(again?'<button class="ghost" data-tg="'+esc(e.id)+'" style="min-height:30px;padding:2px 10px;margin-top:4px">📨 Guruhga yuborish</button> ':'')+'<button class="ghost" data-rm="'+esc(e.id)+'" style="min-height:30px;padding:2px 10px;margin-top:4px">Olib tashlash</button></div></div>'}).join(''):'<p class="hint">Yozuv yo‘q.</p>';
+  box.querySelectorAll('[data-tg]').forEach(function(b){b.addEventListener('click',function(){b.disabled=true;b.textContent='Yuborilmoqda…';sendTg(b.dataset.tg,function(t){if(!t.sent)alert('Guruhga yuborilmadi: '+t.reason)})})});
   box.querySelectorAll('[data-rm]').forEach(function(b){b.addEventListener('click',function(){var e=D.entries.find(function(x){return x.id===b.dataset.rm});haloRemove({kind:'mezana',id:b.dataset.rm,branch:sel.value,label:LABEL[e.action]+' · '+e.name+' · '+e.date,done:function(){load()}})})});
 }
 sel.addEventListener('change',load);load();
