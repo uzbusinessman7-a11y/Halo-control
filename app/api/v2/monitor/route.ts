@@ -90,6 +90,7 @@ function page(branches: Array<{ id: string; name: string }>): string {
 <section class="card"><details id="setBox"><summary style="font-size:15px;font-weight:700;color:var(--text)">⚙️ Ekran sozlamalari: yozuvlar, SET MENU, aksiya</summary><div id="settings" style="margin-top:14px"></div></details></section>`,
     script: `
 var BRANCHES=${boot},MENU=null,RECIPES=[],CATS=[],SCR='',F=null,ST=null;
+var DESIGNS=[['navbat','Navbat — taomlar bittalab katta, oxirida umumiy (tavsiya)'],['kino','Kino — katta surat va ro‘yxat'],['vitrina','Vitrina — hamma taom surati yonma-yon'],['yorliq','Qora yorliq — rasmsiz ro‘yxat'],['halqa','Halqa — dumaloq surat va ro‘yxat']];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function won(n){return Number(n||0).toLocaleString('en-US')+' ₩'}
 function money(v){return Number(String(v==null?'':v).replace(/[^0-9]/g,''))||0}
@@ -107,12 +108,16 @@ function draw(){
   byId('scr').innerHTML=MENU.screens.map(function(s){var n=MENU.items.filter(function(i){return i.screen===s.id}).length;return '<button class="'+(s.id===SCR?'':'ghost')+'" data-s="'+esc(s.id)+'">📺 '+esc(s.title)+' · '+n+'</button>'}).join('')+'<button class="ghost" id="scrNew">+ Ekran</button>';
   document.querySelectorAll('[data-s]').forEach(function(b){b.addEventListener('click',function(){SCR=b.dataset.s;draw()})});
   byId('scrNew').addEventListener('click',function(){var t=prompt('Yangi ekran nomi (masalan Combo):');if(!t)return;act({action:'saveScreen',title:t},function(b){SCR=b.screenId;draw()})});
-  var url=tvUrl(SCR);
-  byId('scrInfo').innerHTML='<div class="row"><button id="open">Ekranni ochish</button><button class="ghost" id="copy">Havolani nusxalash</button></div>'
+  var url=tvUrl(SCR),scNow=MENU.screens.find(function(x){return x.id===SCR});
+  byId('scrInfo').innerHTML='<label class="field"><span>Bu ekranning ko‘rinishi</span><select id="dSel">'+DESIGNS.map(function(d){return '<option value="'+d[0]+'"'+(scNow.design===d[0]?' selected':'')+'>'+d[1]+'</option>'}).join('')+'</select></label>'
+    +'<div class="row" style="gap:8px;margin-bottom:14px"><span style="font-size:14px;color:var(--muted)">Avval sinab ko‘rish:</span>'+DESIGNS.map(function(d){return '<button class="ghost" data-prev="'+d[0]+'" style="min-height:36px;padding:4px 12px">'+d[1].split(' — ')[0]+'</button>'}).join('')+'</div><div id="dMsg"></div>'
+    +'<div class="row"><button id="open">Ekranni ochish</button><button class="ghost" id="copy">Havolani nusxalash</button></div>'
     +'<p class="hint" style="margin:10px 0 0">Televizor brauzerida shu manzilni oching: <b style="color:var(--text);word-break:break-all">'+esc(url)+'</b><br>Parol so‘ralmaydi. Bu yerda o‘zgartirganingiz ekranda 30 soniya ichida o‘zi yangilanadi.</p>'
     +(MENU.unlinked?'<div class="msg warn" style="margin-top:10px"><b>'+MENU.unlinked+'</b> ta narx menyudagi taomga bog‘lanmagan — ekranda shu yerda yozilgan narx ko‘rinadi. Bog‘lasangiz, narx menyudan olinadi va u yerda o‘zgarsa ekranda ham o‘zgaradi.</div>':'<div class="msg ok" style="margin-top:10px">✓ Hamma narx menyudan olinmoqda</div>')
     +'<div id="copyMsg"></div>';
   byId('open').addEventListener('click',function(){window.open(url,'_blank','noopener')});
+  byId('dSel').addEventListener('change',function(){var d=this.value;post({action:'saveScreen',id:SCR,title:scNow.title,design:d}).then(function(x){if(!x.body.ok){byId('dMsg').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}take(x.body);byId('dMsg').innerHTML='<div class="msg ok" style="margin-bottom:10px">✓ Ko‘rinish o‘zgardi. Televizorda 30 soniya ichida almashadi.</div>'})});
+  document.querySelectorAll('[data-prev]').forEach(function(b){b.addEventListener('click',function(){window.open(url+(url.indexOf('?')<0?'?':'&')+'d='+b.dataset.prev,'_blank','noopener')})});
   byId('copy').addEventListener('click',function(){var ok=function(){byId('copyMsg').innerHTML='<div class="msg ok">✓ Nusxa olindi</div>'};if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(url).then(ok,function(){prompt('Nusxalang:',url)});else prompt('Nusxalang:',url)});
   var items=MENU.items.filter(function(i){return i.screen===SCR});
   byId('list').innerHTML='<div class="row" style="justify-content:space-between;margin-bottom:6px"><h2 style="margin:0">Taomlar</h2><button id="iNew">+ Yangi taom</button></div>'
@@ -204,7 +209,7 @@ function drawSettings(){var box=byId('settings');if(!MENU)return;
   var inp=function(id,label,value,extra){return '<label class="field" style="flex:1 1 200px"><span>'+label+'</span><input id="'+id+'" value="'+esc(value)+'"'+(extra||'')+'></label>'};
   var chk=function(id,label,on){return '<label class="row" style="gap:8px;margin-bottom:10px"><input type="checkbox" id="'+id+'" style="width:18px;height:18px;min-height:auto"'+(on?' checked':'')+'> '+label+'</label>'};
   var num=' inputmode="numeric" style="text-align:right"';
-  box.innerHTML='<h3 style="font-size:15px;margin:0 0 8px">«'+esc(sc.title)+'» ekrani</h3><div class="row">'+inp('xTitle','Ekran nomi',sc.title,' maxlength="24"')+inp('xPer','Bir sahifada nechta taom (3–10)',sc.itemsPerPage,num)+inp('xSpot','Katta ko‘rinish har necha soniyada almashadi',sc.spotlightSeconds,num)+'</div>'
+  box.innerHTML='<h3 style="font-size:15px;margin:0 0 8px">«'+esc(sc.title)+'» ekrani</h3><div class="row">'+inp('xTitle','Ekran nomi',sc.title,' maxlength="24"')+inp('xPer','Bir sahifada nechta taom (3–10)',sc.itemsPerPage,num)+inp('xSpot','Har bir taom necha soniya turadi',sc.spotlightSeconds,num)+inp('xOver','Umumiy menyu necha soniya turadi (Navbat)',sc.overviewSeconds,num)+'</div>'
     +'<div class="row" style="margin-bottom:18px"><button id="xSave">Ekranni saqlash</button><button class="ghost" id="xDel" style="color:var(--bad)">Ekranni o‘chirish</button></div><div id="xMsg"></div>'
     +'<h3 style="font-size:15px;margin:0 0 8px">Tepadagi va pastdagi yozuvlar</h3><div class="row">'+inp('rName','Nomi',r.name,' maxlength="24"')+inp('rSlogan','Shior',r.slogan,' maxlength="80"')+'</div><div class="row">'+inp('rHours','Ish vaqti',r.hours,' maxlength="60"')+inp('rPhone','Telefon',r.phone,' maxlength="30"')+'</div>'+inp('rFooter','Pastdagi yozuv',r.footer,' maxlength="80"')
     +'<h3 style="font-size:15px;margin:14px 0 8px">SET MENU (pastda, chapda)</h3>'+chk('sVis','Ekranda ko‘rinsin',s.visible)+'<div class="row">'+inp('sTitle','Sarlavha',s.title,' maxlength="40"')+inp('sDesc','Tarkibi',s.description,' maxlength="120"')+inp('sPrice','Narxi (₩)',s.price?s.price.toLocaleString('en-US'):'',num)+'</div>'
@@ -220,7 +225,7 @@ function drawSettings(){var box=byId('settings');if(!MENU)return;
     +'<button id="gSave">Sozlamalarni saqlash</button><div id="gMsg"></div>';
   ['sPrice','pPrice','pOld'].forEach(function(id){var e=byId(id);e.addEventListener('input',function(){var n=money(e.value);e.value=n?n.toLocaleString('en-US'):''})});
   var v=function(id){return byId(id).value};
-  byId('xSave').addEventListener('click',function(){post({action:'saveScreen',id:SCR,title:v('xTitle'),itemsPerPage:money(v('xPer')),spotlightSeconds:money(v('xSpot'))}).then(function(x){if(!x.body.ok){byId('xMsg').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}take(x.body);byId('xMsg').innerHTML='<div class="msg ok">✓ Saqlandi</div>'})});
+  byId('xSave').addEventListener('click',function(){post({action:'saveScreen',id:SCR,title:v('xTitle'),itemsPerPage:money(v('xPer')),spotlightSeconds:money(v('xSpot')),overviewSeconds:money(v('xOver'))}).then(function(x){if(!x.body.ok){byId('xMsg').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}take(x.body);byId('xMsg').innerHTML='<div class="msg ok">✓ Saqlandi</div>'})});
   byId('xDel').addEventListener('click',function(){if(!confirm('«'+sc.title+'» ekrani o‘chirilsinmi?'))return;post({action:'deleteScreen',id:SCR}).then(function(x){if(!x.body.ok){byId('xMsg').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}take(x.body)})});
   byId('sPic').addEventListener('click',function(){pickImage(function(id,url){ST.setImageId=id;ST.setImage=url;byId('sPicMsg').innerHTML='<div class="msg ok">✓ Rasm yuklandi. «Sozlamalarni saqlash»ni bosing.</div>'},byId('sPicMsg'))});
   byId('pPic').addEventListener('click',function(){pickImage(function(id,url){ST.promoImageId=id;ST.promoImage=url;byId('pPicMsg').innerHTML='<div class="msg ok">✓ Rasm yuklandi. «Sozlamalarni saqlash»ni bosing.</div>'},byId('pPicMsg'))});

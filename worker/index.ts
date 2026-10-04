@@ -76,8 +76,11 @@ const worker = {
       if (tv) {
         const target = new URL("/api/v2/tv", url);
         if (tv[1]) target.searchParams.set("screen", tv[1]);
-        const branch = url.searchParams.get("b");
-        if (branch) target.searchParams.set("b", branch);
+        // b — filial, d — ko'rinishni vaqtincha sinab ko'rish (navbat, kino, vitrina, yorliq, halqa).
+        for (const key of ["b", "d"]) {
+          const value = url.searchParams.get(key);
+          if (value) target.searchParams.set(key, value);
+        }
         return Response.redirect(target.toString(), 302);
       }
     }

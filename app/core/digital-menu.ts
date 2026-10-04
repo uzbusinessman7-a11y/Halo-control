@@ -22,7 +22,11 @@ export interface DmItem {
   id: string; name: string; description: string; screen: string; badge: string; imageId: string; imageUrl: string;
   visible: boolean; soldOut: boolean; soldOutText: string; variants: DmVariant[];
 }
-export interface DmScreen { id: string; title: string; itemsPerPage: number; spotlightSeconds: number }
+/** Ekran ko'rinishi: navbat — taomlar bittalab katta, oxirida umumiy; kino — katta rasm + ro'yxat; vitrina — rasmlar mozaikasi;
+ *  yorliq — rasmsiz klassik ro'yxat; halqa — dumaloq rasm + ro'yxat. */
+export const DM_DESIGNS = ["navbat", "kino", "vitrina", "yorliq", "halqa"] as const;
+export type DmDesign = typeof DM_DESIGNS[number];
+export interface DmScreen { id: string; title: string; itemsPerPage: number; spotlightSeconds: number; overviewSeconds: number; design: DmDesign }
 export interface DmOffer { visible: boolean; title: string; description: string; price: number; imageId: string; imageUrl: string }
 export interface DmPromotion extends DmOffer { eyebrow: string; oldPrice: number; badge: string; intervalSeconds: number; durationSeconds: number; startsAt: string; endsAt: string }
 export interface DmThanks { visible: boolean; title: string; message: string; intervalSeconds: number; durationSeconds: number }
@@ -53,6 +57,7 @@ const safeUrl = (value: unknown) => {
   const url = text(value, 400);
   return /^https:\/\/[a-z0-9.-]+\/[^\s"'<>]*$/i.test(url) ? url : "";
 };
+const designOf = (value: unknown): DmDesign => ((DM_DESIGNS as readonly string[]).includes(String(value)) ? String(value) as DmDesign : "navbat");
 const moment = (value: unknown) => (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(value || "")) ? String(value) : "");
 
 function cleanOffer(input: Row, fallbackTitle: string): DmOffer {
@@ -72,9 +77,12 @@ export function normalizeDm(input: unknown): DmConfig {
     const id = slug(entry.id);
     if (!id || seenScreens.has(id) || screens.length >= MAX_SCREENS) continue;
     seenScreens.add(id);
-    screens.push({ id, title: text(entry.title, 24) || id, itemsPerPage: int(entry.itemsPerPage, 3, 10, 8), spotlightSeconds: int(entry.spotlightSeconds, 4, 120, 8) });
+    screens.push({
+      id, title: text(entry.title, 24) || id, itemsPerPage: int(entry.itemsPerPage, 3, 10, 8), spotlightSeconds: int(entry.spotlightSeconds, 4, 120, 8),
+      overviewSeconds: int(entry.overviewSeconds, 5, 300, 15), design: designOf(entry.design),
+    });
   }
-  if (!screens.length) screens.push({ id: "menyu", title: "Menyu", itemsPerPage: 8, spotlightSeconds: 8 });
+  if (!screens.length) screens.push({ id: "menyu", title: "Menyu", itemsPerPage: 8, spotlightSeconds: 8, overviewSeconds: 15, design: "navbat" });
   const seenItems = new Set<string>();
   const items: DmItem[] = [];
   for (const entry of rows(source.items)) {
@@ -250,7 +258,7 @@ export function tvView(config: DmConfig, recipes: RecipePrice[], screenId: strin
   const byId = new Map(recipes.map((recipe) => [recipe.id, recipe]));
   const offer = (entry: DmOffer) => ({ title: entry.title, description: entry.description, price: entry.price, image: imageOf(entry) });
   return {
-    screen: { id: screen.id, title: screen.title, itemsPerPage: screen.itemsPerPage, spotlightSeconds: screen.spotlightSeconds },
+    screen: { id: screen.id, title: screen.title, itemsPerPage: screen.itemsPerPage, spotlightSeconds: screen.spotlightSeconds, overviewSeconds: screen.overviewSeconds, design: screen.design },
     screens: config.screens.map((entry) => ({ id: entry.id, title: entry.title })),
     restaurant: config.restaurant,
     items: config.items.filter((item) => item.screen === screen.id && item.visible).map((item) => ({
@@ -372,12 +380,16 @@ export function saveSettings(config: DmConfig, body: Row): DmConfig {
 export function saveScreen(config: DmConfig, body: Row): { config: DmConfig; id: string } {
   const title = text(body.title, 24);
   if (title.length < 2) throw new DigitalMenuError("Ekran nomini yozing.");
-  const settings = { itemsPerPage: int(body.itemsPerPage, 3, 10, 8), spotlightSeconds: int(body.spotlightSeconds, 4, 120, 8) };
   const id = slug(body.id);
-  if (id) {
-    if (!config.screens.some((screen) => screen.id === id)) throw new DigitalMenuError("Ekran topilmadi.", 404);
-    return { config: { ...config, screens: config.screens.map((screen) => (screen.id === id ? { ...screen, title, ...settings } : screen)) }, id };
-  }
+  const before = id ? config.screens.find((screen) => screen.id === id) : undefined;
+  if (id && !before) throw new DigitalMenuError("Ekran topilmadi.", 404);
+  if (body.design !== undefined && !(DM_DESIGNS as readonly string[]).includes(String(body.design))) throw new DigitalMenuError("Ko‘rinishni tanlang.");
+  // Yuborilmagan sozlama o'zgarmaydi (yangi ekranda — odatiy qiymat).
+  const settings = {
+    itemsPerPage: int(body.itemsPerPage, 3, 10, before?.itemsPerPage ?? 8), spotlightSeconds: int(body.spotlightSeconds, 4, 120, before?.spotlightSeconds ?? 8),
+    overviewSeconds: int(body.overviewSeconds, 5, 300, before?.overviewSeconds ?? 15), design: body.design !== undefined ? designOf(body.design) : (before?.design ?? "navbat"),
+  };
+  if (before) return { config: { ...config, screens: config.screens.map((screen) => (screen.id === id ? { ...screen, title, ...settings } : screen)) }, id };
   if (config.screens.length >= MAX_SCREENS) throw new DigitalMenuError(`Ekranlar soni ${MAX_SCREENS} tadan oshmaydi.`);
   const fresh = slug(title);
   if (!fresh) throw new DigitalMenuError("Ekran nomida lotin harfi yoki raqam bo‘lsin (manzil uchun).");

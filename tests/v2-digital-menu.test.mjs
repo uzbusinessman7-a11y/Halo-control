@@ -108,6 +108,13 @@ test('taom saqlash: tekshiruvlar, rasm, tartib, ekranlar, sozlamalar', () => {
   assert.throws(() => dm.saveScreen(combo.config, { title: 'Combo' }), /bor/);
   assert.equal(dm.deleteScreen(combo.config, 'combo').screens.length, 3);
   assert.equal(dm.saveScreen(seed, { id: 'kebab', title: 'Kebablar', itemsPerPage: 99, spotlightSeconds: 1 }).config.screens[0].itemsPerPage, 10);
+  // ko'rinish: odatda "navbat"; faqat yuborilgan sozlama o'zgaradi
+  assert.deepEqual([seed.screens[0].design, seed.screens[0].overviewSeconds, combo.config.screens.at(-1).design], ['navbat', 15, 'navbat']);
+  const kino = dm.saveScreen(dm.saveScreen(seed, { id: 'kebab', title: 'Kebab', itemsPerPage: 5 }).config, { id: 'kebab', title: 'Kebab', design: 'kino' }).config.screens[0];
+  assert.deepEqual([kino.design, kino.itemsPerPage, kino.spotlightSeconds, kino.overviewSeconds], ['kino', 5, 8, 15]);
+  assert.throws(() => dm.saveScreen(seed, { id: 'kebab', title: 'Kebab', design: 'boshqa' }), /Ko‘rinishni/);
+  assert.equal(dm.normalizeDm({ screens: [{ id: 'a', title: 'A', design: 'eski' }] }).screens[0].design, 'navbat');
+  assert.deepEqual(Object.keys(dm.tvView(seed, recipes, 'kebab').screen).sort(), ['design', 'id', 'itemsPerPage', 'overviewSeconds', 'spotlightSeconds', 'title']);
   // sozlamalar: faqat yuborilgan qism o'zgaradi
   const set = dm.saveSettings(seed, { restaurant: { hours: 'Har kuni 11—02' }, setOffer: { price: 4500, imageId: 'img-set' }, promotion: { visible: true, startsAt: '2026-10-05T10:00', endsAt: '2026-10-06T10:00' } });
   assert.deepEqual([set.restaurant.hours, set.restaurant.phone, set.setOffer.price, set.setOffer.imageId, set.setOffer.imageUrl, set.promotion.visible], ['Har kuni 11—02', seed.restaurant.phone, 4500, 'img-set', '', true]);
@@ -120,7 +127,8 @@ test('ekran sahifasi: skript to‘g‘ri, shriftlar saytning o‘zidan, tashqi m
   const html = tvPage({ screen: 'kebab', branch: 'main' });
   const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
   assert.doesNotThrow(() => new vm.Script(script));
-  assert.match(script, /var CFG=\{"screen":"kebab","b":"main","v":"tv-1"\}/);
+  assert.match(script, /var CFG=\{"screen":"kebab","b":"main","v":"tv-2","d":""\}/);
+  assert.match(tvPage({ screen: 'kebab', branch: 'main', design: 'kino' }), /"d":"kino"/);
   assert.equal(/https?:\/\//.test(html.replace(/‘/g, '')), false, 'tashqi sayt (shrift, skript) chaqirilmaydi');
   assert.match(html, /\/fonts\/halo-tv-display\.woff/);
   assert.equal(tvPage({ screen: '</script><b>', branch: 'main' }).includes('</script><b>'), false, 'manzildagi matn sahifani buzmaydi');

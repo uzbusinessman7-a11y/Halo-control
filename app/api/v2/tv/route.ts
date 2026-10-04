@@ -5,7 +5,7 @@ import type { D1Like } from "../../../lib/full-migration";
 
 /**
  * HALO monitor menyusi — televizor uchun OCHIQ manzil (parolsiz, faqat o'qiydi).
- *  - GET /api/v2/tv?screen=kebab            → ekran sahifasi (qisqa manzil: /tv/kebab)
+ *  - GET /api/v2/tv?screen=kebab            → ekran sahifasi (qisqa manzil: /tv/kebab; &d=kino — ko'rinishni sinab ko'rish)
  *  - GET /api/v2/tv?data=1&screen=kebab     → ekran ma'lumoti (nom, tavsif, narx, rasm manzili)
  *  - GET /api/v2/tv?media=<id>              → taom rasmi
  * Hech narsa yozmaydi. Tannarx, retsept, savdo va boshqa ichki ma'lumot bu yerdan chiqmaydi.
@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     const branchId = branchOf(url.searchParams.get("b"));
     const screen = slug(url.searchParams.get("screen"));
     if (url.searchParams.get("data") !== "1") {
-      return new Response(tvPage({ screen, branch: branchId }), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      return new Response(tvPage({ screen, branch: branchId, design: slug(url.searchParams.get("d")) }), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
     }
     const key = `${branchId}:${screen}`;
     let body = tvMemoGet(key);
