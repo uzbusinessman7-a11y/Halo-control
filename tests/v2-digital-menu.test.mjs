@@ -459,9 +459,14 @@ test('sayt: boshqaruv faqat rahbarga; ekran parolsiz va faqat o‘qiydi; narx me
 test('rasmlarni eski saytdan ko‘chirish: o‘zgarishsiz saqlanadi, faqat eski saytdagi menyu rasmlari o‘qiladi, eski saytga yozilmaydi', async () => {
   const jpeg = new Uint8Array(40_000).map((_, index) => (index * 31 + 7) % 256);
   const calls = [];
+  const inits = [];
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (url, init = {}) => {
     calls.push([String(url), init.method || 'GET']);
+    // Cloudflare Workers "redirect: error" ni qabul qilmaydi (fetch xato beradi) — shuni takrorlaymiz
+    if (init.redirect !== 'follow' && init.redirect !== 'manual' && init.redirect !== undefined) throw new TypeError('Invalid redirect value, must be one of "follow" or "manual"');
+    inits.push(init);
+    if (String(url).endsWith('/images/pitsa-upload-tv.jpg')) return new Response(null, { status: 302, headers: { location: 'https://boshqa.example/x.jpg' } });
     if (String(url).endsWith('/images/chicken-tv.jpg')) return new Response('Not Found', { status: 404, headers: { 'content-type': 'text/plain' } });
     if (String(url).includes('2512c422')) return new Response('<html>', { status: 200, headers: { 'content-type': 'text/html' } });
     return new Response(jpeg, { status: 200, headers: { 'content-type': 'image/jpeg' } });
@@ -487,7 +492,14 @@ test('rasmlarni eski saytdan ko‘chirish: o‘zgarishsiz saqlanadi, faqat eski 
     assert.match((await (await tv('?data=1&screen=kebab')).json()).stage, new RegExp(`<img src="/api/v2/tv\\?media=${item.imageId}"`));
     // ikkinchi marta ko'chirilmaydi; eski sayt xato bersa yoki rasm o'rniga boshqa narsa kelsa — menyu o'zgarmaydi
     assert.equal((await monitor({ action: 'importImage', kind: tandir.kind, id: tandir.id })).status, 404);
-    assert.equal((await monitor({ action: 'importImage', kind: 'screen', id: 'chicken' })).status, 502);
+    const refused = await monitor({ action: 'importImage', kind: 'screen', id: 'chicken' });
+    assert.deepEqual([refused.status, (await refused.json()).error], [502, 'Eski sayt rasmni bermadi (404).']);
+    // boshqa manzilga yo'naltirishga ergashilmaydi (faqat eski saytning o'zidan o'qiladi)
+    const moved = await monitor({ action: 'importImage', kind: 'screen', id: 'pitsa' });
+    assert.deepEqual([moved.status, (await moved.json()).error], [502, 'Eski sayt rasm o‘rniga boshqa manzilga yo‘naltirdi (302).']);
+    assert.equal(calls.some(([url]) => url.includes('boshqa.example')), false);
+    // so'rov Cloudflare Workers qabul qiladigan ko'rinishda: redirect "manual", o'zini tanishtiradi
+    assert.equal(inits.every((init) => init.redirect === 'manual' && /HALO-Control/.test(init.headers['User-Agent']) && init.signal instanceof AbortSignal), true);
     const fried = targets.find((t) => t.name === 'FRIED CHICKEN');
     assert.equal((await monitor({ action: 'importImage', kind: fried.kind, id: fried.id })).status, 502);
     assert.equal((await (await monitor({ action: 'load' })).json()).menu.imports.length, 21);
