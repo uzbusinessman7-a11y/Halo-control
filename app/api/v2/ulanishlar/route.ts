@@ -10,9 +10,9 @@ declare global {
 }
 
 /**
- * HALO V2 — ulanishlar: Telegram bot (kunlik hisobot), MEZANA guruhi, Google Sheets (avtomatik jadval),
- * API kalitlar (boshqa dasturlar uchun). Hamma amal mavjud tekshirilgan API'lar orqali:
- * /api/telegram, /api/admin/integrations. Kalit faqat bir marta ko'rsatiladi, saqlanmaydi.
+ * HALO V2 — ulanishlar: Telegram bot (kunlik hisobot), MEZANA guruhi, yordamchi bot (ma'lumot va kiritma),
+ * Google Sheets (avtomatik jadval), API kalitlar (boshqa dasturlar uchun). Hamma amal mavjud tekshirilgan
+ * API'lar orqali: /api/telegram, /api/assistant, /api/admin/integrations. Kalit faqat bir marta ko'rsatiladi.
  */
 const PAGE_PATH = "/api/v2/ulanishlar";
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -89,6 +89,7 @@ export async function GET(request: Request) {
     headerRight: '<select id="branch"></select>',
     body: `<section class="card"><h2>✈️ Telegram bot</h2><p class="hint">Har kuni belgilangan vaqtda kunlik hisobot va qisqa “flash” hisobot shu chatga keladi.</p><div id="tg"></div></section>
 <section class="card"><h2>🤝 MEZANA guruhi</h2><p class="hint">MEZANA’dan olib turilgan, qaytarilgan, qarzga olingan mahsulot va to‘lovlar kiritilishi bilan shu Telegram guruhga yuboriladi.</p><div id="mz"></div></section>
+<section class="card"><h2>🤖 Yordamchi bot</h2><p class="hint">Telegramdan ma’lumot olish va kiritma qilish: bugungi holat, kassa, qarzlar, ombor, MEZANA; xarajat, MEZANA yozuvi va qarz to‘lovi — har biri tasdiqlash bilan. Bot faqat siz bog‘lagan Telegram akkauntga javob beradi.</p><div id="as"></div></section>
 <section class="card"><h2>📊 Google Sheets</h2><p class="hint">Savdo, xarajat va hisobotlar Google jadvalga o‘zi tushib turadi.</p><div id="gs"></div></section>
 <section class="card"><h2>🔑 API kalitlar</h2><p class="hint">Boshqa dasturlar (POS, buxgalteriya) HALO ma’lumotini o‘qishi uchun. Kalit faqat yaratilganda bir marta ko‘rinadi.</p><div id="keys"></div></section>`,
     script: `
@@ -148,6 +149,53 @@ function loadMezana(flash){var box=document.getElementById('mz');
       req('/api/telegram','POST',{action:'save-mezana',branchId:sel.value,mezanaDestination:document.getElementById('mzK').value,chatId:id}).then(function(r){if(!r.body.ok){note(msg,false,r.body.error||'Saqlanmadi.');return}loadMezana('<div class="msg ok" style="margin-top:10px">✓ Saqlandi. «Sinov»ni bosib tekshiring.</div>')})});
   });
 }
+/* Yordamchi bot: mavjud /api/assistant amallari (setup, pair, activate, status, retryWebhook, disconnect). Token faqat serverga yuboriladi, qaytib ko'rsatilmaydi. */
+var AS_LINK='',AS_TIMER=null;
+function loadAssistant(flash){var box=document.getElementById('as');clearInterval(AS_TIMER);
+  req('/api/assistant?branch='+encodeURIComponent(sel.value),'GET').then(function(x){var a=x.body||{};
+    if(!a.ok){box.innerHTML='<div class="msg bad">'+esc(a.error||'Yuklanmadi.')+'</div>';return}
+    var t=a.telegram,h='';
+    if(!t){AS_LINK='';
+      h='<div class="msg warn">Yordamchi bot ulanmagan</div>'
+        +'<ol class="hint" style="padding-left:18px;margin-top:12px;display:grid;gap:6px"><li>Telegram’da <b>@BotFather</b> → /newbot → <b>yangi</b> bot yarating. Yuqoridagi hisobot botining tokeni bu yerga to‘g‘ri kelmaydi — yordamchiga alohida bot kerak.</li>'
+        +'<li>BotFather bergan tokenni pastga kiriting va «Botni ulash»ni bosing.</li><li>Keyin o‘z Telegram akkauntingizni bog‘laysiz — bot faqat sizga javob beradi.</li></ol>'
+        +'<label class="field"><span>Yordamchi bot tokeni</span><input id="asT" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="BotFather bergan token"></label>'
+        +'<button id="asSetup">Botni ulash</button>';
+    }else{
+      var branch=(BRANCHES.filter(function(b){return b.id===t.branchId})[0]||{}).name||t.branchId;
+      if(t.enabled)AS_LINK='';
+      h='<div class="msg '+(t.enabled?'ok':'warn')+'">'+(t.enabled?'✓ Faol: @'+esc(t.botName)+' · filial: '+esc(branch):'@'+esc(t.botName)+' tayyor — endi o‘z Telegram akkauntingizni bog‘lang')+'</div><div id="asHook"></div>';
+      if(t.candidateId)h+='<div class="msg warn" style="margin-top:10px">Ulanayotgan akkaunt: <b>'+esc(t.candidateName||'nomsiz')+'</b> · Telegram ID '+esc(t.candidateId)+'. Faqat o‘zingizniki bo‘lsa tasdiqlang.</div><div class="row" style="margin-top:8px"><button id="asAct">Bu mening akkauntim — tasdiqlash</button></div>';
+      else if(AS_LINK&&!t.enabled){var cmd='/start '+AS_LINK.split('start=')[1];
+        h+='<div class="msg" style="margin-top:10px;border:1px solid var(--line)">1. <a href="'+esc(AS_LINK)+'" target="_blank" rel="noreferrer"><b>Telegramni ochish</b></a> va <b>Start</b> bosing. Ochilmasa, quyidagi buyruqni nusxalab @'+esc(t.botName)+' botiga yuboring:'
+          +'<div class="row" style="margin-top:8px"><input id="asCmd" readonly value="'+esc(cmd)+'" style="flex:1;min-width:0;font:13px ui-monospace,Menlo,monospace"><button class="ghost" id="asCopy">📋 Nusxa</button></div>'
+          +'2. Shu oynaga qayting — akkauntingiz shu yerda ko‘rinadi, «tasdiqlash»ni bosasiz. Havola 10 daqiqa amal qiladi.</div>'}
+      h+='<div class="row" style="margin-top:12px">'+(t.enabled?'':'<button id="asPair"'+(t.candidateId||AS_LINK?' class="ghost"':'')+'>'+(AS_LINK||t.candidateId?'Yangi havola olish':'O‘z Telegramimni bog‘lash')+'</button>')+'<button class="ghost" id="asFix">Bot ulanishini tiklash</button><button class="ghost" id="asOff">Uzish</button></div>';
+      if(t.enabled)h+='<p class="hint" style="margin:12px 0 0">Telegramda botga <b>/start</b> yozing — tugmalar chiqadi.'+(BRANCHES.length>1?' Boshqa filialga o‘tish: botdagi «🏪 Filial» tugmasi.':'')+' '+(a.aiReady?'AI ulangan: erkin matn bilan ham yozish mumkin.':'Tugmalar AI’siz ishlaydi; erkin matnli buyruqlar uchun Cloudflare’da OPENAI_API_KEY kerak bo‘ladi (ixtiyoriy).')+'</p>';
+    }
+    box.innerHTML=h+'<div id="asM">'+(flash||'')+'</div>';
+    var msg=document.getElementById('asM'),ok=function(text){return '<div class="msg ok" style="margin-top:10px">'+esc(text)+'</div>'};
+    var act=function(body,after){return req('/api/assistant','POST',Object.assign({branchId:sel.value},body)).then(function(r){if(!r.body.ok){note(msg,false,r.body.error||'Bajarilmadi.');return null}if(after)after(r.body);return r.body})};
+    var on=function(id,fn){var el=document.getElementById(id);if(el)el.addEventListener('click',function(){fn(el)})};
+    on('asSetup',function(b){var tk=document.getElementById('asT').value.trim();if(!tk){note(msg,false,'Tokenni kiriting.');return}b.disabled=true;
+      act({action:'setup',botToken:tk},function(r){loadAssistant(ok(r.message||'Bot tayyor.'))}).then(function(){b.disabled=false})});
+    on('asPair',function(b){b.disabled=true;act({action:'pair'},function(r){AS_LINK=r.link||'';loadAssistant()}).then(function(){b.disabled=false})});
+    on('asCopy',function(){var c=document.getElementById('asCmd');c.focus();c.select();var done=function(){note(msg,true,'✓ Nusxa olindi — Telegramdagi yordamchi botga yuboring.')};
+      if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(c.value).then(done,function(){note(msg,false,'Matn belgilandi — Ctrl+C bosing.')});else{try{document.execCommand('copy');done()}catch(e){note(msg,false,'Matn belgilandi — Ctrl+C bosing.')}}});
+    on('asAct',function(b){b.disabled=true;act({action:'activate',candidateId:t.candidateId},function(r){AS_LINK='';loadAssistant(ok(r.message||'Tasdiqlandi.'))}).then(function(){b.disabled=false})});
+    on('asFix',function(b){b.disabled=true;act({action:'retryWebhook'},function(r){loadAssistant(ok(r.message||'Tiklandi.'))}).then(function(){b.disabled=false})});
+    on('asOff',function(){if(!confirm('Yordamchi bot uzilsinmi? Hisob yozuvlari saqlanadi.'))return;act({action:'disconnect'},function(r){AS_LINK='';loadAssistant(ok(r.message||'Uzildi.'))})});
+    if(t){req('/api/assistant','POST',{action:'status',branchId:sel.value}).then(function(r){var w=r.body&&r.body.webhook,el=document.getElementById('asHook');if(!w||!el)return;
+        var warn=function(text){el.innerHTML='<div class="msg warn" style="margin-top:10px">'+text+'</div>'};
+        if(!w.checked)warn('Telegram bu bot haqida javob bermadi — token bekor qilingan bo‘lishi mumkin. «Uzish»ni bosib, yangi token kiriting.');
+        else if(w.elsewhere)warn('⚠ Bu bot <b>boshqa saytga</b> ulangan (eski sayt) — xabarlar bu yerga kelmaydi. Yangi sayt uchun BotFather’da yangi bot yarating: «Uzish»ni bosing (eski saytdagi bot ishlayveradi), keyin yangi tokenni kiriting.');
+        else if(!w.here)warn('Bot ulanishi uzilgan — «Bot ulanishini tiklash»ni bosing.');
+        else if(w.lastError)el.innerHTML='<p class="hint" style="margin:8px 0 0">Telegramning oxirgi xabari: '+esc(w.lastError)+(w.pending?' · navbatda '+esc(w.pending)+' ta':'')+'</p>'});
+      // Bog'lash kutilayotganda sahifa o'zi tekshirib turadi.
+      if(!t.enabled&&AS_LINK&&!t.candidateId)AS_TIMER=setInterval(function(){if(document.visibilityState!=='visible')return;
+        req('/api/assistant?branch='+encodeURIComponent(sel.value),'GET').then(function(y){var n=y.body&&y.body.telegram;if(n&&(n.candidateId||n.enabled))loadAssistant()})},5000)}
+  });
+}
 /* Google Sheets va API kalitlar */
 function loadIntegrations(){
   req('/api/admin/integrations?branch='+encodeURIComponent(sel.value),'GET').then(function(x){SNAP=x.body||{};drawSheets();drawKeys()});
@@ -199,7 +247,7 @@ function drawKeys(){var box=document.getElementById('keys'),keys=(SNAP.keys||[])
       var o2=document.getElementById('kOut');o2.innerHTML='<div class="msg warn" style="margin-top:10px">Kalit (faqat hozir ko‘rinadi): <code>'+esc(key)+'</code></div><button class="ghost" id="kC">📋 Nusxa</button><div id="kM"></div>';document.getElementById('kC').addEventListener('click',function(){copy(key,document.getElementById('kM'))})});
   });
 }
-function loadAll(){loadTelegram();loadMezana();loadIntegrations()}
+function loadAll(){loadTelegram();loadMezana();loadAssistant();loadIntegrations()}
 sel.addEventListener('change',loadAll);loadAll();
 `,
   }), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });

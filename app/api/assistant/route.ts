@@ -43,6 +43,12 @@ export async function POST(request:Request){
    return Response.json({ok:true,message:'Bot tayyor. Endi Telegram akkauntingizni bog‘lang.'});
   }
   if(!c)throw new AssistantError('Avval yordamchi botni sozlang.');
+  if(b.action==='status'){
+   // Bot xabarlari shu saytga kelyaptimi? (Ko'chirilgan bazada bot eski saytga ulangan bo'lishi mumkin.) Token qaytarilmaydi.
+   let hook:any=null;try{hook=await telegramApi(c.bot_token,'getWebhookInfo',{});}catch{/* token bekor qilingan yoki Telegram javob bermadi */}
+   const url=String(hook?.url||'');
+   return Response.json({ok:true,webhook:{checked:Boolean(hook),here:Boolean(hook)&&url===webhookFor(request),elsewhere:Boolean(url)&&url!==webhookFor(request),pending:Number(hook?.pending_update_count||0),lastError:String(hook?.last_error_message||'').slice(0,200),lastErrorAt:Number(hook?.last_error_date||0)}});
+  }
   if(b.action==='retryWebhook'){
    const hook=await telegramApi(c.bot_token,'getWebhookInfo',{});
    if(hook.url&&hook.url!==webhookFor(request))throw new AssistantError('Bot boshqa tizimga ulangan. Avval o‘sha ulanishni tekshiring.');
@@ -61,9 +67,13 @@ export async function POST(request:Request){
   }
   if(b.action==='disconnect'){
    await db.prepare("UPDATE halo_assistant_config SET enabled=0,owner_id='',pair_hash='',candidate_id='',generation=? WHERE id='main'").bind(crypto.randomUUID()).run();
-   await telegramApi(c.bot_token,'deleteWebhook',{drop_pending_updates:false});
+   // Telegramdagi ulanish faqat shu saytga qaragan bo'lsa o'chiriladi. Bot boshqa saytga ulangan bo'lsa
+   // (ko'chirilgan bazadagi eski sayt boti) — u yerdagi ulanishga tegilmaydi, faqat shu saytdagi yozuv olib tashlanadi.
+   let hookUrl='';try{hookUrl=String((await telegramApi(c.bot_token,'getWebhookInfo',{})).url||'');}catch{hookUrl='';}
+   const elsewhere=Boolean(hookUrl)&&hookUrl!==webhookFor(request);
+   if(hookUrl===webhookFor(request))await telegramApi(c.bot_token,'deleteWebhook',{drop_pending_updates:false});
    await db.prepare("DELETE FROM halo_assistant_config WHERE id='main'").run();
-   return Response.json({ok:true,message:'Yordamchi bot uzildi. Hisob yozuvlari saqlandi.'});
+   return Response.json({ok:true,message:elsewhere?'Shu saytdagi yozuv olib tashlandi. Bot boshqa saytda avvalgidek ishlayveradi.':'Yordamchi bot uzildi. Hisob yozuvlari saqlandi.'});
   }
   throw new AssistantError('Amal topilmadi.');
  }catch(e){return Response.json({error:e instanceof AssistantError?e.message:'Yordamchi amalni yakunlay olmadi. Sozlamani tekshirib qayta urinib ko‘ring.'},{status:e instanceof AssistantError?400:503});}

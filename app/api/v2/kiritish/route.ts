@@ -49,18 +49,18 @@ function inventoryChoices(state: Row, today: string) {
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
-const EXPENSE_CATEGORIES = [
+export const EXPENSE_CATEGORIES = [
   // Eski tizim ro'yxati bilan bir xil (hisobotlar mos bo'lishi uchun). Karta/delivery komissiyasi avtomatik,
   // mahsulot xaridi esa yetkazib beruvchi orqali kiritiladi — shu sabab bu yerda yo'q.
   "Ijara", "Elektr / gaz / suv", "Wi-Fi / telefon", "POS abonent to‘lovi", "Reklama", "Ta’mirlash", "Soliq", "Sug‘urta",
   "Do‘kon / omborsiz mahsulot", "Boshqa",
 ];
-class EntryError extends Error {
+export class EntryError extends Error {
   constructor(message: string, readonly status = 400, readonly code = "") { super(message); }
 }
 const clean = (value: unknown, max: number) => String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
-function moneyAccounts(state: Row) {
+export function moneyAccounts(state: Row) {
   return (Array.isArray(state.accounts) ? state.accounts as Row[] : [])
     .filter((account) => (account.type === "cash" || account.type === "bank") && account.active !== false)
     .map((account) => ({ id: String(account.id), name: String(account.name || account.id), type: String(account.type) }));
@@ -100,7 +100,7 @@ function monthReceipts(state: Row, today: string) {
 }
 
 /** Xarajat yozuvi (eski tizim formatida, serverda tekshirib). Takroriy so'rov ikkinchi marta yozilmaydi. */
-function addExpense(state: Row, body: Row, today: string) {
+export function addExpense(state: Row, body: Row, today: string) {
   const operationId = clean(body.operationId, 36);
   if (!/^[a-f0-9-]{36}$/.test(operationId)) throw new EntryError("Oynani yangilang.");
   const id = `v2-expense:${operationId}`;

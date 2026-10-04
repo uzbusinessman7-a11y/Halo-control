@@ -5,7 +5,7 @@ import { rebalanceSuppliers, auditSupplierBalances } from './supplier-transactio
 import { isAccountingMonthClosed } from './month-end.ts';
 import { supplierProducts } from './supplier-products.ts';
 import { supplierLedger } from './supplier-ledger.ts';
-import { calculateDailyReport } from './daily-report.ts';
+import { calculateDailyReport, createDailyPayrollSource } from './daily-report.ts';
 
 type Row = Record<string, any>;
 export const rows = (v: unknown): Row[] => Array.isArray(v) ? v : [];
@@ -69,7 +69,9 @@ export function assistantReport(state:Row,intent:Row){
   const days=(Date.parse(end)-Date.parse(date))/86400000+1;
   if(days<1||days>366)throw new AssistantError('Hisobot davri 1–366 kun bo‘lsin. Boshlanish va tugash sanasini yozing.');
   const r={revenue:0,cost:0,totalExpenses:0,netProfit:0};
-  for(let i=0;i<days;i++){const daily=calculateDailyReport(state,new Date(Date.parse(date)+i*86400000).toISOString().slice(0,10));for(const key of ['revenue','cost','totalExpenses','netProfit'] as const)r[key]+=daily[key];}
+  // Ko'p kunlik hisobot: ish haqi har kun uchun qaytadan emas, xodim-oy bo'yicha bir marta hisoblanadi (natija o'sha).
+  const payroll=createDailyPayrollSource(state);
+  for(let i=0;i<days;i++){const daily=calculateDailyReport(state,new Date(Date.parse(date)+i*86400000).toISOString().slice(0,10),payroll);for(const key of ['revenue','cost','totalExpenses','netProfit'] as const)r[key]+=daily[key];}
   return `${date}${end!==date?' — '+end:''} · tizimga kiritilgan ma’lumotlar\nSavdo: ${won(r.revenue)}\nTannarx: ${won(r.cost)}\nXarajat va ushlanmalar: ${won(r.totalExpenses)}\nHisoblangan foyda: ${won(r.netProfit)}\nBu bank qoldig‘i emas. Kiritilmagan savdo va xarajatlar hisobga olinmagan.`;
  }
  if(intent.kind==='supplier_products'){

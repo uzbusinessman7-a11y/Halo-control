@@ -176,6 +176,26 @@ const wonText = (n: number) => `${n < 0 ? "−" : ""}${Math.abs(n).toLocaleStrin
 const change = (now: number, before: number) => (before > 0 ? ` (${now >= before ? "+" : "−"}${Math.abs(Math.round(((now - before) / before) * 100))}%)` : "");
 const dm = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
 
+/** Telegram yordamchi boti uchun: bugungi holat (kun hali tugamagan — hozirgacha kiritilgan ma'lumot). */
+export function todayText(report: HomeReport, branchName = "HALO"): string {
+  const lines = [
+    `📊 ${branchName} — ${dm(report.today)}, hozirgacha`,
+    "",
+    `Bugun savdo: ${wonText(report.sales.today)}`,
+    `Kecha: ${wonText(report.sales.yesterday)}${change(report.sales.yesterday, report.sales.weekAgo)}`,
+    `Oy boshidan: ${wonText(report.sales.monthToDate)}${change(report.sales.monthToDate, report.sales.lastMonthSamePeriod)}`,
+    `Xarajat (oy boshidan): ${wonText(report.expenses.monthToDate)}`,
+    "",
+    `Pul: kassa ${wonText(report.money.cash)} · bank ${wonText(report.money.bank)} · kutilmoqda ${wonText(report.money.receivable)}`,
+    `Qarz: ${wonText(report.debts.total)}${report.debts.overdueCount ? ` (30+ kun: ${wonText(report.debts.overdue)})` : ""}`,
+    ...(report.payroll.thisMonthToPay ? [`Maosh (shu oy, to'lanmagan): ${wonText(report.payroll.thisMonthToPay)}`] : []),
+  ];
+  lines.push("", report.alerts.length ? "⚠️ Diqqat:" : "✅ Muammo yo'q");
+  for (const alert of report.alerts.slice(0, 6)) lines.push(`${alert.level === "bad" ? "🔴" : "🟡"} ${alert.text}`);
+  lines.push("", "Foizlar: kecha — o'tgan hafta shu kunga, oy — o'tgan oy shu davrga nisbatan.");
+  return lines.join("\n");
+}
+
 /** Telegram uchun qisqa kunlik hisobot (ertalab kechagi kun bo'yicha). */
 export function flashText(report: HomeReport, branchName = "HALO"): string {
   const p = report.prime;
