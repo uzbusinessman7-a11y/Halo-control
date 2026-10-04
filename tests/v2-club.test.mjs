@@ -232,6 +232,18 @@ test('guruh: /buyurtma bilan topiladi; yangi buyurtma bir marta boradi, mijoz ma
   assert.match(groupMessages()[0].text, /❌ Telegram buyurtma #T\d+ bekor qilindi/);
   out = await event({ ...second, status: 'accepted' });
   assert.equal(out.order.status, 'cancelled', 'yopilgan buyurtma holati orqaga qaytmaydi');
+  // do'kon buyurtmani qabul qilib ulgurgan bo'lsa ham "yangi buyurtma" xabari bir marta boradi; topshirilgani uchun esa bormaydi
+  TG.sent.length = 0;
+  const quick = order();
+  out = await event({ ...quick, status: 'accepted' });
+  assert.equal(out.notified, true);
+  assert.match(groupMessages()[0].text, /🛎 Yangi Telegram buyurtma/);
+  await event({ ...quick, status: 'ready' });
+  assert.equal(groupMessages().length, 1);
+  const done = order({ paymentMethod: 'CARD' });
+  out = await event({ ...done, status: 'completed', completedAt: new Date().toISOString() });
+  assert.equal(groupMessages().length, 1, 'allaqachon topshirilgan buyurtma uchun "yangi" xabari ketmaydi');
+  await event({ ...quick, status: 'cancelled' });
   view = await ownerPost({ action: 'testGroup' });
   assert.equal(view.ok, true);
   await event({ ...first, status: 'cancelled' });
@@ -248,7 +260,7 @@ test('topshirildi → savdo: o‘chiq bo‘lsa kutadi; yoqilgach tushum, ombor, 
   // 2) yoqiladi va kutayotganlar yoziladi
   await ownerPost({ action: 'switch', salesEnabled: true });
   let view = await ownerPost({ action: 'writeWaiting' });
-  assert.deepEqual(view.written, { saved: 1, waiting: 0, skipped: 0 });
+  assert.deepEqual(view.written, { saved: 1, waiting: 0, skipped: 1 }, 'naqd buyurtma yozildi; oldingi sinovdagi karta buyurtmasi o‘tkazib yuborildi');
   let now = await state();
   const sales = now.sales.filter((sale) => sale.clubOrderId === cash.id);
   assert.deepEqual(sales.map((sale) => [sale.recipeId, sale.quantity, sale.totalRevenue, sale.listRevenue, sale.accountId, sale.salesChannel, sale.taxPctAtSale]).sort(), [
