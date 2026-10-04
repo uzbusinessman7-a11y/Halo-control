@@ -1,5 +1,10 @@
 import { vegetablePeriodTotals } from './vegetable-expenses.ts';
-import { calculateDailyReport, reportCoversExpenseCategory, selectActiveFinancialEntries } from "./daily-report.ts";
+import {
+  calculateDailyReport,
+  createDailyPayrollSource,
+  reportCoversExpenseCategory,
+  selectActiveFinancialEntries,
+} from "./daily-report.ts";
 import { saleTaxTreatment } from "./sale-tax.ts";
 import { safeSpreadsheetValue, type SpreadsheetValue } from "./spreadsheet-export.ts";
 import { isKitchenConsumptionEntry } from "./outflow-classification.ts";
@@ -264,7 +269,33 @@ export function buildGoogleSheetsExport(state: JsonRecord, from: string, to: str
     sales: activeSales,
     workerConsumptions: activeWorkerOutflows,
   } as Parameters<typeof calculateDailyReport>[0];
-  const reports = dates.map((date) => ({ date, report: calculateDailyReport(reportState, date) }));
+  // A year of daily reports over the same rows. Each day is handed only its own sales,
+  // money entries and stock movements (grouped once, original order kept, so every sum is
+  // added in the same sequence as a full scan), and payroll is allocated once per member
+  // and month. The figures are the ones calculateDailyReport gives for the whole state.
+  const rowsByDate = (list: JsonRecord[]) => {
+    const groups = new Map<unknown, JsonRecord[]>();
+    for (const row of list) {
+      const group = groups.get(row.date);
+      if (group) group.push(row);
+      else groups.set(row.date, [row]);
+    }
+    return groups;
+  };
+  const activeEntries = selectActiveFinancialEntries(records(state.financialEntries));
+  const salesByDate = rowsByDate(activeSales);
+  const entriesByDate = rowsByDate(activeEntries);
+  const movementsByDate = rowsByDate(records(state.stockMovements));
+  const payrollSource = createDailyPayrollSource(reportState);
+  const reports = dates.map((date) => ({
+    date,
+    report: calculateDailyReport({
+      ...reportState,
+      sales: salesByDate.get(date) || [],
+      financialEntries: entriesByDate.get(date) || [],
+      stockMovements: movementsByDate.get(date) || [],
+    } as Parameters<typeof calculateDailyReport>[0], date, payrollSource),
+  }));
   const reportByDate = new Map(reports.map(({ date, report }) => [date, report]));
   const rangeSales = activeSales.filter((sale) => selectedDates.has(text(sale.date)));
   const rangeOutflows = activeOutflows.filter((entry) => selectedDates.has(text(entry.date)));
@@ -427,7 +458,6 @@ export function buildGoogleSheetsExport(state: JsonRecord, from: string, to: str
     ];
   });
 
-  const activeEntries = selectActiveFinancialEntries(records(state.financialEntries));
   const rangeOilEntries = activeEntries.filter((entry) => (
     selectedDates.has(text(entry.date)) && isOilLedgerEntry(entry)
   ));
@@ -648,9 +678,17 @@ export function buildGoogleSheetsExport(state: JsonRecord, from: string, to: str
   const payrollAdjustments = normalizePayrollAdjustments(state.payrollAdjustments);
   const attendanceDays = normalizeAttendanceDays(state.attendanceDays);
   const payrollPayments = normalizePayrollPayments(state.payrollPayments);
+  // calculatePayroll reads only the member's own shifts; passing just those (same order)
+  // gives the same summary without re-reading every other member's rows for each month.
+  const payrollShiftsByStaff = new Map<string, typeof payrollShifts>();
+  for (const shift of payrollShifts) {
+    const group = payrollShiftsByStaff.get(shift.staffId);
+    if (group) group.push(shift);
+    else payrollShiftsByStaff.set(shift.staffId, [shift]);
+  }
   const payrollRows: Array<Array<SpreadsheetValue>> = monthRange(from, to).flatMap((month) => (
     payrollStaff.flatMap((member) => {
-      const summary = calculatePayroll(member, payrollShifts, payrollAdjustments, month, {
+      const summary = calculatePayroll(member, payrollShiftsByStaff.get(member.id) || [], payrollAdjustments, month, {
         attendanceDays,
         payments: payrollPayments,
       });
@@ -1031,7 +1069,7 @@ function cleanGoogleSheetsAppsScript(input: {
   days: number;
 }) {
   return `const HALO_CONFIG = Object.freeze({
-  scriptVersion: "3.4",
+  scriptVersion: "3.5",
   exportVersion: ${JSON.stringify(GOOGLE_SHEETS_EXPORT_VERSION)},
   endpoint: ${JSON.stringify(input.endpoint)},
   apiKey: ${JSON.stringify(input.apiKey)},
@@ -1200,16 +1238,30 @@ function haloFetchAndWrite_(from, to, silent) {
       url += "&if_updated_at=" + encodeURIComponent(previousVersion);
       url += "&if_export_version=" + encodeURIComponent(previousExportVersion);
     }
-    const response = UrlFetchApp.fetch(url, {
-      method: "get",
-      headers: { Authorization: "Bearer " + HALO_CONFIG.apiKey },
-      muteHttpExceptions: true
-    });
-    const payload = JSON.parse(response.getContentText() || "{}");
+    let response;
+    try {
+      response = UrlFetchApp.fetch(url, {
+        method: "get",
+        headers: { Authorization: "Bearer " + HALO_CONFIG.apiKey },
+        muteHttpExceptions: true
+      });
+    } catch (fetchError) {
+      throw new Error("HALO Control saytiga ulanib bo‘lmadi. Internet yoki sayt manzilini tekshiring: " + HALO_CONFIG.endpoint + " (" + String(fetchError && fetchError.message ? fetchError.message : fetchError).slice(0, 160) + ")");
+    }
     if (response.getResponseCode() === 401) {
       throw new Error("HALO ulanish kaliti bekor bo‘lgan. HALO Control ichidan yangi kod yarating, Code.gs kodini to‘liq almashtiring va HALO_SETUP’ni ishga tushiring.");
     }
-    if (response.getResponseCode() !== 200 || !payload.ok) throw new Error(payload.error || "HALO Control ma’lumoti olinmadi");
+    const responseCode = response.getResponseCode();
+    let payload = null;
+    try {
+      payload = JSON.parse(response.getContentText() || "{}");
+    } catch (parseError) {
+      payload = null;
+    }
+    if (!payload) {
+      throw new Error("HALO Control javob bermadi (HTTP " + responseCode + "). Sayt band yoki vaqtincha ishlamayapti; 1 daqiqadan keyin o‘zi qayta urinadi. Takrorlansa: HALO Control → Ulanishlar → Google Sheets → «Hisobotni tekshirish».");
+    }
+    if (responseCode !== 200 || !payload.ok) throw new Error(payload.error || "HALO Control ma’lumoti olinmadi (HTTP " + responseCode + ")");
     if (payload.branchId !== HALO_CONFIG.branchId) throw new Error("Filial mos kelmadi. Google Sheets kodi shu filial uchun qayta yaratilishi kerak.");
     if (payload.from !== from || payload.to !== to) throw new Error("So‘ralgan sana bilan kelgan hisobot sanasi mos kelmadi. Eski hisobot saqlandi.");
     if (payload.exportVersion !== HALO_CONFIG.exportVersion) throw new Error("HALO va Google Sheets hisobot versiyasi mos kelmadi. HALO Control ichidan yangi Code.gs kodini oling.");

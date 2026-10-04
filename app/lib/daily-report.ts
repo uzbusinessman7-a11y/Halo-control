@@ -1,5 +1,6 @@
 import {
   calculatePayrollForDate,
+  createPayrollDateAllocator,
   normalizeAttendanceDays,
   normalizePayrollAdjustments,
   normalizeStaff,
@@ -149,7 +150,28 @@ export function selectActiveFinancialEntries<T extends {
   ));
 }
 
-export function calculateDailyReport(state: DailyReportState, date: string) {
+/** The payroll line of the daily report for any date, computed over one unchanged state. */
+export type DailyPayrollSource = (date: string) => number;
+
+/**
+ * For reports over many days (the Google Sheets export asks for up to 366 of them): payroll
+ * rows are normalized once and each member's month is allocated once, instead of repeating
+ * all of it for every day. Every date gets exactly the amount calculateDailyReport computes
+ * on its own. Build a new source whenever the state changes.
+ */
+export function createDailyPayrollSource(
+  state: Pick<DailyReportState, "staff" | "workShifts" | "payrollAdjustments" | "attendanceDays">,
+): DailyPayrollSource {
+  const staff = normalizeStaff(state.staff);
+  const payrollForMember = createPayrollDateAllocator(
+    normalizeWorkShifts(state.workShifts),
+    normalizePayrollAdjustments(state.payrollAdjustments),
+    normalizeAttendanceDays(state.attendanceDays),
+  );
+  return (date) => Math.round(staff.reduce((sum, member) => sum + payrollForMember(member, date), 0));
+}
+
+export function calculateDailyReport(state: DailyReportState, date: string, payrollSource?: DailyPayrollSource) {
   const sales = Array.isArray(state.sales) ? state.sales.filter((sale) => (
     sale.date === date
     && sale.status !== "cancelled"
@@ -277,17 +299,22 @@ export function calculateDailyReport(state: DailyReportState, date: string) {
   const taxExemptSales = 0;
   const cardCommission = Math.round(cardCommissionExact);
   const tax = Math.round(taxExact);
-  const staff = normalizeStaff(state.staff);
-  const workShifts = normalizeWorkShifts(state.workShifts);
-  const payrollAdjustments = normalizePayrollAdjustments(state.payrollAdjustments);
-  const attendanceDays = normalizeAttendanceDays(state.attendanceDays);
-  const payroll = Math.round(staff.reduce((sum, member) => sum + calculatePayrollForDate(
-    member,
-    workShifts,
-    payrollAdjustments,
-    attendanceDays,
-    date,
-  ), 0));
+  let payroll: number;
+  if (payrollSource) {
+    payroll = payrollSource(date);
+  } else {
+    const staff = normalizeStaff(state.staff);
+    const workShifts = normalizeWorkShifts(state.workShifts);
+    const payrollAdjustments = normalizePayrollAdjustments(state.payrollAdjustments);
+    const attendanceDays = normalizeAttendanceDays(state.attendanceDays);
+    payroll = Math.round(staff.reduce((sum, member) => sum + calculatePayrollForDate(
+      member,
+      workShifts,
+      payrollAdjustments,
+      attendanceDays,
+      date,
+    ), 0));
+  }
   const automaticExpenses = cardCommission + deliveryCommission + tax + payroll;
   // Inventory purchases are balance-sheet movements (affectsProfit=false).
   // Their cost reaches profit once: through sold-item COGS or a non-sale
