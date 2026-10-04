@@ -7,27 +7,34 @@
  *  - Variant HALO Control menyusidagi taomga bog'langan bo'lsa, ekrandagi narx doim o'sha taomning hozirgi
  *    sotuv narxi (narx bir joyda yuritiladi). Bog'lanmagan bo'lsa — shu yerda qo'lda yozilgan narx.
  *  - Ekran sahifasi parolsiz ochiladi va faqat ko'rinadigan ma'lumotni oladi (nom, tavsif, narx, rasm).
- *  - Rasmlar bazada saqlanadi (v2_digital_menu_media); brauzer yuklashdan oldin kichraytiradi.
+ *  - Ekranning ko'rinishi eski digital menyu saytidagi bilan bir xil (app/core/tv-page.ts); bu yerda faqat ma'lumot.
+ *  - Rasmlar bazada saqlanadi (v2_digital_menu_media). Eski saytdagi rasmlar sifati o'zgarmasdan ko'chiriladi.
  */
 import type { D1Like } from "../lib/full-migration";
-import { DIGITAL_MENU_SEED } from "./digital-menu-seed";
+import { DIGITAL_MENU_SEED, DM_LEGACY_LABELS, DM_OLD_ORIGIN } from "./digital-menu-seed";
 
 type Row = Record<string, unknown>;
 export class DigitalMenuError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
 }
 
-export interface DmVariant { id: string; label: string; recipeId: string; price: number }
+/** Variant: ekranda TYPE (label) | SIZE (size) | PRICE qatori. Tartib — ro'yxatdagi o'rni. */
+export interface DmVariant { id: string; label: string; size: string; recipeId: string; price: number; active: boolean }
 export interface DmItem {
   id: string; name: string; description: string; screen: string; badge: string; imageId: string; imageUrl: string;
   visible: boolean; soldOut: boolean; soldOutText: string; variants: DmVariant[];
 }
-/** Ekran ko'rinishi: navbat — taomlar bittalab katta, oxirida umumiy; kino — katta rasm + ro'yxat; vitrina — rasmlar mozaikasi;
- *  yorliq — rasmsiz klassik ro'yxat; halqa — dumaloq rasm + ro'yxat. */
-export const DM_DESIGNS = ["navbat", "kino", "vitrina", "yorliq", "halqa"] as const;
-export type DmDesign = typeof DM_DESIGNS[number];
-export interface DmScreen { id: string; title: string; itemsPerPage: number; spotlightSeconds: number; overviewSeconds: number; design: DmDesign }
+/**
+ * Ekran sozlamasi (eski saytdagi screenSettings): bir sahifadagi taomlar soni, har taom necha soniya katta turadi (0 — faqat umumiy),
+ * umumiy ko'rinish necha soniya, sahifalar almashish oralig'i, "kun aksiyasi" va rasmi yo'q taom uchun zaxira rasm.
+ */
+export interface DmScreen {
+  id: string; title: string; itemsPerPage: number; spotlightSeconds: number; overviewSeconds: number; pageSeconds: number;
+  offerEnabled: boolean; offerItemId: string; offerLabel: string; offerIntervalSeconds: number; offerDurationSeconds: number;
+  imageId: string; imageUrl: string;
+}
 export interface DmOffer { visible: boolean; title: string; description: string; price: number; imageId: string; imageUrl: string }
+/** Umumiy aksiya va "rahmat" yozuvi eski saytning telefon menyusiga tegishli — televizorda ko'rinmaydi, ma'lumot yo'qolmasligi uchun saqlanadi. */
 export interface DmPromotion extends DmOffer { eyebrow: string; oldPrice: number; badge: string; intervalSeconds: number; durationSeconds: number; startsAt: string; endsAt: string }
 export interface DmThanks { visible: boolean; title: string; message: string; intervalSeconds: number; durationSeconds: number }
 export interface DmConfig {
@@ -39,7 +46,9 @@ export interface RecipePrice { id: string; name: string; price: number; category
 const MAX_ITEMS = 120;
 const MAX_VARIANTS = 6;
 const MAX_SCREENS = 8;
-/** Kichraytirilgan rasm: 900 KB dan oshmasin (D1 qatori 2 MB gacha). */
+/** Bitta sahifada ko'pi bilan 8 taom (4 × 2) — eski ekran to'ri shunga mo'ljallangan. */
+const MAX_PER_PAGE = 8;
+/** Rasm 900 KB dan oshmasin (D1 qatori 2 MB gacha; eski saytdagi eng katta rasm 687 KB). */
 export const MAX_IMAGE_BYTES = 900_000;
 const IMAGE_TYPES = new Set(["image/webp", "image/jpeg", "image/png"]);
 
@@ -48,7 +57,7 @@ const text = (value: unknown, max: number) => String(value ?? "").replace(/[\u00
 const bool = (value: unknown) => value === true;
 const int = (value: unknown, min: number, max: number, fallback: number) => {
   const n = Math.round(Number(value));
-  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+  return value === undefined || value === null || value === "" || !Number.isFinite(n) ? fallback : Math.min(max, Math.max(min, n));
 };
 const idOk = (value: unknown) => typeof value === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(value);
 const slug = (value: unknown) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24);
@@ -57,8 +66,18 @@ const safeUrl = (value: unknown) => {
   const url = text(value, 400);
   return /^https:\/\/[a-z0-9.-]+\/[^\s"'<>]*$/i.test(url) ? url : "";
 };
-const designOf = (value: unknown): DmDesign => ((DM_DESIGNS as readonly string[]).includes(String(value)) ? String(value) as DmDesign : "navbat");
 const moment = (value: unknown) => (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(value || "")) ? String(value) : "");
+
+/* Eski ko'rinishda saqlangan yozuvni tanish uchun: boshlang'ich ma'lumotdagi asl matnlar. */
+let seedIndex: { variants: Map<string, { label: string; size: string }>; screens: Map<string, string> } | null = null;
+function seedLookup() {
+  if (!seedIndex) {
+    const variants = new Map<string, { label: string; size: string }>();
+    for (const item of DIGITAL_MENU_SEED.items) for (const variant of item.variants) variants.set(variant.id, { label: variant.label, size: variant.size });
+    seedIndex = { variants, screens: new Map(DIGITAL_MENU_SEED.screens.map((screen) => [screen.id, screen.imageUrl])) };
+  }
+  return seedIndex;
+}
 
 function cleanOffer(input: Row, fallbackTitle: string): DmOffer {
   return {
@@ -77,12 +96,22 @@ export function normalizeDm(input: unknown): DmConfig {
     const id = slug(entry.id);
     if (!id || seenScreens.has(id) || screens.length >= MAX_SCREENS) continue;
     seenScreens.add(id);
+    // 2026-10-05 gacha saqlangan yozuvda sahifa oralig'i va zaxira rasm bo'lmagan — eski saytdagi qiymatlar olinadi.
+    const legacy = entry.pageSeconds === undefined;
     screens.push({
-      id, title: text(entry.title, 24) || id, itemsPerPage: int(entry.itemsPerPage, 3, 10, 8), spotlightSeconds: int(entry.spotlightSeconds, 4, 120, 8),
-      overviewSeconds: int(entry.overviewSeconds, 5, 300, 15), design: designOf(entry.design),
+      id, title: text(entry.title, 24) || id, itemsPerPage: int(entry.itemsPerPage, 1, MAX_PER_PAGE, MAX_PER_PAGE), spotlightSeconds: int(entry.spotlightSeconds, 0, 120, 8),
+      overviewSeconds: int(entry.overviewSeconds, 5, 300, 15), pageSeconds: int(entry.pageSeconds, 2, 120, 5),
+      offerEnabled: bool(entry.offerEnabled), offerItemId: idOk(entry.offerItemId) ? String(entry.offerItemId) : "", offerLabel: text(entry.offerLabel, 30) || "KUN AKSIYASI",
+      offerIntervalSeconds: int(entry.offerIntervalSeconds, 10, 3600, 30), offerDurationSeconds: int(entry.offerDurationSeconds, 3, 600, 10),
+      imageId: idOk(entry.imageId) ? String(entry.imageId) : "", imageUrl: legacy ? safeUrl(seedLookup().screens.get(id)) : safeUrl(entry.imageUrl),
     });
   }
-  if (!screens.length) screens.push({ id: "menyu", title: "Menyu", itemsPerPage: 8, spotlightSeconds: 8, overviewSeconds: 15, design: "navbat" });
+  if (!screens.length) {
+    screens.push({
+      id: "menyu", title: "Menyu", itemsPerPage: MAX_PER_PAGE, spotlightSeconds: 8, overviewSeconds: 15, pageSeconds: 5,
+      offerEnabled: false, offerItemId: "", offerLabel: "KUN AKSIYASI", offerIntervalSeconds: 30, offerDurationSeconds: 10, imageId: "", imageUrl: "",
+    });
+  }
   const seenItems = new Set<string>();
   const items: DmItem[] = [];
   for (const entry of rows(source.items)) {
@@ -94,8 +123,16 @@ export function normalizeDm(input: unknown): DmConfig {
     const variants: DmVariant[] = [];
     for (const variant of rows(entry.variants)) {
       if (!idOk(variant.id) || seenVariants.has(String(variant.id)) || variants.length >= MAX_VARIANTS) continue;
-      seenVariants.add(String(variant.id));
-      variants.push({ id: String(variant.id), label: text(variant.label, 40), recipeId: text(variant.recipeId, 100), price: int(variant.price, 0, 10_000_000, 0) });
+      const id = String(variant.id);
+      seenVariants.add(id);
+      let label = text(variant.label, 40);
+      let size = text(variant.size, 40);
+      if (variant.size === undefined) {
+        // Eski yozuv: bitta yozuv bo'lgan. O'zgartirilmagan bo'lsa — eski ekrandagi asl TYPE/SIZE; o'zgartirilgan bo'lsa — yozuv SIZE ustuniga, taom nomi TYPE ga.
+        const original = seedLookup().variants.get(id);
+        if (original && label === DM_LEGACY_LABELS[id]) { label = original.label; size = original.size; } else { size = label; label = name; }
+      }
+      variants.push({ id, label, size, recipeId: text(variant.recipeId, 100), price: int(variant.price, 0, 10_000_000, 0), active: variant.active !== false });
     }
     items.push({
       id: String(entry.id), name, description: text(entry.description, 160), screen: seenScreens.has(slug(entry.screen)) ? slug(entry.screen) : screens[0].id,
@@ -157,7 +194,7 @@ export async function writeDm(db: D1Like, branchId: string, config: DmConfig, no
   return updatedAt;
 }
 
-/** Rasm saqlash: brauzer kichraytirib, base64 ko'rinishida yuboradi. */
+/** Rasm saqlash: base64 ko'rinishida (brauzer kichraytirib yuboradi yoki eski saytdan o'zgarishsiz ko'chiriladi). */
 export async function putMedia(db: D1Like, branchId: string, mime: unknown, base64: unknown, now = new Date()): Promise<string> {
   if (!branchOk(branchId)) throw new DigitalMenuError("Filial topilmadi.", 404);
   const type = String(mime || "");
@@ -185,13 +222,15 @@ export async function getMedia(db: D1Like, id: string): Promise<{ mime: string; 
   return { mime: row.mime, bytes };
 }
 
+const usedMedia = (config: DmConfig) => new Set([config.setOffer.imageId, config.promotion.imageId, ...config.items.map((item) => item.imageId), ...config.screens.map((screen) => screen.imageId)].filter(Boolean));
+
 /**
  * Menyuda ishlatilmayotgan rasmlarni o'chiradi (almashtirilgan yoki olib tashlangan rasm bazada qolib ketmasin).
  * Bir soatdan yangi rasmga tegilmaydi — rahbar yuklab, hali "Saqlash"ni bosmagan bo'lishi mumkin.
  */
 export async function pruneMedia(db: D1Like, branchId: string, config: DmConfig, now = new Date()): Promise<number> {
   await ensureDmSchema(db);
-  const used = new Set([config.setOffer.imageId, config.promotion.imageId, ...config.items.map((item) => item.imageId)].filter(Boolean));
+  const used = usedMedia(config);
   const before = new Date(now.getTime() - 3_600_000).toISOString();
   const all = (await db.prepare("SELECT id FROM v2_digital_menu_media WHERE branch_id = ? AND created_at < ?").bind(branchId, before).all<{ id: string }>()).results;
   const orphans = all.filter((row) => !used.has(row.id));
@@ -199,8 +238,54 @@ export async function pruneMedia(db: D1Like, branchId: string, config: DmConfig,
   return orphans.length;
 }
 
-/* ---------- ekran javobi qisqa vaqt xotirada turadi (uchta ekran har 30 soniyada so'raydi) ---------- */
-const TV_MEMO_MS = 12_000;
+/* ---------- eski saytdagi rasmlarni ko'chirish ---------- */
+export interface ImportTarget { kind: "item" | "screen" | "set" | "promo"; id: string; name: string; url: string }
+const fromOldSite = (entry: { imageId: string; imageUrl: string }) => !entry.imageId && entry.imageUrl.startsWith(`${DM_OLD_ORIGIN}/`);
+
+/** Hali eski saytda turgan rasmlar ro'yxati (HALO Control bazasiga ko'chirilmagan). */
+export function importTargets(config: DmConfig): ImportTarget[] {
+  const out: ImportTarget[] = [];
+  for (const item of config.items) if (fromOldSite(item)) out.push({ kind: "item", id: item.id, name: item.name, url: item.imageUrl });
+  if (fromOldSite(config.setOffer)) out.push({ kind: "set", id: "set", name: config.setOffer.title, url: config.setOffer.imageUrl });
+  for (const screen of config.screens) if (fromOldSite(screen)) out.push({ kind: "screen", id: screen.id, name: `${screen.title} — zaxira rasm`, url: screen.imageUrl });
+  if (fromOldSite(config.promotion)) out.push({ kind: "promo", id: "promo", name: config.promotion.title, url: config.promotion.imageUrl });
+  return out;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  return btoa(binary);
+}
+
+/**
+ * Bitta rasmni eski saytdan o'qib, HALO Control bazasiga O'ZGARISHSIZ saqlaydi (qayta siqilmaydi — sifat bir xil).
+ * Manzil mijozdan olinmaydi: faqat menyuda yozilgan va eski saytga qaragan manzil o'qiladi. Eski saytga hech narsa yozilmaydi.
+ */
+export async function importImage(db: D1Like, branchId: string, config: DmConfig, body: Row, fetcher: typeof fetch = fetch): Promise<DmConfig> {
+  const target = importTargets(config).find((entry) => entry.kind === body.kind && entry.id === body.id);
+  if (!target) throw new DigitalMenuError("Bu rasm allaqachon ko‘chirilgan yoki topilmadi.", 404);
+  let response: Response;
+  try {
+    response = await fetcher(target.url, { redirect: "error", signal: AbortSignal.timeout(20_000) });
+  } catch {
+    throw new DigitalMenuError("Eski saytdan rasm o‘qilmadi. Birozdan keyin qayta urinib ko‘ring.", 502);
+  }
+  if (!response.ok) throw new DigitalMenuError(`Eski sayt rasmni bermadi (${response.status}).`, 502);
+  const mime = String(response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+  if (!IMAGE_TYPES.has(mime)) throw new DigitalMenuError("Eski saytdan rasm o‘rniga boshqa narsa keldi.", 502);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.length > MAX_IMAGE_BYTES) throw new DigitalMenuError("Rasm juda katta — uni qo‘lda yuklang.", 413);
+  const imageId = await putMedia(db, branchId, mime, bytesToBase64(bytes));
+  const done = { imageId, imageUrl: "" };
+  if (target.kind === "item") return { ...config, items: config.items.map((item) => (item.id === target.id ? { ...item, ...done } : item)) };
+  if (target.kind === "screen") return { ...config, screens: config.screens.map((screen) => (screen.id === target.id ? { ...screen, ...done } : screen)) };
+  if (target.kind === "set") return { ...config, setOffer: { ...config.setOffer, ...done } };
+  return { ...config, promotion: { ...config.promotion, ...done } };
+}
+
+/* ---------- ekran javobi qisqa vaqt xotirada turadi (uchta ekran har 15 soniyada so'raydi) ---------- */
+const TV_MEMO_MS = 10_000;
 const tvMemo = new Map<string, { at: number; body: string }>();
 export function tvMemoGet(key: string, now = Date.now()): string {
   const hit = tvMemo.get(key);
@@ -218,30 +303,40 @@ export function recipePrices(recipes: unknown): RecipePrice[] {
     .map((recipe) => ({ id: String(recipe.id), name: String(recipe.name || recipe.id), price: Math.max(0, Math.round(Number(recipe.salePrice) || 0)), categoryId: String(recipe.categoryId || "") }));
 }
 
-/** Faqat retseptlar qismini o'qiydi (butun filial holatini ochmasdan) — ekran har 30 soniyada so'raydi. */
+/** Faqat retseptlar qismini o'qiydi (butun filial holatini ochmasdan) — ekran har 15 soniyada so'raydi. */
 export async function readRecipePrices(db: D1Like, branchId: string): Promise<RecipePrice[] | null> {
   const row = await db.prepare("SELECT json_extract(payload, '$.recipes') AS recipes FROM app_state WHERE id = ?").bind(branchId).first<{ recipes: string | null }>();
   if (!row) return null;
   try { return recipePrices(JSON.parse(row.recipes || "[]")); } catch { return []; }
 }
 
-const nameKey = (value: string) => value.toLowerCase().replace(/[‘’`ʻʼ']/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-const tokens = (value: string) => new Set(nameKey(value).split(" ").filter(Boolean));
+/** Nomlarni solishtirish: harf/raqam chegarasi ajratiladi ("450g" → "450 g"), o'lchov birliklari bir xil yoziladi. */
+const UNIT: Record<string, string> = { gram: "g", gr: "g", gramm: "g", grams: "g", pc: "pcs", dona: "pcs", ta: "pcs", kilogram: "kg" };
+const nameKey = (value: string) => value.toLowerCase().replace(/[‘’`ʻʼ']/g, "").replace(/(\d)(?=\p{L})|(\p{L})(?=\d)/gu, "$1$2 ").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+const tokens = (value: string) => new Set(nameKey(value).split(" ").filter(Boolean).map((token) => UNIT[token] || token));
 
 /**
- * Bog'lash taklifi: taom nomi + variant yozuvidagi hamma so'z menyudagi AYNAN BITTA taom nomida uchrasa — o'sha taom.
- * Bir nechta mos kelsa yoki umuman kelmasa — taklif yo'q (noto'g'ri narx ekranga chiqib ketmasin). Faqat taklif: rahbar tasdiqlaydi.
+ * Bog'lash taklifi. Qoida ataylab qattiq (noto'g'ri narx ekranga chiqib ketmasin):
+ *  - menyudagi taom nomida ekrandagi taom nomi, TYPE va SIZE dagi HAMMA so'z bo'lishi kerak
+ *    (masalan «SWEET CHILI · Suyaksiz 450 gram» hech qachon «Fried chicken suyaksiz 450g» ga taklif qilinmaydi);
+ *  - ortiqcha so'z ko'pi bilan bitta (masalan «Cheese pizza»dagi "pizza");
+ *  - shunday taomlar ichida eng kam ortiqcha so'zlisi bitta bo'lsa — o'sha; teng bo'lsa — taklif yo'q.
+ * Bitta variantli taomda (pitsa: Medium) o'lcham nomda bo'lmasligi mumkin — o'lchamsiz ham sinaladi.
+ * Bu faqat taklif: rahbar ro'yxatni ko'rib tasdiqlaydi.
  */
-export function suggestRecipe(itemName: string, variantLabel: string, recipes: RecipePrice[], siblings = 1): string {
-  const wanted = tokens(`${itemName} ${variantLabel}`);
-  if (!wanted.size) return "";
-  const exact = recipes.filter((recipe) => { const have = tokens(recipe.name); return have.size === wanted.size && [...wanted].every((token) => have.has(token)); });
-  if (exact.length === 1) return exact[0].id;
-  if (exact.length > 1) return "";
-  const containing = recipes.filter((recipe) => { const have = tokens(recipe.name); return [...wanted].every((token) => have.has(token)); });
-  if (containing.length === 1) return containing[0].id;
-  // Bitta variantli taom (masalan pitsa): variant yozuvisiz, faqat nomi bilan.
-  if (siblings === 1 && variantLabel) return suggestRecipe(itemName, "", recipes, 1);
+export function suggestRecipe(itemName: string, label: string, size: string, recipes: RecipePrice[], siblings = 1): string {
+  const names = recipes.map((recipe) => ({ id: recipe.id, have: tokens(recipe.name) }));
+  const phrases = [`${itemName} ${label} ${size}`];
+  if (siblings === 1) phrases.push(`${itemName} ${label}`);
+  for (const phrase of phrases) {
+    const wanted = tokens(phrase);
+    if (!wanted.size) continue;
+    const fits = names.filter((entry) => entry.have.size <= wanted.size + 1 && [...wanted].every((token) => entry.have.has(token)));
+    if (!fits.length) continue;
+    const least = Math.min(...fits.map((entry) => entry.have.size));
+    const best = fits.filter((entry) => entry.have.size === least);
+    return best.length === 1 ? best[0].id : "";
+  }
   return "";
 }
 
@@ -252,27 +347,46 @@ export function variantPrice(variant: DmVariant, byId: Map<string, RecipePrice>)
 
 const imageOf = (entry: { imageId: string; imageUrl: string }) => (entry.imageId ? `/api/v2/tv?media=${entry.imageId}` : entry.imageUrl);
 
+export interface TvItem {
+  id: string; name: string; description: string; badge: string; image: string; soldOut: boolean; soldOutText: string;
+  /** Umumiy ko'rinishdagi narx — birinchi variantniki (eski saytdagi "price"). */
+  price: number; variants: Array<{ label: string; size: string; price: number }>;
+}
+export interface TvView {
+  screen: { id: string; title: string; itemsPerPage: number; spotlightSeconds: number; overviewSeconds: number; pageSeconds: number; fallbackImage: string };
+  screens: Array<{ id: string; title: string }>;
+  /** Navbat uzunligi: eng ko'p taomli ekrandagi taomlar soni — uchala ekran umumiy ko'rinishga bir vaqtda yetadi. */
+  slots: number;
+  restaurant: DmConfig["restaurant"];
+  items: TvItem[];
+  setOffer: { title: string; description: string; price: number; image: string } | null;
+  offer: { label: string; intervalSeconds: number; durationSeconds: number; item: TvItem } | null;
+}
+
 /** Ekran uchun ochiq ma'lumot: faqat ko'rinadigan narsalar. Tannarx, retsept va boshqa ichki ma'lumot chiqmaydi. */
-export function tvView(config: DmConfig, recipes: RecipePrice[], screenId: string) {
+export function tvView(config: DmConfig, recipes: RecipePrice[], screenId: string): TvView {
   const screen = config.screens.find((entry) => entry.id === screenId) || config.screens[0];
   const byId = new Map(recipes.map((recipe) => [recipe.id, recipe]));
-  const offer = (entry: DmOffer) => ({ title: entry.title, description: entry.description, price: entry.price, image: imageOf(entry) });
-  return {
-    screen: { id: screen.id, title: screen.title, itemsPerPage: screen.itemsPerPage, spotlightSeconds: screen.spotlightSeconds, overviewSeconds: screen.overviewSeconds, design: screen.design },
-    screens: config.screens.map((entry) => ({ id: entry.id, title: entry.title })),
-    restaurant: config.restaurant,
-    items: config.items.filter((item) => item.screen === screen.id && item.visible).map((item) => ({
+  const show = (item: DmItem): TvItem => {
+    const variants = item.variants.filter((variant) => variant.active).map((variant) => ({ label: variant.label, size: variant.size, price: variantPrice(variant, byId).price })).filter((variant) => variant.price > 0);
+    return {
       id: item.id, name: item.name, description: item.description, badge: item.badge, image: imageOf(item), soldOut: item.soldOut, soldOutText: item.soldOutText,
-      variants: item.variants.map((variant) => ({ label: variant.label, price: variantPrice(variant, byId).price })).filter((variant) => variant.price > 0),
-    })),
-    setOffer: config.setOffer.visible ? offer(config.setOffer) : null,
-    promotion: config.promotion.visible ? {
-      ...offer(config.promotion), eyebrow: config.promotion.eyebrow, oldPrice: config.promotion.oldPrice, badge: config.promotion.badge,
-      intervalSeconds: config.promotion.intervalSeconds, durationSeconds: config.promotion.durationSeconds, startsAt: config.promotion.startsAt, endsAt: config.promotion.endsAt,
-    } : null,
-    thanks: config.thanks.visible && (config.thanks.title || config.thanks.message) ? {
-      title: config.thanks.title, message: config.thanks.message, intervalSeconds: config.thanks.intervalSeconds, durationSeconds: config.thanks.durationSeconds,
-    } : null,
+      price: variants[0]?.price || 0, variants,
+    };
+  };
+  const visible = config.items.filter((item) => item.visible);
+  const offerItem = screen.offerEnabled ? visible.find((item) => item.id === screen.offerItemId) : undefined;
+  return {
+    screen: {
+      id: screen.id, title: screen.title, itemsPerPage: screen.itemsPerPage, spotlightSeconds: screen.spotlightSeconds, overviewSeconds: screen.overviewSeconds,
+      pageSeconds: screen.pageSeconds, fallbackImage: imageOf(screen),
+    },
+    screens: config.screens.map((entry) => ({ id: entry.id, title: entry.title })),
+    slots: Math.max(1, ...config.screens.map((entry) => visible.filter((item) => item.screen === entry.id).length)),
+    restaurant: config.restaurant,
+    items: visible.filter((item) => item.screen === screen.id).map(show),
+    setOffer: config.setOffer.visible ? { title: config.setOffer.title, description: config.setOffer.description, price: config.setOffer.price, image: imageOf(config.setOffer) } : null,
+    offer: offerItem ? { label: screen.offerLabel, intervalSeconds: screen.offerIntervalSeconds, durationSeconds: screen.offerDurationSeconds, item: show(offerItem) } : null,
   };
 }
 
@@ -295,7 +409,8 @@ export function saveItem(config: DmConfig, body: Row, recipes: RecipePrice[]): {
   const used = new Set<string>();
   const variants: DmVariant[] = list.map((entry, index) => {
     const label = text(entry.label, 40);
-    if (list.length > 1 && !label) throw new DigitalMenuError(`${index + 1}-variant: nomini yozing (masalan Chicken yoki 450 gram).`);
+    const size = text(entry.size, 40);
+    if (list.length > 1 && !label && !size) throw new DigitalMenuError(`${index + 1}-variant: turini yoki o‘lchamini yozing (masalan Chicken yoki 450 gram).`);
     const recipeId = text(entry.recipeId, 100);
     if (recipeId && !known.has(recipeId)) throw new DigitalMenuError(`${index + 1}-variant: bog‘langan taom menyuda topilmadi.`);
     const price = Number(entry.price);
@@ -305,8 +420,9 @@ export function saveItem(config: DmConfig, body: Row, recipes: RecipePrice[]): {
     used.add(variantId);
     // Bog'langan variantda qo'lda narx yuborilmasa — avvalgisi zaxira bo'lib qoladi (taom menyudan olib tashlansa ko'rinadi).
     const before = current?.variants.find((variant) => variant.id === variantId)?.price || 0;
-    return { id: variantId, label, recipeId, price: Number.isSafeInteger(price) && price > 0 ? price : before };
+    return { id: variantId, label, size, recipeId, price: Number.isSafeInteger(price) && price > 0 ? price : before, active: entry.active !== false };
   });
+  if (!variants.some((variant) => variant.active)) throw new DigitalMenuError("Kamida bitta variant ekranda ko‘rinishi kerak.");
   const imageId = body.imageId === undefined ? (current?.imageId || "") : (idOk(body.imageId) ? String(body.imageId) : "");
   const item: DmItem = {
     id: current?.id || newId("item"), name, description: text(body.description, 160), screen, badge: text(body.badge, 16),
@@ -359,6 +475,19 @@ export function linkVariant(config: DmConfig, body: Row, recipes: RecipePrice[])
   return { ...config, items };
 }
 
+/** Bir nechta variantni bir yo'la bog'lash (rahbar ro'yxatni ko'rib tasdiqlagan). Bittasi xato bo'lsa — hech biri bog'lanmaydi. */
+export function linkMany(config: DmConfig, body: Row, recipes: RecipePrice[]): DmConfig {
+  const links = rows(body.links);
+  if (!links.length) throw new DigitalMenuError("Bog‘lash uchun hech narsa tanlanmagan.");
+  if (links.length > MAX_ITEMS * MAX_VARIANTS) throw new DigitalMenuError("Juda ko‘p qator.");
+  let next = config;
+  for (const link of links) {
+    if (!text(link.recipeId, 100)) throw new DigitalMenuError("Menyudagi taom tanlanmagan.");
+    next = linkVariant(next, link, recipes);
+  }
+  return next;
+}
+
 export function saveSettings(config: DmConfig, body: Row): DmConfig {
   // Yangi rasm yuklansa yoki rasm olib tashlansa — eski saytdagi vaqtinchalik rasm manzili ham tozalanadi.
   for (const key of ["setOffer", "promotion"]) {
@@ -383,12 +512,21 @@ export function saveScreen(config: DmConfig, body: Row): { config: DmConfig; id:
   const id = slug(body.id);
   const before = id ? config.screens.find((screen) => screen.id === id) : undefined;
   if (id && !before) throw new DigitalMenuError("Ekran topilmadi.", 404);
-  if (body.design !== undefined && !(DM_DESIGNS as readonly string[]).includes(String(body.design))) throw new DigitalMenuError("Ko‘rinishni tanlang.");
-  // Yuborilmagan sozlama o'zgarmaydi (yangi ekranda — odatiy qiymat).
+  // Yuborilmagan sozlama o'zgarmaydi (yangi ekranda — eski saytdagi odatiy qiymat).
   const settings = {
-    itemsPerPage: int(body.itemsPerPage, 3, 10, before?.itemsPerPage ?? 8), spotlightSeconds: int(body.spotlightSeconds, 4, 120, before?.spotlightSeconds ?? 8),
-    overviewSeconds: int(body.overviewSeconds, 5, 300, before?.overviewSeconds ?? 15), design: body.design !== undefined ? designOf(body.design) : (before?.design ?? "navbat"),
+    itemsPerPage: int(body.itemsPerPage, 1, MAX_PER_PAGE, before?.itemsPerPage ?? MAX_PER_PAGE), spotlightSeconds: int(body.spotlightSeconds, 0, 120, before?.spotlightSeconds ?? 8),
+    overviewSeconds: int(body.overviewSeconds, 5, 300, before?.overviewSeconds ?? 15), pageSeconds: int(body.pageSeconds, 2, 120, before?.pageSeconds ?? 5),
+    offerEnabled: body.offerEnabled === undefined ? (before?.offerEnabled ?? false) : bool(body.offerEnabled),
+    offerItemId: body.offerItemId === undefined ? (before?.offerItemId ?? "") : (idOk(body.offerItemId) ? String(body.offerItemId) : ""),
+    offerLabel: body.offerLabel === undefined ? (before?.offerLabel ?? "KUN AKSIYASI") : (text(body.offerLabel, 30) || "KUN AKSIYASI"),
+    offerIntervalSeconds: int(body.offerIntervalSeconds, 10, 3600, before?.offerIntervalSeconds ?? 30), offerDurationSeconds: int(body.offerDurationSeconds, 3, 600, before?.offerDurationSeconds ?? 10),
+    imageId: body.imageId === undefined ? (before?.imageId ?? "") : (idOk(body.imageId) ? String(body.imageId) : ""),
+    imageUrl: body.imageId === undefined ? (before?.imageUrl ?? "") : "",
   };
+  if (settings.offerEnabled) {
+    if (!config.items.some((item) => item.id === settings.offerItemId)) throw new DigitalMenuError("Kun aksiyasi uchun taomni tanlang.");
+    if (settings.offerDurationSeconds >= settings.offerIntervalSeconds) throw new DigitalMenuError("Kun aksiyasi turadigan vaqt chiqish oralig‘idan qisqa bo‘lsin.");
+  }
   if (before) return { config: { ...config, screens: config.screens.map((screen) => (screen.id === id ? { ...screen, title, ...settings } : screen)) }, id };
   if (config.screens.length >= MAX_SCREENS) throw new DigitalMenuError(`Ekranlar soni ${MAX_SCREENS} tadan oshmaydi.`);
   const fresh = slug(title);
@@ -405,21 +543,39 @@ export function deleteScreen(config: DmConfig, id: unknown): DmConfig {
   return { ...config, screens: config.screens.filter((screen) => screen.id !== id) };
 }
 
-/** Rahbar sahifasi uchun: har variantning hozirgi narxi, bog'langan taom va taklif. */
+/** Rahbar sahifasi uchun: har variantning hozirgi narxi, bog'langan taom, taklif va hali ko'chirilmagan rasmlar. */
 export function adminView(config: DmConfig, recipes: RecipePrice[]) {
   const byId = new Map(recipes.map((recipe) => [recipe.id, recipe]));
   let unlinked = 0;
+  // Menyudagi bitta taom ekrandagi faqat bitta qatorga taklif qilinadi: allaqachon bog'langan yoki ikki qatorga mos kelgan taom taklif qilinmaydi.
+  const taken = new Map<string, number>();
+  for (const item of config.items) for (const variant of item.variants) if (variant.recipeId && byId.has(variant.recipeId)) taken.set(variant.recipeId, 2);
+  const guesses = new Map<string, string>();
+  for (const item of config.items) {
+    for (const variant of item.variants) {
+      if (variantPrice(variant, byId).linked) continue;
+      const guess = suggestRecipe(item.name, variant.label, variant.size, recipes, item.variants.length);
+      if (!guess) continue;
+      guesses.set(`${item.id}/${variant.id}`, guess);
+      taken.set(guess, (taken.get(guess) || 0) + 1);
+    }
+  }
   const items = config.items.map((item) => ({
     ...item, image: imageOf(item),
     variants: item.variants.map((variant) => {
       const live = variantPrice(variant, byId);
       const missing = Boolean(variant.recipeId) && !byId.has(variant.recipeId);
       if (!live.linked) unlinked += 1;
+      const guess = guesses.get(`${item.id}/${variant.id}`) || "";
       return {
         ...variant, shownPrice: live.price, linked: live.linked, missing, recipeName: byId.get(variant.recipeId)?.name || "",
-        suggestion: live.linked ? "" : suggestRecipe(item.name, variant.label, recipes, item.variants.length),
+        suggestion: !live.linked && guess && taken.get(guess) === 1 ? guess : "",
       };
     }),
   }));
-  return { ...config, items, setOffer: { ...config.setOffer, image: imageOf(config.setOffer) }, promotion: { ...config.promotion, image: imageOf(config.promotion) }, unlinked };
+  return {
+    ...config, items, screens: config.screens.map((screen) => ({ ...screen, image: imageOf(screen) })),
+    setOffer: { ...config.setOffer, image: imageOf(config.setOffer) }, promotion: { ...config.promotion, image: imageOf(config.promotion) },
+    unlinked, imports: importTargets(config).map((target) => ({ kind: target.kind, id: target.id, name: target.name })),
+  };
 }
