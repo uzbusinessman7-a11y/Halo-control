@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     }
     if (body.action === "saveProduct") {
       const mutation = await mutateHaloState((state) => saveProduct(state as Record<string, unknown>, body), 5, branchId, "Rahbar",
-        `Ombor mahsuloti saqlandi · ${String(body.name || "").slice(0, 60)}`, "Ombor (yangi)");
+        `Ombor mahsuloti saqlandi · ${String(body.name || "").slice(0, 60)}${body.unitCost !== undefined && body.unitCost !== null ? ` · narx ${Number(body.unitCost)} ₩/birlik` : ""}`, "Ombor (yangi)");
       return json({ ok: true, today, ...mutation.result, products: productList(mutation.state as Record<string, unknown>, today), ...extra(mutation.state as Record<string, unknown>) });
     }
     if (body.action === "count") {
@@ -136,7 +136,7 @@ function loadProducts(){post({action:'products',branchId:sel.value}).then(functi
 function catOf(id){return CATS.find(function(c){return c.id===id})||{name:'',fallback:false}}
 function prodRow(p,showCat){var quick=catOf(p.categoryId).fallback&&CAT===p.categoryId;
   return '<div class="item" data-edit="'+esc(p.id)+'" style="cursor:pointer"><b>'+esc(p.name)+(p.low?'<span class="tag bad">kam qoldi</span>':'')+(p.vegetable?'<span class="tag warn">xarajat sifatida</span>':'')+'</b><span class="v'+(p.low?' bad':'')+'">'+(p.vegetable?'—':qty(p.stock,p.unit))+'</span>'
-    +'<small>'+(showCat?esc(catOf(p.categoryId).name)+' · ':'')+(p.vegetable?'Sanalmaydi, xaridi xarajatga yoziladi':'Minimum: '+qty(p.minStock,p.unit)+' · narx: '+(p.unitCost?won(Math.round(p.unitCost*(p.unit==='g'||p.unit==='ml'?1000:1)))+' / '+(p.unit==='g'?'kg':p.unit==='ml'?'litr':esc(p.unit)):'—')+' · qiymati '+won(p.value))+(p.lastReceipt?' · oxirgi kirim '+esc(p.lastReceipt):'')+'</small>'
+    +'<small>'+(showCat?esc(catOf(p.categoryId).name)+' · ':'')+(p.vegetable?'Sanalmaydi, xaridi xarajatga yoziladi':'Minimum: '+qty(p.minStock,p.unit)+' · narx: '+(p.unitCost?won(Math.round(p.unitCost*(p.unit==='g'||p.unit==='ml'?1000:1)))+' / '+(p.unit==='g'?'kg':p.unit==='ml'?'litr':esc(p.unit)):'—')+' · qiymati '+won(p.value))+(p.lastReceipt?' · oxirgi kirim '+esc(p.lastReceipt):'')+' · <span style="color:var(--accent);white-space:nowrap">✏️ Tahrirlash</span></small>'
     +(quick?'<select data-qc="'+esc(p.id)+'" style="grid-column:1/-1;min-height:38px;margin-top:6px"><option value="">— kategoriyaga o‘tkazish —</option>'+CATS.filter(function(c){return !c.fallback}).map(function(c){return '<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>'}).join('')+'</select>':'')+'</div>'}
 function drawList(){
   CATS.forEach(function(c){c.count=PRODUCTS.filter(function(p){return p.categoryId===c.id}).length});
@@ -161,6 +161,9 @@ function drawList(){
   box.querySelectorAll('[data-restore]').forEach(function(b){b.addEventListener('click',function(){b.disabled=true;post({action:'restoreProduct',branchId:sel.value,id:b.dataset.restore}).then(function(x){if(!x.body.ok){alert(x.body.error);b.disabled=false;return}PRODUCTS=x.body.products;ARCH=x.body.archived||[];drawList()})})});
   box.querySelectorAll('[data-edit]').forEach(function(el){el.addEventListener('click',function(){productForm(PRODUCTS.find(function(p){return p.id===el.dataset.edit}))})});
 }
+/* Narx odam o'qiydigan birlikda kiritiladi: g → 1 kg, ml → 1 litr, qolganlari — 1 birlik. */
+function priceMul(u){return u==='g'||u==='ml'?1000:1}
+function priceLabel(u){return 'Narxi — 1 '+(u==='g'?'kg':u==='ml'?'litr':u)+' uchun (₩)'}
 function productForm(p){
   var box=document.getElementById('pForm'),op=uuid();
   var units=['g','ml','dona','kg','litr'];
@@ -168,6 +171,8 @@ function productForm(p){
     +'<label class="field"><span>Nomi</span><input id="fName" maxlength="100" value="'+esc(p?p.name:'')+'"></label>'
     +'<div class="row"><label class="field" style="flex:1"><span>Hisob birligi</span><select id="fUnit"'+(p&&p.movements?' disabled':'')+'>'+units.map(function(u){return '<option'+(p&&p.unit===u?' selected':'')+'>'+u+'</option>'}).join('')+'</select></label>'
     +'<label class="field" style="flex:1"><span>Minimum qoldiq</span><input id="fMin" inputmode="decimal" value="'+esc(p?p.minStock:'')+'" placeholder="0"></label></div>'
+    +'<label class="field"><span id="fPriceL">'+priceLabel(p?p.unit:'g')+'</span><input id="fPrice" inputmode="numeric" placeholder="0" value="'+(p&&p.unitCost?Math.round(p.unitCost*priceMul(p.unit)).toLocaleString('en-US'):'')+'"></label>'
+    +'<p class="hint" style="margin-top:-6px">Retsept tannarxi shu narxdan hisoblanadi. Keyingi kirimda narx kirim narxiga o‘zi yangilanadi.</p>'
     +'<div class="row"><label class="field" style="flex:1"><span>Qadoq nomi (ixtiyoriy)</span><input id="fPack" maxlength="30" value="'+esc(p?p.packageName:'')+'" placeholder="quti, qop, banka…"></label>'
     +'<label class="field" style="flex:1"><span>Qadoqda nechta birlik</span><input id="fPer" inputmode="decimal" value="'+esc(p&&p.unitsPerPackage?p.unitsPerPackage:'')+'" placeholder="masalan 1000"></label></div>'
     +'<label class="field"><span>Kategoriya</span><select id="fCat">'+(p?'':'<option value="">— avtomatik (nomiga qarab) —</option>')+CATS.map(function(c){return '<option value="'+esc(c.id)+'"'+(p&&p.categoryId===c.id?' selected':(!p&&CAT===c.id?' selected':''))+'>'+esc(c.name)+'</option>'}).join('')+'</select></label>'
@@ -177,11 +182,15 @@ function productForm(p){
     +'<div class="row"><button id="fSave">Saqlash</button><button class="ghost" id="fCancel">Bekor</button>'+(p?'<button class="ghost" id="fArch" style="color:var(--bad)">Ro‘yxatdan olib tashlash</button>':'')+'</div><div id="fMsg"></div></div>';
   box.scrollIntoView({behavior:'smooth',block:'start'});
   document.getElementById('fCancel').addEventListener('click',function(){box.innerHTML=''});
+  var fp=document.getElementById('fPrice'),priceDirty=false;
+  fp.addEventListener('input',function(){priceDirty=true;var v=Number(fp.value.replace(/[^0-9]/g,''))||0;fp.value=v?v.toLocaleString('en-US'):''});
+  document.getElementById('fUnit').addEventListener('change',function(){document.getElementById('fPriceL').textContent=priceLabel(this.value)});
   var fa=document.getElementById('fArch');if(fa)fa.addEventListener('click',function(){var why=prompt(p.name+' ro‘yxatdan olib tashlansinmi? Qoldiq va tarix saqlanadi, keyin tiklash mumkin.\\nSababi:');if(!why||why.trim().length<3)return;fa.disabled=true;
     post({action:'archiveProduct',branchId:sel.value,id:p.id,reason:why.trim()}).then(function(x){fa.disabled=false;if(!x.body.ok){document.getElementById('fMsg').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}PRODUCTS=x.body.products;ARCH=x.body.archived||[];drawList();document.getElementById('pForm').innerHTML='<div class="msg ok" style="margin-bottom:10px">✓ Ro‘yxatdan olib tashlandi</div>'})});
   document.getElementById('fSave').addEventListener('click',function(){
     var btn=this;btn.disabled=true;
-    post({action:'saveProduct',branchId:sel.value,id:p?p.id:'',operationId:op,name:document.getElementById('fName').value,unit:document.getElementById('fUnit').value,minStock:Number(document.getElementById('fMin').value.replace(',','.')||0),packageName:document.getElementById('fPack').value,unitsPerPackage:Number(document.getElementById('fPer').value.replace(',','.')||0),supplierId:document.getElementById('fSup').value,categoryId:document.getElementById('fCat').value,vegetable:document.getElementById('fVeg').checked}).then(function(x){btn.disabled=false;
+    post({action:'saveProduct',branchId:sel.value,id:p?p.id:'',operationId:op,name:document.getElementById('fName').value,unit:document.getElementById('fUnit').value,minStock:Number(document.getElementById('fMin').value.replace(',','.')||0),packageName:document.getElementById('fPack').value,unitsPerPackage:Number(document.getElementById('fPer').value.replace(',','.')||0),supplierId:document.getElementById('fSup').value,categoryId:document.getElementById('fCat').value,vegetable:document.getElementById('fVeg').checked,
+      unitCost:priceDirty?(Number(fp.value.replace(/[^0-9]/g,''))||0)/priceMul(document.getElementById('fUnit').value):undefined}).then(function(x){btn.disabled=false;
       if(!x.body.ok){document.getElementById('fMsg').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}
       PRODUCTS=x.body.products;CATS=x.body.categories||CATS;drawList();document.getElementById('pForm').innerHTML='<div class="msg ok" style="margin-bottom:10px">✓ '+(x.body.created?'Mahsulot qo‘shildi':'Saqlandi')+'</div>'});
   });

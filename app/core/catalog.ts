@@ -78,6 +78,14 @@ export function saveProduct(state: Row, body: Row) {
     throw new CatalogError(error instanceof CategoryError ? error.message : "Kategoriyani tanlang.");
   }
   const fields = { name, minStock, packageName, unitsPerPackage: packageName ? unitsPerPackage : 0, ...(body.supplierId !== undefined ? { supplierId } : {}), ...(categoryId ? { categoryId } : {}) };
+  // Narx (1 hisob birligi uchun, ₩): rahbar qo'lda belgilashi mumkin — retsept tannarxi shu narxdan hisoblanadi.
+  // Yuborilmasa o'zgarmaydi. Keyingi narxli kirimda kirim narxiga yangilanadi (eski tizim qoidasi).
+  let askedCost: number | undefined;
+  if (body.unitCost !== undefined && body.unitCost !== null && body.unitCost !== "") {
+    askedCost = Number(body.unitCost);
+    if (!Number.isFinite(askedCost) || askedCost < 0 || askedCost > 1e9) throw new CatalogError("Narxni tekshiring.");
+    askedCost = Math.round(askedCost * 1e6) / 1e6;
+  }
   // Sabzavot/sous: sanalmaydi, xaridi xarajat bo'lib yoziladi. O'zgarish tarixi bilan (eski hisobotlar buzilmaydi).
   const withVeg = (next: Row, productId: string) => (body.vegetable === undefined ? next
     : configureExpenseOnly(next, productId, body.vegetable === true));
@@ -86,15 +94,24 @@ export function saveProduct(state: Row, body: Row) {
     if (!current) throw new CatalogError("Mahsulot topilmadi. Sahifani yangilang.", 404);
     const used = rows(state.stockMovements).some((move) => move.inventoryId === id);
     if (current.unit !== unit && used) throw new CatalogError("Bu mahsulotning harakatlari bor — birligini o'zgartirib bo'lmaydi. Yangi mahsulot yarating.", 409);
-    const updated = { ...current, ...fields, unit, updatedAt: new Date().toISOString() };
-    return { state: withVeg({ ...state, inventory: inventory.map((item) => (item.id === id ? updated : item)) }, id), result: { product: updated, created: false } };
+    const oldCost = Number(current.unitCost) || 0;
+    const priceChanged = askedCost !== undefined && Math.abs(askedCost - oldCost) > 1e-9;
+    const packagingChanged = Number(current.unitsPerPackage || 0) !== fields.unitsPerPackage;
+    const now = new Date().toISOString();
+    const updated = {
+      ...current, ...fields, unit, updatedAt: now,
+      ...(priceChanged ? { unitCost: askedCost, costEdits: [{ at: now, by: "Rahbar", from: oldCost, to: askedCost }, ...rows(current.costEdits)].slice(0, 20) } : {}),
+      // Qadoq narxi doim birlik narxiga mos (kirimlar ham shunday yozadi).
+      ...(priceChanged || packagingChanged ? { packageCost: (priceChanged ? askedCost! : oldCost) * fields.unitsPerPackage } : {}),
+    };
+    return { state: withVeg({ ...state, inventory: inventory.map((item) => (item.id === id ? updated : item)) }, id), result: { product: updated, created: false, priceChanged } };
   }
   const operationId = clean(body.operationId, 36);
   if (!/^[a-f0-9-]{36}$/.test(operationId)) throw new CatalogError("Oynani yangilang.");
   const newId = `inv-${operationId.slice(0, 13)}`;
   const existing = inventory.find((item) => item.id === newId);
   if (existing) return { state, result: { product: existing, created: false } };
-  const product = { id: newId, supplierId: "", ...fields, unit, stock: 0, unitCost: 0, packageCost: 0, gramsPerUnit: unit === "g" ? 1 : 0, createdAt: new Date().toISOString() };
+  const product = { id: newId, supplierId: "", ...fields, unit, stock: 0, unitCost: askedCost ?? 0, packageCost: (askedCost ?? 0) * fields.unitsPerPackage, gramsPerUnit: unit === "g" ? 1 : 0, createdAt: new Date().toISOString() };
   return { state: withVeg({ ...state, inventory: [product, ...inventory] }, newId), result: { product, created: true } };
 }
 
