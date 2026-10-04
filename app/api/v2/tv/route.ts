@@ -1,6 +1,6 @@
 import { ensureHaloState } from "../../../lib/halo-store";
 import { getMedia, readDm, readRecipePrices, tvMemoGet, tvMemoSet, tvView } from "../../../core/digital-menu";
-import { tvPage, tvRender, tvRevision, TV_VERSION } from "../../../core/tv-page";
+import { tvLook, tvPage, tvRender, tvRevision, TV_VERSION } from "../../../core/tv-page";
 import type { D1Like } from "../../../lib/full-migration";
 
 /**
@@ -9,7 +9,7 @@ import type { D1Like } from "../../../lib/full-migration";
  *  - GET /api/v2/tv?data=1&screen=kebab&rev=…    → ekran uchun tayyor menyu; rev hozirgi nusxa bilan bir xil bo'lsa — faqat belgi va server vaqti
  *  - GET /api/v2/tv?menu=1&screen=kebab          → menyu ma'lumoti oddiy JSON ko'rinishida (taom, variant, narx, rasm manzili)
  *  - GET /api/v2/tv?media=<id>                   → taom rasmi
- * Boshqa filial: &b=<filial> yoki &branch=<filial>.
+ * Boshqa filial: &b=<filial> yoki &branch=<filial>. Sayqallangan variant (ixtiyoriy): &look=premium — odatda asl ko'rinish.
  * Hech narsa yozmaydi; POST/PUT/DELETE yo'q. Tannarx, retsept, savdo va boshqa ichki ma'lumot bu yerdan chiqmaydi.
  * Javoblar keshlanmaydi (no-store) — narx o'zgarsa eski narx ushlanib qolmaydi. Faqat rasm doimiy keshlanadi (manzili o'zgarmas).
  */
@@ -38,13 +38,14 @@ export async function GET(request: Request) {
     }
     const branchId = branchOf(url.searchParams.get("b") || url.searchParams.get("branch"));
     const screen = slug(url.searchParams.get("screen"));
+    const look = tvLook(url.searchParams.get("look"));
     const wantsData = url.searchParams.get("data") === "1";
     const wantsMenu = url.searchParams.get("menu") === "1";
     if (!wantsData && !wantsMenu) {
-      return new Response(tvPage({ screen, branch: branchId }), { headers: { "Content-Type": "text/html; charset=utf-8", ...NO_STORE } });
+      return new Response(tvPage({ screen, branch: branchId, look }), { headers: { "Content-Type": "text/html; charset=utf-8", ...NO_STORE } });
     }
     // Xotiradagi nusxa: {"data": ekran uchun tayyor menyu, "menu": oddiy ma'lumot}. Server vaqti har javobda yangi qo'yiladi.
-    const key = `${branchId}:${screen}`;
+    const key = `${branchId}:${screen}:${look}`;
     let memo = tvMemoGet(key);
     if (!memo) {
       await ensureHaloState();
@@ -52,7 +53,7 @@ export async function GET(request: Request) {
       if (!recipes) return Response.json({ ok: false, error: "Filial topilmadi." }, { status: 404, headers: NO_STORE });
       const { config, updatedAt } = await readDm(database(), branchId);
       const view = tvView(config, recipes, screen);
-      const payload = tvRender(view);
+      const payload = tvRender(view, look);
       const revision = tvRevision(payload);
       memo = JSON.stringify({ revision, data: { ...payload, revision }, menu: { revision, updatedAt, ...view } });
       tvMemoSet(key, memo);

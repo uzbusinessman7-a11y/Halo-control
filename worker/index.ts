@@ -74,7 +74,7 @@ const worker = {
       // Monitor menyusi (televizor) — parolsiz ochiladi, faqat o'qiydi:
       //   /menu?screen=kebab | chicken | pitsa   (eski saytdagi "?screen=…" bilan bir xil)
       //   /tv/kebab                              (qisqa manzil)
-      // Boshqa filial: &branch=<filial> yoki &b=<filial>.
+      // Boshqa filial: &branch=<filial> yoki &b=<filial>. Sayqallangan variant: &look=premium.
       const tv = url.pathname.match(/^\/tv(?:\/([a-z0-9-]{1,24}))?\/?$/);
       if (tv || url.pathname === "/menu" || url.pathname === "/menu/") {
         const target = new URL("/api/v2/tv", url);
@@ -82,6 +82,9 @@ const worker = {
         if (screen) target.searchParams.set("screen", screen);
         const branch = url.searchParams.get("branch") || url.searchParams.get("b");
         if (branch) target.searchParams.set("b", branch);
+        // look=premium — o'sha ko'rinishning sayqallangan varianti; berilmasa asl (eski menyudagi) ko'rinish.
+        const look = url.searchParams.get("look");
+        if (look) target.searchParams.set("look", look);
         return Response.redirect(target.toString(), 302);
       }
     }

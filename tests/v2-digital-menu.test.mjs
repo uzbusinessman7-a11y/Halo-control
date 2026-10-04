@@ -7,7 +7,8 @@ import { DatabaseSync } from 'node:sqlite';
 
 const dm = await import('../app/core/digital-menu.ts');
 const { DIGITAL_MENU_SEED, DM_LEGACY_LABELS, DM_OLD_ORIGIN } = await import('../app/core/digital-menu-seed.ts');
-const { tvPage, tvRender, tvRevision, TV_VERSION } = await import('../app/core/tv-page.ts');
+const { tvPage, tvRender, tvRevision, tvLook, TV_VERSION } = await import('../app/core/tv-page.ts');
+const { TV_CSS_SAYQAL } = await import('../app/core/tv-css-sayqal.ts');
 const { TV_CSS } = await import('../app/core/tv-css.ts');
 const tvRoute = await import('../app/api/v2/tv/route.ts');
 const monitorRoute = await import('../app/api/v2/monitor/route.ts');
@@ -288,6 +289,56 @@ test('ekran sahifasi: eski televizor brauzeriga mos skript, tashqi saytga bog‘
   assert.equal(tvPage({ screen: '</script><b>', branch: 'main' }).includes('</script><b>'), false, 'manzildagi matn sahifani buzmaydi');
 });
 
+test('sayqallangan variant (&look=premium): o‘sha ko‘rinish ustiga kichik qatlam; asl ko‘rinishga tegmaydi', () => {
+  // faqat aniq "premium" so'ralganda ishlaydi; boshqa har qanday qiymat — asl ko'rinish
+  assert.deepEqual([tvLook('premium'), tvLook('yangi'), tvLook(''), tvLook(null), tvLook('PREMIUM')], ['premium', '', '', '', '']);
+  const view = (id) => dm.tvView(dm.seedDm(), [], id);
+  assert.equal(tvRender(view('kebab'), 'boshqa').stage, tvRender(view('kebab')).stage);
+  // sahifa: asl CSS o'zgarishsiz turadi, ustidan qo'shimcha qatlam; asl sahifada qatlam yo'q
+  const page = tvPage({ screen: 'kebab', branch: 'main', look: 'premium' });
+  assert.equal(page.includes('<style>' + TV_CSS + '</style><style>' + TV_CSS_SAYQAL + '</style>'), true);
+  assert.equal(tvPage({ screen: 'kebab', branch: 'main' }).includes('halo-soft'), false);
+  assert.equal(tvPage({ screen: 'kebab', branch: 'main', look: 'yangi' }), tvPage({ screen: 'kebab', branch: 'main' }));
+  const script = page.match(/<script>([\s\S]*?)<\/script>/)[1];
+  assert.doesNotThrow(() => new vm.Script(script));
+  assert.match(script, /var CFG=\{"api":"\/api\/v2\/tv","screen":"kebab","b":"main","v":"tv-3","look":"premium"\}/);
+  assert.equal(/https?:\/\/|@font-face|@import|url\(/.test(page), false, 'tashqi sayt yoki shrift yuklanmaydi');
+  assert.equal(TV_CSS_SAYQAL.includes('\\'), false);
+  assert.equal((TV_CSS_SAYQAL.match(/{/g) || []).length, (TV_CSS_SAYQAL.match(/}/g) || []).length);
+  // ranglar o'sha: qatlamda faqat asl CSS'da bor ranglar ishlatiladi
+  for (const color of TV_CSS_SAYQAL.match(/#[0-9a-f]{3,6}/gi) || []) assert.equal(TV_CSS.includes(color), true, `yangi rang qo‘shilgan: ${color}`);
+  // tuzilish o'sha: kartalar, rasm, TYPE/SIZE/PRICE jadvali; vaqtlar bir xil
+  const asl = tvRender(view('kebab'));
+  const out = tvRender(view('kebab'), 'premium');
+  assert.deepEqual(out.cfg, asl.cfg);
+  assert.deepEqual([out.bodyClass, out.footerClass, out.footer, out.title], [asl.bodyClass, asl.footerClass, asl.footer, asl.title]);
+  const tags = (html) => html.replace(/<div class="price[^>]*>[\s\S]*?<\/div>\n/g, '').replace(/>[^<]*</g, '><').replace(' many', '');
+  assert.equal(tags(out.stage), tags(asl.stage), 'narx blokidan tashqari HTML tuzilishi bir xil');
+  // 1) umumiy ko'rinishda hamma narx
+  assert.match(out.stage, /^<section class="menu-page cols-3 rows-2 many active"/);
+  assert.match(out.stage, /<h2>KEBAB<\/h2>[\s\S]*?<div class="price list"><div class="mini"><span>Chicken<\/span><b>₩7,900<\/b><\/div><div class="mini"><span>Lamb<\/span><b>₩8,900<\/b><\/div><div class="mini"><span>Mix<\/span><b>₩8,900<\/b><\/div><div class="mini"><span>Cheese<\/span><b>₩9,900<\/b><\/div><\/div>/);
+  assert.equal((out.stage.match(/class="mini"/g) || []).length, 21, 'kebab ekranidagi 21 ta narxning hammasi');
+  assert.match(tvRender(view('chicken'), 'premium').stage, /<div class="mini"><span>450 gram<\/span><b>₩11,900<\/b><\/div><div class="mini"><span>800 gram<\/span><b>₩19,900<\/b><\/div><div class="mini"><span>1kg<\/span><b>₩19,900<\/b><\/div>/);
+  // bitta narxli taomlar (pitsa): asl ko'rinishdagidek bitta katta narx
+  const pitsa = tvRender(view('pitsa'), 'premium').stage;
+  assert.match(pitsa, /^<section class="menu-page cols-4 rows-2 active"/);
+  assert.equal(pitsa.includes('class="mini"'), false);
+  assert.match(pitsa, /<div class="price"><strong>₩11,900<\/strong><\/div>/);
+  // 2) jadvalda harflar bir xil; ma'lumotning o'zi o'zgarmaydi
+  assert.match(out.stage, /<div class="variant-row"><span>Halo lavash<\/span><span>Chicken<\/span>/);
+  assert.match(out.stage, /<div class="variant-row"><span>Tandir lavash chicken<\/span><span>Cheese<\/span>/);
+  assert.match(asl.stage, /<div class="variant-row"><span>HALO LAVASH<\/span><span>CHICKEN<\/span>/);
+  // 3) namuna tavsif ko'rsatilmaydi (asl ko'rinishda — eski saytdagidek turadi)
+  assert.equal(asl.stage.includes('Taom haqida qisqa ma’lumot'), true);
+  assert.equal(out.stage.includes('Taom haqida qisqa ma’lumot'), false);
+  assert.match(out.stage, /<h2>HALO LAVASH<\/h2><p>Meat · Cabbage · Tomato · Cucumber · Sauce · Spices<\/p>/);
+  // 5 va undan ko'p narx sig'maydi — birinchi narx va "~" belgisi
+  let big = dm.seedDm();
+  const kebab = big.items.find((i) => i.name === 'KEBAB');
+  big = dm.saveItem(big, { id: kebab.id, name: kebab.name, screen: 'kebab', variants: [...kebab.variants, { label: 'Kebab', size: 'Big', price: 15000 }] }, recipes).config;
+  assert.match(tvRender(dm.tvView(big, [], 'kebab'), 'premium').stage, /<h2>KEBAB<\/h2>[\s\S]*?<div class="price"><strong class="from">₩7,900<\/strong><\/div>/);
+});
+
 /* ---------- sayt orqali ---------- */
 function d1(sqlite) {
   const make = (query, params = []) => ({
@@ -344,6 +395,13 @@ test('sayt: boshqaruv faqat rahbarga; ekran parolsiz va faqat o‘qiydi; narx me
   assert.deepEqual([menu.ok, menu.revision, menu.items.length, menu.items[3].name, menu.items[3].variants[0].price], [true, data.revision, 6, 'KEBAB', 7900]);
   assert.equal(JSON.stringify(menu).includes('recipeId'), false);
   assert.equal((await tv('?data=1&screen=kebab&b=yoq-filial')).status, 404);
+  // sayqallangan variant alohida so'raladi; asl javob o'zgarmaydi
+  const plus = await (await tv('?data=1&screen=kebab&look=premium')).json();
+  assert.notEqual(plus.revision, data.revision);
+  assert.match(plus.stage, /class="menu-page cols-3 rows-2 many active"/);
+  assert.equal((await (await tv('?data=1&screen=kebab')).json()).revision, data.revision);
+  assert.equal((await (await tv('?data=1&screen=kebab&look=nimadir')).json()).revision, data.revision);
+  assert.match(await (await tv('?screen=kebab&look=premium')).text(), /"look":"premium"/);
 
   // rahbar: bog'lash, rasm, sotildi
   const loaded = await (await monitor({ action: 'load' })).json();

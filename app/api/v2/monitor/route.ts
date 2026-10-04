@@ -153,10 +153,11 @@ function draw(){
   document.querySelectorAll('[data-s]').forEach(function(b){b.addEventListener('click',function(){SCR=b.dataset.s;ST=null;draw()})});
   byId('scrNew').addEventListener('click',function(){var t=prompt('Yangi ekran nomi (masalan Combo):');if(!t)return;act({action:'saveScreen',title:t},function(b){SCR=b.screenId;ST=null;draw()})});
   var url=tvUrl(SCR);
-  byId('scrInfo').innerHTML='<div class="row"><button id="open">Ekranni ochish</button><button class="ghost" id="copy">Havolani nusxalash</button></div>'
-    +'<p class="hint" style="margin:10px 0 0">Televizor brauzerida shu manzilni oching: <b style="color:var(--text);word-break:break-all">'+esc(url)+'</b><br>Parol so‘ralmaydi. Ko‘rinishi eski monitor menyusidagi bilan bir xil. Bu yerda o‘zgartirganingiz ekranda 15 soniya ichida o‘zi yangilanadi.</p>'
+  byId('scrInfo').innerHTML='<div class="row"><button id="open">Ekranni ochish</button><button class="ghost" id="open2">Sayqallangan variantni ko‘rish</button><button class="ghost" id="copy">Havolani nusxalash</button></div>'
+    +'<p class="hint" style="margin:10px 0 0">Televizor brauzerida shu manzilni oching: <b style="color:var(--text);word-break:break-all">'+esc(url)+'</b><br>Parol so‘ralmaydi. Ko‘rinishi eski monitor menyusidagi bilan bir xil. Bu yerda o‘zgartirganingiz ekranda 15 soniya ichida o‘zi yangilanadi.<br>Sayqallangan variant — o‘sha ko‘rinish, faqat yozuvlar kattaroq va umumiy ko‘rinishda hamma narx chiqadi. Yoqsa, televizorda manzil oxiriga <b style="color:var(--text)">&amp;look=premium</b> qo‘shing.</p>'
     +'<div id="copyMsg"></div>'+importBox()+linkBox();
   byId('open').addEventListener('click',function(){window.open(url,'_blank','noopener')});
+  byId('open2').addEventListener('click',function(){window.open(url+'&look=premium','_blank','noopener')});
   byId('copy').addEventListener('click',function(){var ok=function(){byId('copyMsg').innerHTML='<div class="msg ok">✓ Nusxa olindi</div>'};if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(url).then(ok,function(){prompt('Nusxalang:',url)});else prompt('Nusxalang:',url)});
   bindImport();bindLink();
   var items=MENU.items.filter(function(i){return i.screen===SCR});
