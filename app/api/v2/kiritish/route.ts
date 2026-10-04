@@ -11,6 +11,7 @@ import { CHICKEN_OIL_CAN_LITERS, isOilLedgerEntry } from "../../../lib/oil-accou
 import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
 import { categoryIdOf, categoryList } from "../../../core/categories";
 import { ensureRecurring, RecurringError, recurringList, saveRecurring, stopRecurring } from "../../../core/recurring";
+import { COURIER_CATEGORY } from "../../../core/courier";
 import { shell } from "../../../core/ui-shell";
 
 declare global {
@@ -54,6 +55,8 @@ export const EXPENSE_CATEGORIES = [
   // mahsulot xaridi esa yetkazib beruvchi orqali kiritiladi — shu sabab bu yerda yo'q.
   "Ijara", "Elektr / gaz / suv", "Wi-Fi / telefon", "POS abonent to‘lovi", "Reklama", "Ta’mirlash", "Soliq", "Sug‘urta",
   "Do‘kon / omborsiz mahsulot", "Boshqa",
+  // Telegram do'kon: mijozdan olingan yetkazish haqini kuryerga berish (foydaga ta'sir qilmaydi — bu pul bizniki emas edi).
+  COURIER_CATEGORY,
 ];
 export class EntryError extends Error {
   constructor(message: string, readonly status = 400, readonly code = "") { super(message); }
@@ -127,7 +130,7 @@ export function addExpense(state: Row, body: Row, today: string) {
   if (twin && reason.length < 3) throw new EntryError("Shu kuni aynan shu turdagi va shu summadagi xarajat bor. Bu boshqa xarajat bo‘lsa, sababini yozing.", 409, "DUPLICATE");
   const entry = {
     id, type: "expense", category, amount, date, accountId,
-    note: [paysTaxReserve ? "Soliq to‘lovi (avtomatik zaxiradan)" : "", name, note].filter(Boolean).join(" · "), affectsProfit: !paysTaxReserve,
+    note: [paysTaxReserve ? "Soliq to‘lovi (avtomatik zaxiradan)" : "", name, note].filter(Boolean).join(" · "), affectsProfit: !paysTaxReserve && category !== COURIER_CATEGORY,
     createdByName: "Rahbar", createdAt: new Date().toISOString(),
     ...(twin ? { duplicateOf: twin.id, duplicateReason: reason } : {}),
   };

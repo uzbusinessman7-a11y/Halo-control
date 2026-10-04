@@ -11,6 +11,8 @@ import { shell } from "../../../core/ui-shell";
 import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
 import { isAccountingMonthClosed } from "../../../lib/month-end";
 import { categoryIdOf, categoryList } from "../../../core/categories";
+import { cancelClubSale, clubPosOrderId, setClubSaleState } from "../../../core/club";
+import { clubDb } from "../../../core/club-service";
 
 declare global {
   var __HALO_SELF_HOSTED__: boolean | undefined;
@@ -26,6 +28,8 @@ declare global {
  * Kirish: rahbar, xodim (login+PIN) yoki eski /hisob kabi loginsiz — faqat asosiy filial, faqat kiritish.
  */
 const PAGE_PATH = "/api/v2/pos";
+/** Telegram do'kon orqali yozilgan savdo yozuvlari shu bilan boshlanadi (pos-order:club-<buyurtma>). */
+const CLUB_POS_PREFIX = clubPosOrderId("");
 const POS_ACTOR_ID = "pos-terminal";
 const WASTE_REASONS = ["Isrof / buzilgan", "Muddati o‘tgan", "Tushib ketdi / to‘kildi", "Boshqa"];
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -133,6 +137,8 @@ export async function POST(request: Request) {
       const id = clean(body.id, 160);
       if (id.startsWith("pos-import:")) await assertV2DayOpen(branchId, date);
       await mutateHaloState((state) => {
+        // Telegram do'kon savdosi: kuryer puli kirimi ham birga olib tashlanadi.
+        if (id.startsWith(CLUB_POS_PREFIX)) return { state: cancelClubSale(state as Row, id.slice(CLUB_POS_PREFIX.length)), result: null };
         if (id.startsWith("pos-order:")) return { state: cancelPosOrder(state as Row, id).state, result: null };
         if (id.startsWith("pos-import:")) {
           // Butun POS hisobot yuklashini bekor qilish: savdolar olib tashlanadi, ombor qaytadi.
@@ -148,6 +154,9 @@ export async function POST(request: Request) {
         const entry = (Array.isArray((state as Row).workerConsumptions) ? (state as Row).workerConsumptions as Row[] : []).find((item) => item.id === id);
         return { state: deleteWorkerConsumption(state as Row, id, { id: String(entry?.workerId || actor.id), name: actor.name }).state, result: null };
       }, 5, branchId, user.name, "HALO HISOB: yozuv bekor qilindi", "HALO HISOB (yangi)");
+      if (id.startsWith(CLUB_POS_PREFIX)) {
+        try { await setClubSaleState(clubDb(), branchId, id.slice(CLUB_POS_PREFIX.length), "cancelled", "Rahbar HALO HISOB oynasida bekor qildi."); } catch { /* belgi qo'yilmasa ham savdo bekor bo'lgan */ }
+      }
       saved = { kind: "cancel" };
     } else if (action !== "load") {
       throw new PosPageError("Amal noto‘g‘ri.");

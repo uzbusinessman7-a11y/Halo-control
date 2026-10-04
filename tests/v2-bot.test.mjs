@@ -139,7 +139,7 @@ test('xarajat: tur → summa va izoh → hisob → tasdiqlash; tasdiqlanmaguncha
   const before = (await state()).financialEntries.length;
   let out = await say('➕ Xarajat');
   assert.match(out[0].text, /Turini tanlang/);
-  assert.equal(out[0].buttons.length, 11, '10 ta tur + bekor');
+  assert.equal(out[0].buttons.length, 12, '11 ta tur (kuryer puli ham) + bekor');
   const id = button(out[0], 'Elektr / gaz / suv').split(':')[1];
   out = await press(button(out[0], 'Elektr / gaz / suv'));
   assert.match(out[0].text, /Summani yozing/);

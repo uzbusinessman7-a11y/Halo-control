@@ -16,6 +16,7 @@ import { selectActiveFinancialEntries } from "../lib/daily-report";
 import type { AccountInput } from "./ledger-store";
 import type { EntryInput } from "./ledger";
 import { saleDeductions } from "./deductions";
+import { COURIER_CATEGORY } from "./courier";
 
 type Row = Record<string, unknown>;
 const rows = (value: unknown): Row[] => Array.isArray(value)
@@ -34,6 +35,7 @@ export const BRIDGE_ACCOUNTS: AccountInput[] = [
   { code: "soliq", name: "Soliq (POS savdosidan avtomatik)", kind: "expense" },
   { code: "soliq-zaxira", name: "To'lanadigan soliq zaxirasi", kind: "liability" },
   { code: "ochilish", name: "Ochilish qoldig'i", kind: "equity" },
+  { code: "kuryer-puli", name: "Kuryer puli (yetkazish haqi, kuryerga beriladi)", kind: "liability" },
 ];
 
 /** Eski hisob ID → yangi hisob kodi (barqaror, takrorlanmaydi). */
@@ -134,7 +136,9 @@ export function buildBridgePlan(state: Row, today: string): BridgePlan {
     const settles = entry.affectsProfit === false;
     // Soliqni to'lash: avtomatik zaxiradan yopiladi (foydaga ikkinchi marta tushmaydi).
     const paysTaxReserve = entry.type === "expense" && settles && String(entry.category || "") === "Soliq";
-    const other = entry.type === "income" ? (settles ? "kapital-qarz" : "boshqa-kirim") : paysTaxReserve ? "soliq-zaxira" : settles ? "hisob-yopilishi" : "xarajat";
+    // Kuryer puli: mijozdan olingani ham, kuryerga berilgani ham bitta hisobda — qoldig'i hali berilmagan pulni ko'rsatadi.
+    const courier = settles && String(entry.category || "") === COURIER_CATEGORY;
+    const other = courier ? "kuryer-puli" : entry.type === "income" ? (settles ? "kapital-qarz" : "boshqa-kirim") : paysTaxReserve ? "soliq-zaxira" : settles ? "hisob-yopilishi" : "xarajat";
     const lines = entry.type === "transfer"
       ? [{ code: to!, amount }, { code: from, amount: -amount }]
       : entry.type === "income"

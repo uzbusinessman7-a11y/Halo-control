@@ -192,6 +192,7 @@ const MORE_MENU = [
   ["/pos", "🧾", "HALO HISOB oynasi", "Naqd, hisob-raqam, delivery, oshxona, chiqit"],
   ["/api/v2/monitor", "📺", "Monitor menyu", "Televizordagi reklama menyu: taom, narx, rasm"],
   ["/api/v2/mezana", "🤝", "MEZANA", "Olib turish, qaytarish, qarz va to‘lov"],
+  ["/api/v2/club", "🛍", "Telegram do‘kon", "HALO CLUB: buyurtma → savdo, narx, tugagan mahsulot"],
   ["/api/v2/vazifalar", "✅", "Xodim vazifalari", "Vazifa yuborish va bajarilishi"],
   ["/api/v2/nazorat", "☑️", "Kunlik nazorat", "Ochilish/yopilish tekshiruvi, oshxona qoidalari"],
   ["/api/v2/eksport", "📥", "Hisobot va zaxira", "Excel uchun yuklab olish, nusxa, qaytarish"],
