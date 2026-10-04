@@ -51,7 +51,13 @@ Javob:
 - `soldOut` — «Tugagan mahsulot yopilsin» yoqilgan, mahsulot bog'langan va ombordagi mahsulot bir portsiyaga yetmasa `true`.
   Omborsiz yuritiladigan mahsulotlar (sabzavot, sous) hisobga kirmaydi; omborga bog'lanmagan taom hech qachon «tugagan» bo'lmaydi.
 
+- `updatedAt` — filial holati oxirgi o'zgargan vaqt; narx ham, «tugadi» ham o'chiq bo'lsa bo'sh (holat o'qilmaydi — javob tezroq).
+
 Xatolar: `401` kalit noto'g'ri · `413` so'rov juda katta · `422` ro'yxat noto'g'ri.
+
+**Tezlik:** do'kon boshqa mintaqadan chaqiradi va har bir baza so'rovi ~0,2 soniya turadi. Shuning uchun kalitni tekshirish bilan
+sozlamalar bitta so'rovda o'qiladi, yozish va o'qish bitta to'plamda (batch) bajariladi: sinxron — 2–3 ta, buyurtma hodisasi —
+kalit + bitta to'plam (savdo yozilsa, ustiga filial holatini saqlash). Bu sonlar `tests/v2-club.test.mjs` da tekshiriladi.
 
 ### 1.2. `POST {SAYT}/api/integrations/v1/club/orders` — buyurtma hodisasi
 

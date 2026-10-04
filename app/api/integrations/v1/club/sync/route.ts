@@ -19,16 +19,22 @@ export async function POST(request: Request) {
   let branchId = "";
   try {
     const db = clubDb();
-    branchId = await authenticateClub(db, request);
-    if (!branchId) {
+    const settings = await authenticateClub(db, request);
+    if (!settings) {
       await writeIntegrationLog({ endpoint: ENDPOINT, method: "POST", status: 401, message: "Do‘kon kaliti noto‘g‘ri" });
       return json({ ok: false, error: "Kalit noto‘g‘ri." }, 401);
     }
+    branchId = settings.branchId;
     const raw = await request.text();
     if (raw.length > 400_000) return json({ ok: false, error: "So‘rov juda katta." }, 413);
     const body = JSON.parse(raw || "{}") as unknown;
-    const { state, updatedAt } = await readHaloState(branchId);
-    const result = await syncClubCatalog(db, branchId, body, state as Record<string, unknown>);
+    // Filial holati faqat narx yoki "tugadi" yoqilgan bo'lsa o'qiladi (aks holda kerak emas — javob tezroq).
+    let updatedAt = "";
+    const result = await syncClubCatalog(db, settings, body, async () => {
+      const current = await readHaloState(branchId);
+      updatedAt = current.updatedAt;
+      return current.state as Record<string, unknown>;
+    });
     return json({ ok: true, updatedAt, ...result });
   } catch (error) {
     const status = error instanceof ClubError ? error.status : error instanceof SyntaxError ? 400 : 500;

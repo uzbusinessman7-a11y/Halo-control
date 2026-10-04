@@ -293,9 +293,18 @@ const SCHEMA = [
   )`,
   "CREATE INDEX IF NOT EXISTS v2_club_orders_recent ON v2_club_orders (branch_id, received_at)",
 ];
+// Jadvallar bir marta tekshiriladi (har so'rovda emas): do'kon boshqa mintaqadan chaqiradi, har bir baza so'rovi ~0,2 soniya turadi.
+const schemaReady = new WeakSet<object>();
 export async function ensureClubSchema(db: D1Like) {
+  if (schemaReady.has(db)) return;
   await db.batch(SCHEMA.map((sql) => db.prepare(sql)));
+  schemaReady.add(db);
 }
+/** batch() javobidagi SELECT qatorlari (null — javob kutilgan shaklda emas, alohida so'rov kerak). */
+const batchRows = <T>(result: unknown): T[] | null => {
+  const rows = (result as { results?: unknown } | null | undefined)?.results;
+  return Array.isArray(rows) ? rows as T[] : null;
+};
 
 export interface ClubSettings {
   branchId: string; keyPrefix: string; keyCreatedAt: string; salesEnabled: boolean; priceSync: boolean; stockSync: boolean; notifyEnabled: boolean;
@@ -352,27 +361,28 @@ export async function revokeClubKey(db: D1Like, branchId: string, now = new Date
   await ensureSettingsRow(db, branchId, now);
   await db.prepare("UPDATE v2_club_settings SET key_hash = '', key_prefix = '', key_created_at = '', updated_at = ? WHERE branch_id = ?").bind(now, branchId).run();
 }
-/** So'rovdagi kalit qaysi filialniki ("" — kalit noto'g'ri). */
-export async function authenticateClub(db: D1Like, request: Request): Promise<string> {
+/** So'rovdagi kalit qaysi filialniki (null — kalit noto'g'ri). Filial sozlamalari ham shu bitta so'rovda o'qiladi. */
+export async function authenticateClub(db: D1Like, request: Request): Promise<ClubSettings | null> {
   const header = request.headers.get("authorization") || "";
   const key = header.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || "";
-  if (!/^halo_club_[A-Za-z0-9_-]{40,}$/.test(key)) return "";
+  if (!/^halo_club_[A-Za-z0-9_-]{40,}$/.test(key)) return null;
   await ensureClubSchema(db);
-  const row = await db.prepare("SELECT branch_id FROM v2_club_settings WHERE key_hash = ? AND key_hash <> ''").bind(await sha256(key)).first<{ branch_id: string }>();
-  return row?.branch_id || "";
+  const row = await db.prepare("SELECT * FROM v2_club_settings WHERE key_hash = ? AND key_hash <> ''").bind(await sha256(key)).first<SettingsRow>();
+  return row?.branch_id ? toSettings(row.branch_id, row) : null;
 }
 
 export interface ClubProduct { kind: "product" | "addon"; id: string; name: string; category: string; price: number; active: boolean; recipeId: string; stockFollow: boolean; seenAt: string }
 type ProductRow = { kind: string; external_id: string; name: string; category: string; price: number; active: number; recipe_id: string; stock_follow: number; seen_at: string };
 
+const PRODUCTS_SQL = "SELECT kind, external_id, name, category, price, active, recipe_id, stock_follow, seen_at FROM v2_club_products WHERE branch_id = ? ORDER BY kind DESC, category, name";
+const toProduct = (row: ProductRow): ClubProduct => ({
+  kind: row.kind === "addon" ? "addon" : "product", id: row.external_id, name: row.name, category: row.category, price: Number(row.price) || 0,
+  active: Boolean(row.active), recipeId: row.recipe_id, stockFollow: Boolean(row.stock_follow), seenAt: row.seen_at,
+});
 export async function listClubProducts(db: D1Like, branchId: string): Promise<ClubProduct[]> {
   await ensureClubSchema(db);
-  const result = await db.prepare("SELECT kind, external_id, name, category, price, active, recipe_id, stock_follow, seen_at FROM v2_club_products WHERE branch_id = ? ORDER BY kind DESC, category, name")
-    .bind(branchId).all<ProductRow>();
-  return result.results.map((row) => ({
-    kind: row.kind === "addon" ? "addon" : "product", id: row.external_id, name: row.name, category: row.category, price: Number(row.price) || 0,
-    active: Boolean(row.active), recipeId: row.recipe_id, stockFollow: Boolean(row.stock_follow), seenAt: row.seen_at,
-  }));
+  const result = await db.prepare(PRODUCTS_SQL).bind(branchId).all<ProductRow>();
+  return result.results.map(toProduct);
 }
 export const linkMap = (products: ClubProduct[]) => new Map(products.filter((product) => product.recipeId).map((product) => [linkKey(product.kind, product.id), product.recipeId]));
 
@@ -394,26 +404,40 @@ function normalizeCatalog(input: unknown, kind: "product" | "addon") {
  * Do'kon o'z mahsulotlari ro'yxatini yuboradi; javobda har biri uchun ko'rsatma oladi:
  * narx (yoqilgan va bog'langan bo'lsa — HALO Control'dagi sotuv narxi) va "tugadi" belgisi.
  * Bog'lash faqat HALO Control'da, rahbar tomonidan qilinadi — bu yerda saqlangan bog'lanishga tegilmaydi.
+ * `settings` — kalit tekshirilganda o'qilgan sozlamalar (qayta o'qilmaydi). `loadState` faqat narx yoki "tugadi" yoqilgan
+ * bo'lsa chaqiriladi: ikkalasi o'chiq bo'lsa filial holati kerak emas.
  */
-export async function syncClubCatalog(db: D1Like, branchId: string, body: unknown, state: Row, now = new Date().toISOString()) {
+export async function syncClubCatalog(db: D1Like, settings: ClubSettings, body: unknown, loadState: () => Promise<Row>, now = new Date().toISOString()) {
+  const branchId = settings.branchId;
   const source = body && typeof body === "object" ? body as Row : {};
   const incoming = [...normalizeCatalog(source.products, "product"), ...normalizeCatalog(source.addons, "addon")];
-  await ensureSettingsRow(db, branchId, now);
-  for (let index = 0; index < incoming.length; index += 40) {
-    await db.batch(incoming.slice(index, index + 40).map((item) => db.prepare(
-      `INSERT INTO v2_club_products (branch_id, kind, external_id, name, category, price, active, seen_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(branch_id, kind, external_id) DO UPDATE SET name = excluded.name, category = excluded.category, price = excluded.price, active = excluded.active, seen_at = excluded.seen_at`,
-    ).bind(branchId, item.kind, item.id, item.name, item.category, item.price, item.active ? 1 : 0, now, now)));
+  await ensureClubSchema(db);
+  const upserts = incoming.map((item) => db.prepare(
+    `INSERT INTO v2_club_products (branch_id, kind, external_id, name, category, price, active, seen_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(branch_id, kind, external_id) DO UPDATE SET name = excluded.name, category = excluded.category, price = excluded.price, active = excluded.active, seen_at = excluded.seen_at`,
+  ).bind(branchId, item.kind, item.id, item.name, item.category, item.price, item.active ? 1 : 0, now, now));
+  // Oxirgi to'plamga vaqt belgisi va ro'yxatni o'qish ham qo'shiladi — bitta baza so'rovi.
+  const tail = [
+    db.prepare("INSERT OR IGNORE INTO v2_club_settings (branch_id, updated_at) VALUES (?, ?)").bind(branchId, now),
+    db.prepare("UPDATE v2_club_settings SET last_sync_at = ? WHERE branch_id = ?").bind(now, branchId),
+    db.prepare(PRODUCTS_SQL).bind(branchId),
+  ];
+  let last: unknown[] = [];
+  for (let index = 0; index === 0 || index < upserts.length; index += 40) {
+    const chunk = upserts.slice(index, index + 40);
+    const final = index + 40 >= upserts.length;
+    last = await db.batch(final ? [...chunk, ...tail] : chunk);
   }
-  await db.prepare("UPDATE v2_club_settings SET last_sync_at = ? WHERE branch_id = ?").bind(now, branchId).run();
-  const settings = await readClubSettings(db, branchId);
-  const stored = new Map((await listClubProducts(db, branchId)).map((product) => [linkKey(product.kind, product.id), product]));
-  const recipes = new Map(recipeInfos(state).map((recipe) => [recipe.id, recipe]));
+  const rows = batchRows<ProductRow>(last[last.length - 1]);
+  const products = rows ? rows.map(toProduct) : await listClubProducts(db, branchId);
+  const stored = new Map(products.map((product) => [linkKey(product.kind, product.id), product]));
+  const needState = settings.priceSync || settings.stockSync;
+  const recipes = needState ? new Map(recipeInfos(await loadState()).map((recipe) => [recipe.id, recipe])) : null;
   const directive = (kind: "product" | "addon", id: string) => {
     const product = stored.get(linkKey(kind, id));
-    const recipe = product?.recipeId ? recipes.get(product.recipeId) : undefined;
+    const recipe = recipes && product?.recipeId ? recipes.get(product.recipeId) : undefined;
     return {
-      id, linked: Boolean(recipe),
+      id, linked: recipes ? Boolean(recipe) : Boolean(product?.recipeId),
       price: settings.priceSync && recipe && recipe.price > 0 ? recipe.price : null,
       soldOut: Boolean(settings.stockSync && recipe && product?.stockFollow && recipe.portions !== null && recipe.portions < 1),
     };
@@ -482,21 +506,30 @@ export async function listWaitingClubOrders(db: D1Like, branchId: string): Promi
   return result.results.map(toOrderRow);
 }
 
-/** Hodisani qabul qiladi: buyurtma yoziladi yoki holati yangilanadi (holat orqaga qaytmaydi, yopilgani o'zgarmaydi). */
+const RANK_SQL = `CASE status ${CLUB_STATUSES.map((status) => `WHEN '${status}' THEN ${RANK[status]}`).join(" ")} ELSE 0 END`;
+/**
+ * Hodisani qabul qiladi: buyurtma yoziladi yoki holati yangilanadi (holat orqaga qaytmaydi, yopilgani o'zgarmaydi).
+ * Hammasi bitta to'plamda (bitta baza so'rovi): yozish, shartli yangilash va natijani o'qish.
+ */
 export async function recordClubOrder(db: D1Like, branchId: string, order: ClubOrder, now = new Date().toISOString()): Promise<ClubOrderRow> {
-  await ensureSettingsRow(db, branchId, now);
-  await db.prepare(
-    `INSERT OR IGNORE INTO v2_club_orders (branch_id, order_id, order_number, status, fulfillment, payment_method, total, payload, received_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(branchId, order.id, order.number, order.status, order.fulfillment, order.paymentMethod, order.total, JSON.stringify(order), now, now).run();
-  const current = await readClubOrder(db, branchId, order.id);
+  await ensureClubSchema(db);
+  const payload = JSON.stringify(order);
+  const results = await db.batch([
+    db.prepare("INSERT OR IGNORE INTO v2_club_settings (branch_id, updated_at) VALUES (?, ?)").bind(branchId, now),
+    db.prepare(
+      `INSERT OR IGNORE INTO v2_club_orders (branch_id, order_id, order_number, status, fulfillment, payment_method, total, payload, received_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(branchId, order.id, order.number, order.status, order.fulfillment, order.paymentMethod, order.total, payload, now, now),
+    db.prepare(
+      `UPDATE v2_club_orders SET status = ?, order_number = ?, fulfillment = ?, payment_method = ?, total = ?, payload = ?, updated_at = ?
+       WHERE branch_id = ? AND order_id = ? AND status NOT IN ('completed', 'cancelled') AND status <> ? AND ? >= ${RANK_SQL}`,
+    ).bind(order.status, order.number, order.fulfillment, order.paymentMethod, order.total, payload, now, branchId, order.id, order.status, RANK[order.status]),
+    db.prepare("UPDATE v2_club_settings SET last_order_at = ? WHERE branch_id = ?").bind(now, branchId),
+    db.prepare(`SELECT ${ORDER_COLUMNS} FROM v2_club_orders WHERE branch_id = ? AND order_id = ?`).bind(branchId, order.id),
+  ]);
+  const rows = batchRows<OrderDbRow>(results[results.length - 1]);
+  const current = rows ? (rows[0] ? toOrderRow(rows[0]) : null) : await readClubOrder(db, branchId, order.id);
   if (!current) throw new ClubError("Buyurtma saqlanmadi.", 500);
-  const closed = current.status === "completed" || current.status === "cancelled";
-  if (!closed && current.status !== order.status && RANK[order.status] >= RANK[current.status]) {
-    await db.prepare("UPDATE v2_club_orders SET status = ?, order_number = ?, fulfillment = ?, payment_method = ?, total = ?, payload = ?, updated_at = ? WHERE branch_id = ? AND order_id = ? AND status = ?")
-      .bind(order.status, order.number, order.fulfillment, order.paymentMethod, order.total, JSON.stringify(order), now, branchId, order.id, current.status).run();
-  }
-  await db.prepare("UPDATE v2_club_settings SET last_order_at = ? WHERE branch_id = ?").bind(now, branchId).run();
-  return (await readClubOrder(db, branchId, order.id))!;
+  return current;
 }
 export async function setClubSaleState(db: D1Like, branchId: string, orderId: string, saleState: string, note: string, date = "", now = new Date().toISOString()) {
   await db.prepare("UPDATE v2_club_orders SET sale_state = ?, sale_note = ?, sale_date = ?, updated_at = ? WHERE branch_id = ? AND order_id = ?")
