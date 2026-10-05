@@ -6,6 +6,12 @@ import { LedgerError } from "../../../core/ledger";
 import { runDebtBridge } from "../../../core/debt-bridge";
 import { statement, statementText } from "../../../core/debts";
 import type { D1Like } from "../../../lib/full-migration";
+import { VegetableExpenseError } from "../../../lib/vegetable-expenses";
+import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
+import {
+  applySupplierIntake, intakeInventoryChoices, listSupplierProducts, rememberIntakePrices, removeSupplierProduct, saveSupplierProduct, SupplierIntakeError,
+} from "../../../core/supplier-intake";
+import { SUPPLIER_INTAKE_SCRIPT, SUPPLIER_INTAKE_STYLE } from "../../../core/supplier-intake-ui";
 import { shell } from "../../../core/ui-shell";
 
 declare global {
@@ -63,6 +69,39 @@ export async function POST(request: Request) {
       }, 5, branchId, "Rahbar", `Qarz qoldig‘i tuzatildi · Sabab: ${reason.slice(0, 80)}`, "Qarzlar (yangi)");
       return json({ ok: true });
     }
+    // Yetkazib beruvchi profili: mahsulotlar ro'yxati va «Yangi kirim» (ombor + qarz + to'lov bitta saqlashda).
+    const moneyAccounts = (st: Row) => list(st.accounts).filter((account) => (account.type === "cash" || account.type === "bank") && account.active !== false)
+      .map((account) => ({ id: String(account.id), name: String(account.name || account.id), type: String(account.type) }));
+    const profile = async (st: Row, supplierId: string) => {
+      const choices = intakeInventoryChoices(st, today);
+      const byId = new Map(choices.inventory.map((item) => [item.id, item]));
+      const products = (await listSupplierProducts(database(), branchId, supplierId)).map((product) => {
+        const item = product.inventoryId ? byId.get(product.inventoryId) : undefined;
+        return { ...product, name: item ? item.name : product.name, vegetable: Boolean(item?.vegetable), missing: Boolean(product.inventoryId) && !item };
+      });
+      return { products, inventory: choices.inventory, inventoryCategories: choices.categories, accounts: moneyAccounts(st), today };
+    };
+    if (body.action === "profile" || body.action === "saveProduct" || body.action === "removeProduct") {
+      const supplierId = String(body.supplierId || "");
+      const { state } = await readHaloState(branchId);
+      if (!list((state as Row).suppliers).some((entry) => entry.id === supplierId)) return json({ error: "Yetkazib beruvchi topilmadi." }, 404);
+      if (body.action === "saveProduct") await saveSupplierProduct(database(), branchId, supplierId, (body.product && typeof body.product === "object" ? body.product : {}) as Row, state as Row, today);
+      if (body.action === "removeProduct") await removeSupplierProduct(database(), branchId, supplierId, String(body.id || ""));
+      return json({ ok: true, ...(await profile(state as Row, supplierId)) });
+    }
+    if (body.action === "intake") {
+      const supplierId = String(body.supplierId || "");
+      const date = String(body.date || "");
+      // Pul chiqadigan bo'lsa — kassada yopilgan kunga yozilmaydi (yopilgan kun qoldig'i o'zgarmasligi kerak).
+      if (Number(body.paidAmount) > 0) await assertV2DayOpen(branchId, date);
+      const products = await listSupplierProducts(database(), branchId, supplierId);
+      const mutation = await mutateHaloState((cur) => applySupplierIntake(cur as Row, { ...body, supplierId }, products, today), 5, branchId, "Rahbar",
+        `Yangi kirim (yetkazib beruvchi) · ₩${(Array.isArray(body.lines) ? body.lines as Row[] : []).reduce((sum, line) => sum + (Number(line?.amount) || 0), 0).toLocaleString("en-US")}`, "Qarzlar (yangi)", true);
+      const result = mutation.result;
+      let remembered = true;
+      try { await rememberIntakePrices(database(), branchId, result); } catch { remembered = false; }
+      return json({ ok: true, result, remembered, ...(await profile(mutation.state as Row, supplierId)) });
+    }
     const { state } = await readHaloState(branchId);
     const bridge = await runDebtBridge(database(), scope, state as Record<string, unknown>, today);
     if (body.action === "statement") {
@@ -74,6 +113,9 @@ export async function POST(request: Request) {
       .map((account) => ({ id: String(account.id), name: String(account.name || account.id), type: String(account.type) }));
     return json({ ok: true, today, bridge, accounts });
   } catch (error) {
+    if (error instanceof SupplierIntakeError) return json({ error: error.message, code: error.code || undefined, details: error.details }, error.status);
+    if (error instanceof ClosedDayError) return json({ error: error.message }, 409);
+    if (error instanceof VegetableExpenseError) return json({ error: error.message }, 400);
     if (error instanceof SupplierBalanceEditError) return json({ error: error.message }, 409);
     if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     if (error instanceof LedgerError || (error instanceof Error && /filial/i.test(error.message))) return json({ error: error.message }, 400);
@@ -89,7 +131,7 @@ function page(branches: Array<{ id: string; name: string }>): string {
     headerRight: '<select id="branch"></select>',
     body: `<section class="card noprint"><div class="row"><button id="addSup">+ Yangi yetkazib beruvchi</button><a href="/api/v2/mezana" style="text-decoration:none"><button class="ghost" type="button">🤝 MEZANA hisobi ›</button></a></div><div id="supForm"></div></section>
 <section class="card noprint" id="listCard"><h2>Yetkazib beruvchilarga qarz</h2><div id="list"><p class="hint">Yuklanmoqda…</p></div></section>
-<section class="card" id="stCard" hidden></section>`,
+<section class="card" id="stCard" hidden></section>${SUPPLIER_INTAKE_STYLE}`,
     script: `
 var BRANCHES=${boot},TODAY='',PARTIES={},ACCOUNTS=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -125,11 +167,15 @@ function openStatement(partyId,from,to){
       +s.lines.map(function(l){return '<tr><td>'+esc(l.date)+'</td><td>'+esc(KIND[l.kind]||l.kind)+(l.memo?'<br><small style="color:var(--muted)">'+esc(l.memo)+'</small>':'')+'</td><td class="n">'+(l.amount>0?'+':'−')+won(Math.abs(l.amount))+'</td><td class="n">'+won(l.balance)+'</td></tr>'}).join('')
       +'<tr><td colspan="3"><b>'+esc(s.to)+' holatiga qarz</b></td><td class="n"><b>'+won(s.closing)+'</b></td></tr></table>'
       +'<p class="hint" style="margin-top:10px">Jami xarid: '+won(s.purchases)+' · Jami to‘lov: '+won(s.payments)+'</p>'
+      +'<div class="row noprint" style="margin:14px 0 4px"><button id="addIn">📦 Yangi kirim</button><button class="ghost" id="prods">🗂 Mahsulotlari</button></div><p class="hint noprint" style="margin:0">Mahsulot kelgan bo‘lsa — «Yangi kirim»: omborga ham, qarzga ham o‘zi yozadi. «+ Xarid» — faqat mahsulotsiz qarz uchun.</p>'
       +'<div class="row noprint" style="margin:14px 0 6px"><button id="addPur">+ Xarid (qarz oshadi)</button><button class="ghost" id="addPay">+ To‘lov qildim</button></div><div id="entry" class="noprint" style="margin-bottom:12px"></div>'
       +'<div class="row noprint"><button id="copy">📋 Nusxa olish (xabar uchun)</button><button class="ghost" id="print">🖨 Chop etish / PDF</button></div><div id="cmsg" class="noprint"></div>'
       +'<div class="row noprint" style="margin-top:10px"><button class="ghost" id="recs">🧾 Yozuvlar / bekor qilish</button><button class="ghost" id="bal">⚖️ Qoldiqni tuzatish</button><button class="ghost" id="edit">✏️ Ma’lumotlari</button></div><div id="fix" class="noprint"></div>';
     document.getElementById('stGo').addEventListener('click',function(){openStatement(partyId,document.getElementById('stFrom').value,document.getElementById('stTo').value)});
     document.getElementById('print').addEventListener('click',function(){window.print()});
+    document.getElementById('addIn').addEventListener('click',function(){openIntake(partyId)});
+    document.getElementById('prods').addEventListener('click',function(){openProducts(partyId)});
+    if(FLASH){document.getElementById('entry').innerHTML=FLASH;FLASH=''}
     document.getElementById('addPur').addEventListener('click',function(){entryForm(partyId,'purchase')});
     document.getElementById('addPay').addEventListener('click',function(){entryForm(partyId,'payment')});
     document.getElementById('recs').addEventListener('click',function(){fixRecords(partyId,from,to)});
@@ -210,6 +256,6 @@ document.getElementById('addSup').addEventListener('click',function(){
       box.innerHTML='<div class="msg ok" style="margin-top:12px">✓ '+esc(name)+' qo‘shildi. Endi uni bosib xarid yoki to‘lov kiritasiz.</div>';load()});
   });
 });
-`,
+${SUPPLIER_INTAKE_SCRIPT}`,
   });
 }
