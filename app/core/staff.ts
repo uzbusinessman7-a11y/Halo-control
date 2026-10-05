@@ -97,6 +97,43 @@ export function addShift(state: Row, body: Row, today: string) {
   return { state: { ...state, workShifts: next }, result: { shift, alreadySaved: false } };
 }
 
+/**
+ * Rahbar xodimning ishlagan kunlarini birdaniga kiritadi: bir nechta kun, hammasiga bir xil vaqt.
+ * Har bir kun oddiy qo'lda smena sifatida yoziladi (addShift qoidalari bilan) — hisob varaqasi, tuzatish va bekor
+ * qilish avvalgidek ishlaydi. Hammasi yoziladi yoki hech biri: bitta kun xato bo'lsa, qaysi kunligi aytiladi.
+ * Ikki marta haq yozilmasligi uchun: smenasi bor yoki dam/kasal/kelmadi deb belgilangan kun qabul qilinmaydi.
+ */
+export function addShifts(state: Row, body: Row, today: string) {
+  const op = opId(body);
+  const staffId = clean(body.staffId, 100);
+  const dates = [...new Set((Array.isArray(body.dates) ? body.dates as unknown[] : []).map((value) => clean(value, 10)))].sort();
+  if (!dates.length) throw new StaffError("Kamida bitta kunni belgilang.");
+  if (dates.length > 31) throw new StaffError("Bir martada ko'pi bilan 31 kun kiritiladi.");
+  if (dates.some((date) => !/^\d{4}-\d{2}-\d{2}$/.test(date))) throw new StaffError("Sanani tekshiring.");
+  const STATUS: Record<string, string> = { off: "dam olish", sick: "kasal", absent: "kelmadi" };
+  let next = state;
+  let saved = 0;
+  for (const date of dates) {
+    // Har kun uchun o'z amal raqami (asosiy raqam + sana) — qayta yuborilsa ikkinchi marta yozilmaydi.
+    const dayOp = `${op.slice(0, 28)}${date.replace(/-/g, "")}`;
+    if (rows(next.workShifts).some((shift) => shift.id === `v2-shift:${dayOp}`)) continue;
+    const day = rows(next.attendanceDays).find((entry) => entry.staffId === staffId && entry.date === date && entry.voided !== true);
+    if (day) throw new StaffError(`${date}: bu kun «${STATUS[String(day.status)] || String(day.status)}» deb belgilangan. Avval kun holatini bekor qiling.`, 409);
+    if (rows(next.workShifts).some((shift) => shift.staffId === staffId && shift.date === date && shift.status !== "void")) {
+      throw new StaffError(`${date}: bu kunda smena allaqachon bor. Shu kunga yana smena kerak bo'lsa, «＋ Smena» orqali kiriting.`, 409);
+    }
+    try {
+      const out = addShift(next, { ...body, operationId: dayOp, date }, today);
+      next = out.state;
+      if (out.result.alreadySaved !== true) saved += 1;
+    } catch (error) {
+      if (error instanceof StaffError) throw new StaffError(`${date}: ${error.message}`, error.status);
+      throw error;
+    }
+  }
+  return { state: next, result: { saved, alreadySaved: saved === 0 } };
+}
+
 /** Bonus yoki ushlanma (pulsiz, faqat maosh hisobiga). Sababi majburiy. */
 export function addAdjustment(state: Row, body: Row, today: string) {
   const op = opId(body);

@@ -1,10 +1,11 @@
 import { isAdminRequest } from "../../../lib/integration-store";
 import { HaloStateConflictError, listHaloBranches, mutateHaloState, readHaloState } from "../../../lib/halo-store";
-import { addAdjustment, addShift, editShift, repairPaymentPaidAt, payStaff, saveStaffMember, setDayStatus, StaffError, staffList, staffRecords, voidAdjustment, voidDayStatus, voidPayment, voidShift } from "../../../core/staff";
+import { addAdjustment, addShift, addShifts, editShift, repairPaymentPaidAt, payStaff, saveStaffMember, setDayStatus, StaffError, staffList, staffRecords, voidAdjustment, voidDayStatus, voidPayment, voidShift } from "../../../core/staff";
 import { LedgerError } from "../../../core/ledger";
 import { runPayrollBridge } from "../../../core/payroll-bridge";
 import { isMonth, payslip, payslipText } from "../../../core/payroll-ledger";
 import type { D1Like } from "../../../lib/full-migration";
+import { STAFF_DAYS_SCRIPT, STAFF_DAYS_STYLE } from "../../../core/staff-days-ui";
 import { shell } from "../../../core/ui-shell";
 import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
 
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
     const mutations: Record<string, [(st: Record<string, unknown>) => { state: Record<string, unknown>; result: unknown }, string]> = {
       saveStaff: [(st) => saveStaffMember(st, body), "Xodim ma’lumoti saqlandi"],
       shift: [(st) => addShift(st, body, today), "Smena qo‘lda kiritildi"],
+      shifts: [(st) => addShifts(st, body, today), `Ishlagan kunlar qo‘lda kiritildi · ${Array.isArray(body.dates) ? body.dates.length : 0} kun`],
       adjust: [(st) => addAdjustment(st, body, today), body.type === "bonus" ? "Bonus yozildi" : "Ushlanma yozildi"],
       pay: [(st) => payStaff(st, body, today), body.kind === "advance" ? "Avans berildi" : "Oylik to‘landi"],
       editShift: [(st) => editShift(st, body), `Smena vaqti tuzatildi · Sabab: ${String(body.reason || "").slice(0, 80)}`],
@@ -108,7 +110,7 @@ function page(branches: Array<{ id: string; name: string }>): string {
     body: `<section class="card noprint" id="checkCard"><h2>Nazorat</h2><div id="checks"><p class="hint">Yuklanmoqda…</p></div></section>
 <section class="card noprint"><div class="row"><button class="ghost" id="manage">👥 Xodimlar ro‘yxati va stavkalar</button></div><div id="staffBox"></div></section>
 <section class="card noprint" id="listCard"><h2>Xodimlar</h2><div id="list"></div></section>
-<section class="card" id="slipCard" hidden></section>`,
+<section class="card" id="slipCard" hidden></section>${STAFF_DAYS_STYLE}`,
     script: `
 var BRANCHES=${boot},MONTH='',OLD={},STAFF=null,ACC=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -153,10 +155,11 @@ function openSlip(id){
       +'<tr class="sum"><td colspan="2">'+(p.remaining>=0?'To‘lanishi kerak':'Ortiqcha to‘langan')+'</td><td class="n">'+won(Math.abs(p.remaining))+'</td></tr></table>'
       +(p.earlierMonths?'<p class="hint" style="margin-top:10px">Oldingi oylardan '+(p.earlierMonths>0?'to‘lanmagan: ':'ortiqcha to‘langan: ')+won(Math.abs(p.earlierMonths))+'</p>':'')
       +(p.corrections.length?'<details class="noprint" style="margin-top:10px"><summary>'+p.corrections.length+' ta tuzatish tarixi</summary>'+p.corrections.map(function(c){return '<div class="hint">'+esc(c.date)+' · '+won(c.amount)+' · '+esc(c.memo)+'</div>'}).join('')+'</details>':'')
-      +'<div class="row noprint" style="margin-top:14px"><button class="ghost" data-act="shift">＋ Smena</button><button class="ghost" data-act="adjust">± Bonus / ushlanma</button><button class="ghost" data-act="pay">💸 To‘lash</button><button class="ghost" data-act="day">📅 Dam / kasal / kelmadi</button><button class="ghost" data-act="recs">🧾 Yozuvlar / tuzatish</button></div><div id="actBox" class="noprint"></div>'
+      +'<div class="row noprint" style="margin-top:14px"><button data-act="days">🗓 Ishlagan kunlar</button><button class="ghost" data-act="shift">＋ Smena</button><button class="ghost" data-act="adjust">± Bonus / ushlanma</button><button class="ghost" data-act="pay">💸 To‘lash</button><button class="ghost" data-act="day">📅 Dam / kasal / kelmadi</button><button class="ghost" data-act="recs">🧾 Yozuvlar / tuzatish</button></div><div id="actBox" class="noprint"></div>'
       +'<div class="row noprint" style="margin-top:12px"><button id="copy">📋 Xodimga yuborish uchun nusxa</button><button class="ghost" id="print">🖨 Chop etish / PDF</button></div><div id="cmsg" class="noprint"></div>';
     document.getElementById('print').addEventListener('click',function(){window.print()});
-    card.querySelectorAll('[data-act]').forEach(function(b){b.addEventListener('click',function(){if(b.dataset.act==='recs')recordsBox(OLD[id],id,p.employee.name);else actionForm(b.dataset.act,OLD[id],id,p.employee.name)})});
+    card.querySelectorAll('[data-act]').forEach(function(b){b.addEventListener('click',function(){if(b.dataset.act==='recs')recordsBox(OLD[id],id,p.employee.name);else if(b.dataset.act==='days')daysForm(OLD[id],id,p.employee.name);else actionForm(b.dataset.act,OLD[id],id,p.employee.name)})});
+    if(NOTE){document.getElementById('actBox').innerHTML=NOTE;NOTE=''}
     document.getElementById('copy').addEventListener('click',function(){
       var done=function(){document.getElementById('cmsg').innerHTML='<div class="msg ok" style="margin-top:10px">✓ Nusxa olindi — Telegram yoki KakaoTalk’ga joylang</div>'};
       if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(res.text).then(done,function(){prompt('Matnni nusxalang:',res.text)})}else{prompt('Matnni nusxalang:',res.text)}
@@ -252,6 +255,6 @@ function staffForm(m){
   });
 }
 sel.addEventListener('change',function(){STAFF=null;ACC=null;load()});mon.addEventListener('change',load);load();
-`,
+${STAFF_DAYS_SCRIPT}`,
   });
 }
