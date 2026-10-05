@@ -153,7 +153,7 @@ function staffScreen(){
 
 function ownerScreen(){
   var opts=USER.branches.map(function(b){return '<option value="'+esc(b.id)+'">'+esc(b.name)+'</option>'}).join('');
-  app.innerHTML='<div class="page-head"><div><h1>Kassa nazorati</h1><p>Pul qayerda, kunlarni yopish va karta puli</p></div><select id="branch">'+opts+'</select></div>'
+  app.innerHTML='<div class="page-head"><div><h1>Kassa</h1><p>Pul qayerda, kunlarni yopish va karta puli</p></div><select id="branch">'+opts+'</select></div>'
     +'<div id="alerts"></div>'
     +'<section class="card"><h2>Pul qayerda</h2><div class="grid" id="balances"></div></section>'
     +'<section class="card"><h2>Karta va delivery — hali tushmagan pul</h2><div class="grid" id="recv"></div><div class="row" style="margin-top:12px"><button class="ghost" id="openSettle">+ Pul bankka tushdi</button></div><div id="settle" hidden></div></section>'

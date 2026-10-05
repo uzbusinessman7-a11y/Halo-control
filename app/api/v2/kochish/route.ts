@@ -71,7 +71,7 @@ export async function POST(request: Request) {
 
 function page(): string {
   return shell({
-    title: "Ko'chish", active: "bosh", heading: "Yangi tizimga to'liq o'tish",
+    title: "To‘liq o‘tish", active: "kochish", heading: "To‘liq o‘tish",
     subtitle: "Eski saytdan butunlay shu saytga o'tish uchun tekshiruv ro'yxati",
     body: `<div id="body" style="display:grid;gap:16px"><section class="card"><div class="skeleton"></div><div class="skeleton" style="margin-top:12px"></div></section></div>`,
     script: `

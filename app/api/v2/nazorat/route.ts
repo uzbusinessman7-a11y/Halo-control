@@ -78,7 +78,7 @@ export async function POST(request: Request) {
 function page(branches: Array<{ id: string; name: string }>): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
   return shell({
-    title: "Kunlik nazorat", active: "bosh", heading: "Kunlik nazorat",
+    title: "Kunlik nazorat", active: "nazorat", heading: "Kunlik nazorat",
     subtitle: "Ochilish va yopilish tekshiruvi, oshxona qoidalari",
     headerRight: '<div class="row"><input type="date" id="date"><select id="branch"></select></div>',
     body: `<section class="card"><h2 id="sum">Tekshiruv</h2><p class="hint">Xodimlar ilovasida smena davomida belgilaydi. Siz ham shu yerda belgilashingiz yoki belgini olib tashlashingiz mumkin.</p><div id="phases"></div></section>

@@ -157,7 +157,7 @@ export async function POST(request: Request) {
 function page(branches: Array<{ id: string; name: string }>): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
   return shell({
-    title: "MEZANA", active: "qarz", heading: "MEZANA",
+    title: "MEZANA", active: "mezana", heading: "MEZANA",
     subtitle: "Olib turilgan, qaytarilgan, qarzga olingan mahsulot va to‘lovlar",
     headerRight: '<div class="row"><input type="date" id="date"><select id="branch"></select></div>',
     back: "/api/v2/qarz",

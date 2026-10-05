@@ -32,7 +32,9 @@ export async function GET(request: Request) {
     return new Response(null, { status: 303, headers: { Location: `/signin-with-chatgpt?return_to=${encodeURIComponent(PAGE_PATH)}` } });
   }
   const branches = (await listHaloBranches()).map((branch) => ({ id: branch.id, name: branch.name }));
-  return new Response(page(branches), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  // Xodimlar → «Keldim / ketdim joyi» shu sahifaning alohida ko'rinishi (?b=joy).
+  const joy = new URL(request.url).searchParams.get("b") === "joy";
+  return new Response(page(branches, joy), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -115,15 +117,15 @@ export async function POST(request: Request) {
   }
 }
 
-function page(branches: Array<{ id: string; name: string }>): string {
+function page(branches: Array<{ id: string; name: string }>, joy = false): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
   return shell({
-    title: "Maosh", active: "maosh", heading: "Maosh",
-    subtitle: "Har bir xodim uchun oylik hisob varaqasi",
-    headerRight: '<div class="row"><input type="month" id="month"><select id="branch"></select></div>',
-    body: `<section class="card noprint" id="checkCard"><h2>Nazorat</h2><div id="checks"><p class="hint">Yuklanmoqda…</p></div></section>
-<section class="card noprint"><div class="row"><button class="ghost" id="manage">👥 Xodimlar ro‘yxati va stavkalar</button><button class="ghost" id="place">📍 Keldim / ketdim joyi</button></div><div id="staffBox"></div></section>
-<section class="card noprint" id="listCard"><h2>Xodimlar</h2><div id="list"></div></section>
+    title: joy ? "Keldim / ketdim joyi" : "Maosh", active: joy ? "joy" : "maosh", heading: joy ? "Keldim / ketdim joyi" : "Maosh",
+    subtitle: joy ? "Xodim «ISHNI BOSHLADIM / TUGATDIM»ni faqat oshxona yaqinida bosa oladi" : "Har bir xodim uchun oylik hisob varaqasi",
+    headerRight: `<div class="row"><input type="month" id="month"${joy ? " hidden" : ""}><select id="branch"></select></div>`,
+    body: `<section class="card noprint" id="checkCard"${joy ? " hidden" : ""}><h2>Nazorat</h2><div id="checks"><p class="hint">Yuklanmoqda…</p></div></section>
+<section class="noprint"><div class="row"${joy ? " hidden" : ""}><button class="ghost" id="manage">👥 Xodimlar ro‘yxati va stavkalar</button></div><div id="staffBox"></div></section>
+<section class="card noprint" id="listCard"${joy ? " hidden" : ""}><h2>Xodimlar</h2><div id="list"></div></section>
 <section class="card" id="slipCard" hidden></section>${STAFF_DAYS_STYLE}`,
     script: `
 var BRANCHES=${boot},MONTH='',OLD={},STAFF=null,ACC=[];
@@ -270,7 +272,7 @@ function staffForm(m){
 }
 sel.addEventListener('change',function(){STAFF=null;ACC=null;load()});mon.addEventListener('change',load);load();
 ${STAFF_DAYS_SCRIPT}${ATTENDANCE_PLACE_SCRIPT}
-document.getElementById('place').addEventListener('click',function(){placeBox('')});
+var JOY=${joy ? "true" : "false"};if(JOY){placeBox('');sel.addEventListener('change',function(){placeBox('')})}
 `,
   });
 }

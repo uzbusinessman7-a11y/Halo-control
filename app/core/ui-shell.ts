@@ -3,17 +3,86 @@
  * (kompyuterda chap menyu, telefonda pastki menyu). Hamma V2 sahifalari shu yerdan quriladi.
  */
 
-export type NavKey = "bosh" | "kiritish" | "kassa" | "ombor" | "menyu" | "qarz" | "maosh";
+/**
+ * Navigatsiya ikki qavat:
+ *  1) NAV_GROUPS — har kuni ishlatiladigan bo'limlar. Telefonda pastda guruhlar, tepada shu guruh sahifalari;
+ *     kompyuterda chap ustunda.
+ *  2) NAV_MORE — kam ishlatiladigan bo'limlar. "⋯ Yana" tugmasi ostida, turkumlarga ajratilgan oynada.
+ * Har sahifa faqat bitta joyda turadi.
+ */
+export type NavKey =
+  | "bosh"
+  | "kiritish" | "kassa" | "nazorat"
+  | "qarz" | "mezana"
+  | "ombor" | "menyu"
+  | "maosh" | "vazifalar"
+  | "eksport" | "sanoq" | "tarix"
+  | "kalkulyator" | "monitor" | "club"
+  | "joy" | "akkauntlar"
+  | "filiallar" | "ushlanmalar" | "ulanishlar"
+  | "kochish";
 
-const NAV: Array<{ key: NavKey; label: string; icon: string }> = [
-  { key: "bosh", label: "Bosh", icon: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>' },
-  { key: "kiritish", label: "Kiritish", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>' },
-  { key: "kassa", label: "Kassa", icon: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="12" cy="14.5" r="2"/>' },
-  { key: "ombor", label: "Ombor", icon: '<path d="M3 8 12 3l9 5v11H3z"/><path d="M7 19v-7h10v7"/><path d="M7 15h10"/>' },
-  { key: "menyu", label: "Menyu", icon: '<path d="M7 3v8a2 2 0 0 0 2 2v8"/><path d="M5 3v5a2 2 0 0 0 4 0V3"/><path d="M17 21V3c-2.2 1.2-3.5 3.6-3.5 7v3H17"/>' },
-  { key: "qarz", label: "Qarz", icon: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 12h7M9 16h5"/>' },
-  { key: "maosh", label: "Maosh", icon: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.3-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c2 .7 3.2 2.4 3.6 5.2"/>' },
+interface NavPage { key?: NavKey; href: string; label: string; hint?: string; out?: boolean }
+interface NavGroup { key: string; label: string; title: string; icon: string; pages: NavPage[] }
+
+/** Har kuni ishlatiladigan bo'limlar. */
+export const NAV_GROUPS: NavGroup[] = [
+  { key: "bosh", label: "Bosh", title: "Bosh sahifa", icon: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>', pages: [
+    { key: "bosh", href: "/api/v2/bosh", label: "Bosh sahifa" },
+  ] },
+  { key: "kundalik", label: "Kundalik", title: "Kundalik ish", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>', pages: [
+    { key: "kiritish", href: "/api/v2/kiritish", label: "Kiritish" },
+    { href: "/pos", label: "HALO HISOB" },
+    { key: "kassa", href: "/api/v2/kassa", label: "Kassa" },
+    { key: "nazorat", href: "/api/v2/nazorat", label: "Kunlik nazorat" },
+  ] },
+  { key: "xarid", label: "Xarid", title: "Xarid va qarz", icon: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 12h7M9 16h5"/>', pages: [
+    { key: "qarz", href: "/api/v2/qarz", label: "Yetkazib beruvchilar" },
+    { key: "mezana", href: "/api/v2/mezana", label: "MEZANA" },
+  ] },
+  { key: "ombor", label: "Ombor", title: "Ombor va menyu", icon: '<path d="M3 8 12 3l9 5v11H3z"/><path d="M7 19v-7h10v7"/><path d="M7 15h10"/>', pages: [
+    { key: "ombor", href: "/api/v2/ombor", label: "Ombor" },
+    { key: "menyu", href: "/api/v2/menyu", label: "Menyu" },
+  ] },
+  { key: "xodimlar", label: "Xodimlar", title: "Xodimlar", icon: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.3-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c2 .7 3.2 2.4 3.6 5.2"/>', pages: [
+    { key: "maosh", href: "/api/v2/maosh", label: "Maosh" },
+    { key: "vazifalar", href: "/api/v2/vazifalar", label: "Vazifalar" },
+  ] },
 ];
+
+/** Kam ishlatiladigan bo'limlar — "⋯ Yana" ichida, turkumlar bo'yicha. `icon` bu yerda — turkum belgisi (emoji). */
+export const NAV_MORE: NavGroup[] = [
+  { key: "hisobot", label: "Hisobot", title: "Hisobot", icon: "📊", pages: [
+    { key: "eksport", href: "/api/v2/eksport", label: "Hisobot va zaxira", hint: "Excel yuklab olish, zaxira nusxa" },
+    { key: "sanoq", href: "/api/v2/sanoq", label: "Oy yakuni sanog‘i", hint: "Pul, ombor va qarzni sanab tasdiqlash" },
+    { key: "tarix", href: "/api/v2/tarix", label: "O‘zgarishlar tarixi", hint: "Kim, qachon, nimani o‘zgartirgan" },
+  ] },
+  { key: "menyu-vosita", label: "Menyu", title: "Menyu vositalari", icon: "🍽️", pages: [
+    { key: "kalkulyator", href: "/api/v2/kalkulyator", label: "Narx kalkulyatori", hint: "Tannarxdan sotuv narxi, foiz" },
+    { key: "monitor", href: "/api/v2/monitor", label: "Monitor menyu", hint: "Televizordagi menyu" },
+    { key: "club", href: "/api/v2/club", label: "Telegram do‘kon", hint: "HALO CLUB bilan ulanish" },
+  ] },
+  { key: "xodim-sozlash", label: "Xodimlar", title: "Xodimlar sozlamasi", icon: "👥", pages: [
+    { key: "joy", href: "/api/v2/maosh?b=joy", label: "Keldim / ketdim joyi", hint: "Oshxona joyi — faqat yaqindan bosiladi" },
+    { key: "akkauntlar", href: "/api/v2/sozlamalar?b=akkaunt", label: "Akkauntlar", hint: "Xodim login va parollari" },
+    { href: "/api/v2/xodim", label: "Xodim ilovasi", hint: "Xodim ko‘radigan ekran" },
+  ] },
+  { key: "sozlash", label: "Sozlash", title: "Sozlash", icon: "⚙️", pages: [
+    { key: "filiallar", href: "/api/v2/sozlamalar?b=filial", label: "Filiallar", hint: "Filial qo‘shish va nomlash" },
+    { key: "ushlanmalar", href: "/api/v2/ushlanmalar", label: "Soliq va komissiyalar", hint: "Har savdodan avtomatik ushlanadi" },
+    { key: "ulanishlar", href: "/api/v2/ulanishlar", label: "Ulanishlar", hint: "Telegram bot, Google Sheets, API" },
+  ] },
+  { key: "tizim", label: "Tizim", title: "Tizim", icon: "🧰", pages: [
+    { href: "/api/v2/ornatish", label: "Ilovani o‘rnatish", hint: "Telefon yoki kompyuterga" },
+    { key: "kochish", href: "/api/v2/kochish", label: "To‘liq o‘tish", hint: "Eski saytdan butunlay shu saytga" },
+    { href: "/api/admin/migration", label: "Ma’lumot ko‘chirish", hint: "Eski saytdan ma’lumot olish" },
+    { href: "/?eski=1", label: "Eski ko‘rinish", hint: "Avvalgi saytni ochish" },
+    { href: "/signout-with-chatgpt", label: "Chiqish", hint: "Akkauntdan chiqish", out: true },
+  ] },
+];
+const has = (group: NavGroup, active: NavKey | null) => group.pages.some((page) => page.key && page.key === active);
+const groupOf = (active: NavKey | null) => NAV_GROUPS.find((group) => has(group, active)) || null;
+const moreOf = (active: NavKey | null) => NAV_MORE.find((group) => has(group, active)) || null;
 
 export const DESIGN_CSS = `
 :root{color-scheme:dark;--bg:#0b0b0c;--card:#141416;--card-2:#1b1b1e;--text:#f4f4f5;--muted:#9a9aa2;--line:#27272b;
@@ -33,17 +102,45 @@ a{color:var(--accent)}
 .page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
 .backrow{margin-bottom:-6px}.backbtn{min-height:40px;padding:6px 14px 6px 10px;font-size:15px;border-radius:12px}
 .page-head h1{font-size:26px;line-height:1.15;margin:0;letter-spacing:-.02em}.page-head p{margin:4px 0 0;color:var(--muted);font-size:14px}
-.bottom{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(7,1fr);padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
+.bottom{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(6,1fr);padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
 .nav-a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;border-radius:12px;color:var(--muted);text-decoration:none;font-size:10.5px;font-weight:600;letter-spacing:-.01em}
 .nav-a svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .nav-a.on{color:var(--accent)}.nav-a.on svg{stroke-width:2.2}
+.subnav{display:flex;gap:8px;overflow-x:auto;max-width:980px;margin:0 auto;padding:0 16px 10px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.subnav::-webkit-scrollbar{display:none}
+.sub-a{flex:0 0 auto;padding:7px 14px;border-radius:99px;border:1px solid var(--line);background:var(--card);color:var(--muted);text-decoration:none;font-size:14px;font-weight:700;white-space:nowrap}
+.sub-a.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.side-g{font-size:11.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:14px 12px 4px}
+.side-a{display:block;padding:7px 12px;border-radius:10px;color:var(--text);text-decoration:none;font-size:14.5px;font-weight:600}
+.side-gap{height:10px}
+.side-a:hover{background:var(--card-2)}
+.side-a.on{background:var(--accent-soft);color:var(--accent)}
+button.nav-a{background:none;min-height:0;border:0;font-family:inherit;cursor:pointer}
+.nav-more svg{fill:currentColor;stroke:none}
+.side-more{display:block;width:100%;margin-top:14px;padding:9px 12px;min-height:0;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--text);font-size:14.5px;font-weight:700;text-align:left}
+.side-more.on{border-color:var(--accent);color:var(--accent)}
+.sheet.more{width:min(820px,100%)}
+.more-top{display:flex;justify-content:space-between;align-items:center;gap:12px;position:sticky;top:-18px;z-index:1;margin:-18px -16px 0;padding:14px 16px 10px;background:var(--card);border-radius:18px 18px 0 0}
+.more-top h3{margin:0;font-size:20px}.more-top button{min-height:36px;padding:4px 14px}
+.more-grid{display:grid;gap:12px;margin-top:12px}
+.more-c{background:var(--card-2);border:1px solid var(--line);border-radius:14px;padding:4px 6px 6px;min-width:0}
+.more-c h4{margin:0;padding:10px 10px 6px;font-size:12.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--accent)}
+.more-a{display:block;padding:8px 10px;border-radius:10px;color:var(--text);text-decoration:none;border-top:1px solid var(--line)}
+.more-c h4+.more-a{border-top:0}
+.more-a b{display:block;font-size:15.5px;font-weight:700;line-height:1.3}
+.more-a small{display:block;color:var(--muted);font-size:12.5px;line-height:1.35}
+.more-a:hover{background:var(--card)}
+.more-a.on{background:var(--accent-soft);border-top-color:transparent}.more-a.on b{color:var(--accent)}
+.more-a.out b{color:var(--bad)}
+@media (min-width:640px){.more-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (min-width:900px){
  .app{display:grid;grid-template-columns:232px 1fr}.app.solo{display:block}
- .side{display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh;padding:20px 14px;border-right:1px solid var(--line);background:var(--card)}
- .side .brand{padding:4px 8px 18px}
+ .side{display:flex;flex-direction:column;gap:1px;position:sticky;top:0;height:100vh;overflow-y:auto;padding:20px 12px;border-right:1px solid var(--line);background:var(--card)}
+ .side .brand{padding:4px 8px 6px}
  .side .nav-a{flex-direction:row;gap:12px;font-size:15px;padding:11px 12px}
  .side .nav-a.on{background:var(--accent-soft);color:var(--accent)}
  .side-foot{margin-top:auto;font-size:12px;color:var(--muted);padding:8px}
+ .more-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 
  .bottom,.top{display:none}
  .content{padding:28px 28px 40px}
@@ -110,12 +207,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px}
 .sheet{background:var(--card);border:1px solid var(--line);border-radius:18px 18px 0 0;width:min(560px,100%);max-height:88dvh;overflow-y:auto;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
 .sheet h3{margin:0 0 6px;font-size:19px}.sheet .fx{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}.sheet .fx b{font-variant-numeric:tabular-nums;text-align:right}
 @media (min-width:640px){.sheet-bg{align-items:center}.sheet{border-radius:18px}}
-.more-btn{position:fixed;z-index:20;top:calc(10px + env(safe-area-inset-top));right:14px;width:44px;height:44px;min-height:44px;padding:0;border-radius:12px;background:var(--card);color:var(--text);border:1px solid var(--line);font-size:24px;line-height:1;font-weight:900}
-.more-panel{position:fixed;z-index:30;top:calc(62px + env(safe-area-inset-top));right:14px;width:min(340px,calc(100vw - 28px));max-height:calc(100dvh - 160px);overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:8px;box-shadow:0 20px 50px rgba(0,0,0,.5)}
-.more-head{display:flex;justify-content:space-between;align-items:center;padding:4px 8px 8px}.more-head button{min-height:34px;padding:4px 10px}
-.more-item{display:flex;gap:12px;align-items:center;padding:11px 10px;border-radius:12px;color:var(--text);text-decoration:none}
-.more-item:hover{background:var(--card-2)}.more-item .ico{width:28px;text-align:center;font-size:18px}.more-item small{display:block;color:var(--muted);font-size:12.5px;font-weight:500}
-@media (min-width:900px){.more-btn{top:24px;right:28px}.more-panel{top:76px;right:28px}.page-head{padding-right:60px}}
+
 
 .page-head>*{min-width:0;max-width:100%}.page-head .row>*{flex:1 1 140px;min-width:0}select,input{max-width:100%}.content{min-width:0;overflow-x:clip}
 .card h2{text-transform:none;letter-spacing:-.01em;font-size:17px;color:var(--text);font-weight:700}
@@ -187,39 +279,45 @@ function haloCatChips(list,sel,total){var e=function(v){return String(v==null?''
 function haloLoading(n){var s='';for(var i=0;i<(n||3);i++)s+='<div class="skeleton" style="margin:10px 0;width:'+(90-i*15)+'%"></div>';return s}
 `;
 
-/** "⋯" menyu: kam ishlatiladigan bo'limlar — ulanishlar, sozlamalar, nazorat va chiqish. */
-const MORE_MENU = [
-  ["/pos", "🧾", "HALO HISOB oynasi", "Naqd, hisob-raqam, delivery, oshxona, chiqit"],
-  ["/api/v2/monitor", "📺", "Monitor menyu", "Televizordagi reklama menyu: taom, narx, rasm"],
-  ["/api/v2/mezana", "🤝", "MEZANA", "Olib turish, qaytarish, qarz va to‘lov"],
-  ["/api/v2/club", "🛍", "Telegram do‘kon", "HALO CLUB: buyurtma → savdo, narx, tugagan mahsulot"],
-  ["/api/v2/vazifalar", "✅", "Xodim vazifalari", "Vazifa yuborish va bajarilishi"],
-  ["/api/v2/nazorat", "☑️", "Kunlik nazorat", "Ochilish/yopilish tekshiruvi, oshxona qoidalari"],
-  ["/api/v2/eksport", "📥", "Hisobot va zaxira", "Excel uchun yuklab olish, nusxa, qaytarish"],
-  ["/api/v2/ornatish", "📲", "Ilovani o‘rnatish", "iPhone, Mac, Windows, Android"],
-  ["/api/v2/kalkulyator", "🧮", "Narx kalkulyatori", "Tannarxdan narx: 30/35/40%, foiz qo‘shish/ayirish"],
-  ["/api/v2/ushlanmalar", "％", "Soliq va komissiyalar", "Har savdodan avtomatik ushlanadi"],
-  ["/api/v2/ulanishlar", "🔌", "Ulanishlar", "Telegram, Google Sheets, API"],
-  ["/api/v2/sozlamalar", "⚙️", "Sozlamalar", "Xodim akkauntlari, filiallar"],
-  ["/api/v2/sanoq", "▤", "Oy yakuni sanog‘i", "Pul, ombor, qarz"],
-  ["/api/v2/tarix", "↺", "O‘zgarishlar tarixi", "Nima o‘chirildi, o‘zgartirildi"],
-  ["/api/v2/kochish", "🚀", "To‘liq o‘tish", "Tekshiruv ro‘yxati"],
-  ["/api/v2/xodim", "👷", "Xodim ilovasi", "Xodimlar telefoni uchun"],
-  ["/api/admin/migration", "⇪", "Ma’lumot ko‘chirish", "Eski saytdan yakuniy ko‘chirish"],
-  ["/?eski=1", "🗂", "Eski ko‘rinish (zaxira)", "Hamma eski oynalar"],
-  ["/signout-with-chatgpt", "⎋", "Chiqish", ""],
-].map(([href, icon, label, hint]) => `<a class="more-item" href="${href}"><span class="ico">${icon}</span><span><b>${label}</b>${hint ? `<small>${hint}</small>` : ""}</span></a>`).join("");
-const MORE_UI = `<button class="more-btn" id="moreBtn" aria-label="Yana" aria-expanded="false">⋯</button>
-<div class="more-panel" id="morePanel" hidden><div class="more-head"><b>Yana</b><button class="ghost" id="moreClose" aria-label="Yopish">✕</button></div>${MORE_MENU}</div>`;
-const MORE_SCRIPT = `(function(){var b=document.getElementById('moreBtn'),p=document.getElementById('morePanel');if(!b)return;
-function set(o){p.hidden=!o;b.setAttribute('aria-expanded',o?'true':'false')}
-b.addEventListener('click',function(e){e.stopPropagation();set(p.hidden)});document.getElementById('moreClose').addEventListener('click',function(){set(false)});
-document.addEventListener('click',function(e){if(!p.hidden&&!p.contains(e.target)&&e.target!==b)set(false)});document.addEventListener('keydown',function(e){if(e.key==='Escape')set(false)})})();
-`;
+const pageOn = (page: NavPage, active: NavKey | null) => Boolean(page.key && page.key === active);
+const DOTS = '<circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/>';
 
-function navLinks(active: NavKey | null, cls: string) {
-  return NAV.map((item) => `<a class="nav-a ${cls}${item.key === active ? " on" : ""}" href="/api/v2/${item.key}"${item.key === active ? ' aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span>${item.label}</span></a>`).join("");
+/** Telefon: pastki qator — 5 asosiy guruh va "⋯ Yana". */
+function bottomNav(active: NavKey | null) {
+  const current = groupOf(active);
+  const groups = NAV_GROUPS.map((group) => `<a class="nav-a${group === current ? " on" : ""}" href="${group.pages[0].href}"${group === current ? ' aria-current="true"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true">${group.icon}</svg><span>${group.label}</span></a>`).join("");
+  return `${groups}<button type="button" class="nav-a nav-more js-more${moreOf(active) ? " on" : ""}" id="moreBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="morePanel"><svg viewBox="0 0 24 24" aria-hidden="true">${DOTS}</svg><span>Yana</span></button>`;
 }
+/** Telefon: tepada — ochiq guruh (yoki "⋯" turkumi) sahifalari. Bitta sahifali guruhda ko'rsatilmaydi. */
+function subNav(active: NavKey | null) {
+  const current = groupOf(active) || moreOf(active);
+  const pages = current ? current.pages.filter((page) => !page.out) : [];
+  if (!current || pages.length < 2) return "";
+  return `<nav class="subnav" aria-label="${current.title}">${pages.map((page) => `<a class="sub-a${pageOn(page, active) ? " on" : ""}" href="${page.href}"${pageOn(page, active) ? ' aria-current="page"' : ""}>${page.label}</a>`).join("")}</nav>`;
+}
+/** Kompyuter: chap ustun — asosiy guruhlar; "⋯" ichidagi sahifa ochiq bo'lsa, uning turkumi ham ko'rinadi. */
+function sideNav(active: NavKey | null) {
+  const list = (group: NavGroup) => `${group.pages.length > 1 ? `<div class="side-g">${group.title}</div>` : '<div class="side-gap"></div>'}${group.pages.filter((page) => !page.out).map((page) => `<a class="side-a${pageOn(page, active) ? " on" : ""}" href="${page.href}"${pageOn(page, active) ? ' aria-current="page"' : ""}>${page.label}</a>`).join("")}`;
+  const more = moreOf(active);
+  return `${NAV_GROUPS.map(list).join("")}${more ? list(more) : ""}<button type="button" class="side-more js-more${more ? " on" : ""}" aria-haspopup="dialog" aria-expanded="false" aria-controls="morePanel" title="Kam ishlatiladigan bo‘limlar">⋯ Yana</button>`;
+}
+/** "⋯ Yana" oynasi: kam ishlatiladigan bo'limlar, turkum-turkum. */
+function morePanel(active: NavKey | null) {
+  const cards = NAV_MORE.map((group) => `<section class="more-c"><h4>${group.icon} ${group.title}</h4>${group.pages.map((page) => `<a class="more-a${pageOn(page, active) ? " on" : ""}${page.out ? " out" : ""}" href="${page.href}"${pageOn(page, active) ? ' aria-current="page"' : ""}><b>${page.label}</b>${page.hint ? `<small>${page.hint}</small>` : ""}</a>`).join("")}</section>`).join("");
+  return `<div class="sheet-bg" id="morePanel" hidden><div class="sheet more" role="dialog" aria-modal="true" aria-labelledby="moreTitle"><div class="more-top"><h3 id="moreTitle">Yana</h3><button type="button" class="ghost" id="moreX">Yopish</button></div><p class="hint" style="margin:4px 0 0">Kam ishlatiladigan bo‘limlar — turkumlar bo‘yicha.</p><div class="more-grid">${cards}</div></div></div>`;
+}
+
+/** Yoqilgan sahifa tugmasi ko'rinib tursin; "⋯ Yana" oynasini ochish-yopish. */
+const SUBNAV_SCRIPT = `(function(){var a=document.querySelector('.subnav .sub-a.on');if(a&&a.scrollIntoView)a.scrollIntoView({block:'nearest',inline:'center'})})();
+(function(){var p=document.getElementById('morePanel');if(!p)return;var bs=document.querySelectorAll('.js-more');
+function set(open){p.hidden=!open;[].forEach.call(bs,function(b){b.setAttribute('aria-expanded',open?'true':'false')});document.documentElement.style.overflow=open?'hidden':'';if(open){var f=p.querySelector('.more-a.on')||document.getElementById('moreX');if(f&&f.focus)f.focus({preventScroll:true})}}
+[].forEach.call(bs,function(b){b.addEventListener('click',function(){set(p.hidden)})});
+p.addEventListener('click',function(e){if(e.target===p)set(false)});
+document.getElementById('moreX').addEventListener('click',function(){set(false)});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!p.hidden)set(false)});
+window.addEventListener('pageshow',function(){if(!p.hidden)set(false)});
+})();
+`;
 
 const BRAND = '<a class="brand" href="/api/v2/bosh"><span class="logo">H</span><span><b>HALO</b><small>Control</small></span></a>';
 
@@ -280,13 +378,13 @@ export function shell(input: ShellInput): string {
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23d4a84b'/%3E%3Ctext x='16' y='23' font-family='Arial' font-weight='900' font-size='20' text-anchor='middle' fill='%23111'%3EH%3C/text%3E%3C/svg%3E">
 <style>${DESIGN_CSS}</style></head><body>
 <div class="app${withNav ? "" : " solo"}">
-${withNav ? `<aside class="side">${BRAND}${navLinks(input.active, "")}<div class="side-foot">Yangi tizim · sinov rejimi</div></aside>` : ""}
+${withNav ? `<aside class="side">${BRAND}${sideNav(input.active)}<div class="side-foot">Yangi tizim · sinov rejimi</div></aside>` : ""}
 <div>
-<div class="top"><div class="top-in">${BRAND}</div></div>
-<main class="content">${input.back === false ? "" : `<div class="backrow"><button class="ghost backbtn" id="haloBack" type="button" data-fallback="${input.back || "/api/v2/bosh"}">‹ Orqaga</button></div>`}${head}${input.body}</main>
+<div class="top"><div class="top-in">${BRAND}</div>${withNav ? subNav(input.active) : ""}</div>
+<main class="content">${input.back === false || withNav ? "" : `<div class="backrow"><button class="ghost backbtn" id="haloBack" type="button" data-fallback="${input.back || "/api/v2/bosh"}">‹ Orqaga</button></div>`}${head}${input.body}</main>
 </div>
 </div>
-${withNav ? `<nav class="bottom">${navLinks(input.active, "")}</nav>${MORE_UI}` : ""}
-<script>${INSTALL_SCRIPT}${BACK_SCRIPT}${COMMON_SCRIPT}${withNav ? MORE_SCRIPT : ""}${input.script}</script>
+${withNav ? `<nav class="bottom" aria-label="Asosiy menyu">${bottomNav(input.active)}</nav>${morePanel(input.active)}` : ""}
+<script>${INSTALL_SCRIPT}${BACK_SCRIPT}${COMMON_SCRIPT}${withNav ? SUBNAV_SCRIPT : ""}${input.script}</script>
 </body></html>`;
 }

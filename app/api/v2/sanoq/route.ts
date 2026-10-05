@@ -66,7 +66,7 @@ export async function POST(request: Request) {
 function page(branches: Array<{ id: string; name: string }>): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
   return shell({
-    title: "Oy yakuni sanog'i", active: "bosh", heading: "Oy yakuni sanog'i",
+    title: "Oy yakuni sanog‘i", active: "sanoq", heading: "Oy yakuni sanog‘i",
     subtitle: "Pul, ombor va qarzlarni haqiqatda sanang — bu yangi oyning tasdiqlangan boshlanishi bo'ladi",
     headerRight: '<div class="row"><input type="date" id="date"><select id="branch"></select></div>',
     body: `<section class="card"><div class="row" style="justify-content:space-between"><div id="progress" class="hint" style="margin:0">Yuklanmoqda…</div>

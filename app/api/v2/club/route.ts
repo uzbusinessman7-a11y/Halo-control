@@ -142,7 +142,7 @@ export async function POST(request: Request) {
 function page(branches: Array<{ id: string; name: string }>): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
   return shell({
-    title: "Telegram do‘kon", active: "bosh", heading: "Telegram do‘kon",
+    title: "Telegram do‘kon", active: "club", heading: "Telegram do‘kon",
     subtitle: "HALO CLUB: buyurtma → savdo, narx va tugagan mahsulot, guruhga xabar",
     headerRight: '<div class="row"><select id="branch"></select></div>',
     body: `<div id="warn"></div>

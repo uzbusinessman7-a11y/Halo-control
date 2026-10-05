@@ -23,7 +23,9 @@ export async function GET(request: Request) {
     return new Response(null, { status: 303, headers: { Location: `/signin-with-chatgpt?return_to=${encodeURIComponent(PAGE_PATH)}` } });
   }
   const branches = (await listHaloBranches()).map((branch) => ({ id: branch.id, name: branch.name }));
-  return new Response(page(branches), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  // Bitta sahifa, ikki bo'lim: Xodimlar → Akkauntlar (?b=akkaunt) va Sozlash → Filiallar (?b=filial).
+  const section = new URL(request.url).searchParams.get("b") === "filial" ? "filial" : "akkaunt";
+  return new Response(page(branches, section), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
 function linkWorker(state: Row, body: Row) {
@@ -61,16 +63,16 @@ export async function POST(request: Request) {
   }
 }
 
-function page(branches: Array<{ id: string; name: string }>): string {
+function page(branches: Array<{ id: string; name: string }>, section: "akkaunt" | "filial" = "akkaunt"): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
+  const filial = section === "filial";
   return shell({
-    title: "Sozlamalar", active: "bosh", heading: "Sozlamalar",
-    subtitle: "Xodim akkauntlari va filiallar",
-    headerRight: '<select id="branch"></select>',
-    body: `<section class="card"><h2>Xodim akkauntlari</h2><p class="hint">Xodim telefonidan <b>/xodim</b> sahifasiga login va PIN bilan kiradi: ish boshlash/tugatish, vazifalar, POS hisobot, mahsulot kirimi, xarajat, minus tavar, kassa sanog‘i. Har bir akkauntni xodimga bog‘lang — smena maoshga shu orqali tushadi. Kirim va xarajat — faqat belgilangan xodimga. Ruxsat o‘zgarsa, xodim qayta kiradi.</p><div id="acc"></div>
+    title: filial ? "Filiallar" : "Akkauntlar", active: filial ? "filiallar" : "akkauntlar", heading: filial ? "Filiallar" : "Akkauntlar",
+    subtitle: filial ? "Filial qo‘shish, nomi va manzili" : "Xodimlar telefondan kiradigan login va PIN",
+    headerRight: `<select id="branch"${filial ? " hidden" : ""}></select>`,
+    body: `<section class="card"${filial ? " hidden" : ""}><h2>Xodim akkauntlari</h2><p class="hint">Xodim telefonidan <b>/xodim</b> sahifasiga login va PIN bilan kiradi: ish boshlash/tugatish, vazifalar, POS hisobot, mahsulot kirimi, xarajat, minus tavar, kassa sanog‘i. Har bir akkauntni xodimga bog‘lang — smena maoshga shu orqali tushadi. Kirim va xarajat — faqat belgilangan xodimga. Ruxsat o‘zgarsa, xodim qayta kiradi.</p><div id="acc"></div>
 <div class="row" style="margin-top:12px"><button id="accNew">+ Yangi akkaunt</button></div><div id="accForm"></div></section>
-<section class="card"><h2>Telegram, Google Sheets, API</h2><p class="hint">Ular endi alohida bo‘limda.</p><a href="/api/v2/ulanishlar"><button class="ghost">🔌 Ulanishlarni ochish</button></a></section>
-<section class="card"><h2>Filiallar</h2><div id="br"></div><div class="row" style="margin-top:12px"><button class="ghost" id="brNew">+ Yangi filial</button></div><div id="brForm"></div></section>`,
+<section class="card"${filial ? "" : " hidden"}><h2>Filiallar</h2><div id="br"></div><div class="row" style="margin-top:12px"><button class="ghost" id="brNew">+ Yangi filial</button></div><div id="brForm"></div></section>`,
     script: `
 var BRANCHES=${boot},STAFF=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}

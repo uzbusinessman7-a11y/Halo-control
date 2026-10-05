@@ -126,8 +126,8 @@ export async function POST(request: Request) {
 function page(branches: Array<{ id: string; name: string }>): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
   return shell({
-    title: "Qarzlar", active: "qarz", heading: "Qarzlar",
-    subtitle: "Yetkazib beruvchilar bilan hisob-kitob va solishtirish akti",
+    title: "Yetkazib beruvchilar", active: "qarz", heading: "Yetkazib beruvchilar",
+    subtitle: "Mahsulot kirimi, qarz, to‘lov va solishtirish akti",
     headerRight: '<select id="branch"></select>',
     body: `<section class="card noprint"><div class="row"><button id="addSup">+ Yangi yetkazib beruvchi</button><a href="/api/v2/mezana" style="text-decoration:none"><button class="ghost" type="button">🤝 MEZANA hisobi ›</button></a></div><div id="supForm"></div></section>
 <section class="card noprint" id="listCard"><h2>Yetkazib beruvchilarga qarz</h2><div id="list"><p class="hint">Yuklanmoqda…</p></div></section>
