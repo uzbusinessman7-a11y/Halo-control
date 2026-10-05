@@ -42,4 +42,16 @@ test('sahifa: faqat rahbar, skript to‘g‘ri', async () => {
   assert.equal((await GET(new Request(url))).status, 303);
   const html = await (await GET(new Request(url, { headers: { 'oai-authenticated-user-email': 'owner@example.com' } }))).text();
   assert.doesNotThrow(() => new vm.Script(html.match(/<script>([\s\S]*?)<\/script>/)[1]));
+  // Ikki alohida bo'lim: «Menyu» (taom tannarxi) va «Menyu tahlili» (?b=tahlil) — har biri o'z nomi bilan menyuda.
+  assert.match(html, /<h1>Menyu<\/h1>/);
+  assert.match(html, /href="\/api\/v2\/menyu\?b=tahlil"[^>]*><button[^>]*>📊 Menyu tahlili/, 'tahlilga bitta tugma bilan o‘tiladi');
+  assert.doesNotMatch(html, /data-m="ana"/, 'sahifa ichidagi yashirin «Tahlil» tugmasi yo‘q');
+  const ana = await (await GET(new Request(url + '?b=tahlil', { headers: { 'oai-authenticated-user-email': 'owner@example.com' } }))).text();
+  assert.doesNotThrow(() => new vm.Script(ana.match(/<script>([\s\S]*?)<\/script>/)[1]));
+  assert.match(ana, /<h1>Menyu tahlili<\/h1>/);
+  assert.match(ana, /class="more-a on" href="\/api\/v2\/menyu\?b=tahlil"/, '«Yana → Hisobot»da belgilangan');
+  assert.match(ana, /data-f="top">🔥 Ko‘p sotilgan/);
+  assert.match(ana, /data-f="none">🚫 Sotilmagan/);
+  assert.match(ana, /var BRANCHES=.*,ANA=true;/);
+  assert.match(html, /var BRANCHES=.*,ANA=false;/);
 });

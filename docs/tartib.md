@@ -20,7 +20,7 @@ Kompyuterda hammasi chap ustunda guruh sarlavhalari bilan.
 
 | Turkum | Bo‘limlar |
 | --- | --- |
-| 📊 Hisobot | Hisobot va zaxira · Oy yakuni sanog‘i · O‘zgarishlar tarixi |
+| 📊 Hisobot | Menyu tahlili · Hisobot va zaxira · Oy yakuni sanog‘i · O‘zgarishlar tarixi |
 | 🍽️ Menyu vositalari | Narx kalkulyatori · Monitor menyu · Telegram do‘kon |
 | 👥 Xodimlar sozlamasi | Keldim / ketdim joyi · Akkauntlar · Xodim ilovasi · HALO HISOB |
 | ⚙️ Sozlash | Filiallar · Soliq va komissiyalar · Ulanishlar |
@@ -45,3 +45,6 @@ Rahbar savdoni «Kiritish»da kiritadi; HALO HISOB va Xodim ilovasi — xodimlar
   (`/api/v2/sozlamalar?b=akkaunt`, `?b=filial`).
 - `Keldim / ketdim joyi` — Maosh sahifasining alohida ko‘rinishi
   (`/api/v2/maosh?b=joy`).
+- `Menyu tahlili` — Menyu sahifasining alohida ko‘rinishi (`/api/v2/menyu?b=tahlil`):
+  qaysi taom ko‘p sotiladi, qaysi biri sotilmaydi, qaysi biri foyda keltiradi. Menyu sahifasining
+  o‘zida faqat taom tannarxi va narxlar; ikkalasi bir-biriga bitta tugma bilan bog‘langan.

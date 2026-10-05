@@ -16,7 +16,7 @@ export type NavKey =
   | "qarz" | "mezana"
   | "ombor" | "menyu"
   | "maosh" | "vazifalar"
-  | "eksport" | "sanoq" | "tarix"
+  | "tahlil" | "eksport" | "sanoq" | "tarix"
   | "kalkulyator" | "monitor" | "club"
   | "joy" | "akkauntlar"
   | "filiallar" | "ushlanmalar" | "ulanishlar"
@@ -52,6 +52,7 @@ export const NAV_GROUPS: NavGroup[] = [
 /** Kam ishlatiladigan bo'limlar — "⋯ Yana" ichida, turkumlar bo'yicha. `icon` bu yerda — turkum belgisi (emoji). */
 export const NAV_MORE: NavGroup[] = [
   { key: "hisobot", label: "Hisobot", title: "Hisobot", icon: "📊", pages: [
+    { key: "tahlil", href: "/api/v2/menyu?b=tahlil", label: "Menyu tahlili", hint: "Ko‘p sotiladigan va sotilmaydigan taomlar" },
     { key: "eksport", href: "/api/v2/eksport", label: "Hisobot va zaxira", hint: "Excel yuklab olish, zaxira nusxa" },
     { key: "sanoq", href: "/api/v2/sanoq", label: "Oy yakuni sanog‘i", hint: "Pul, ombor va qarzni sanab tasdiqlash" },
     { key: "tarix", href: "/api/v2/tarix", label: "O‘zgarishlar tarixi", hint: "Kim, qachon, nimani o‘zgartirgan" },

@@ -25,7 +25,7 @@ test('ulanishlar sahifasi, guruhli menyu va “⋯ Yana” oynasi', async () => 
   const panel = html.match(/<div class="sheet-bg" id="morePanel" hidden>[\s\S]*?<\/section><\/div><\/div><\/div>/)[0];
   assert.deepEqual([...panel.matchAll(/<h4>[^ ]+ ([^<]+)<\/h4>/g)].map((m) => m[1]), ['Hisobot', 'Menyu vositalari', 'Xodimlar sozlamasi', 'Sozlash', 'Tizim']);
   for (const href of ['/api/v2/ulanishlar', '/api/v2/sozlamalar?b=akkaunt', '/api/v2/sozlamalar?b=filial', '/api/v2/sanoq', '/api/v2/tarix', '/api/v2/kochish', '/api/v2/maosh?b=joy', '/api/v2/eksport', '/api/v2/kalkulyator', '/api/v2/monitor', '/api/v2/club', '/api/v2/ushlanmalar', '/api/v2/ornatish', '/signout-with-chatgpt']) assert.ok(panel.includes(`href="${href}"`), href);
-  assert.equal((panel.match(/class="more-a/g) || []).length, 18, 'oynada 18 ta bo‘lim');
+  assert.equal((panel.match(/class="more-a/g) || []).length, 19, 'oynada 19 ta bo‘lim');
   assert.ok(panel.includes('href="/pos"') && !html.match(/<nav class="bottom"[\s\S]*?<\/nav>/)[0].includes('/pos'), 'HALO HISOB — xodim oynalari qatorida');
   assert.match(panel, /class="more-a on" href="\/api\/v2\/ulanishlar"/, 'ochiq bo‘lim oynada belgilangan');
   for (const main of ['/api/v2/kiritish', '/api/v2/qarz', '/api/v2/ombor', '/api/v2/maosh"']) assert.ok(!panel.includes(`href="${main}`), main + ' oynada takrorlanmaydi');
