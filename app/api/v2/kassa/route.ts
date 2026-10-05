@@ -155,19 +155,21 @@ function ownerScreen(){
   var opts=USER.branches.map(function(b){return '<option value="'+esc(b.id)+'">'+esc(b.name)+'</option>'}).join('');
   app.innerHTML='<div class="page-head"><div><h1>Kassa</h1><p>Pul qayerda, kunlarni yopish va karta puli</p></div><select id="branch">'+opts+'</select></div>'
     +'<div id="alerts"></div>'
-    +'<section class="card"><h2>Pul qayerda</h2><div class="grid" id="balances"></div></section>'
+    // Tartib: 1) pul qayerda (raqam), 2) amallar, 3) kutilayotgan pul, 4) kunlar ro'yxati.
+    +'<section class="card"><h2>Pul qayerda</h2><div class="grid" id="balances"></div>'
+    +'<div class="row" style="margin-top:14px"><button id="openCount">🧮 Kassani sanash</button><button class="ghost" data-mv="transfer">⇄ O‘tkazma</button><button class="ghost" data-mv="income">＋ Kirim</button></div>'
+    +'<p class="hint" style="margin:8px 0 0">Sanash — bugungi naqd pulni sanab yozish. O‘tkazma — kassadan bankka (yoki aksincha). Kirim — boshqa daromad yoki o‘z pulingiz.</p>'
+    +'<div id="ownCount"></div><div id="moveBox"></div></section>'
     +'<section class="card"><h2>Karta va delivery — hali tushmagan pul</h2><div class="grid" id="recv"></div><div class="row" style="margin-top:12px"><button class="ghost" id="openSettle">+ Pul bankka tushdi</button></div><div id="settle" hidden></div></section>'
-    +'<section class="card"><h2>Kunlar</h2><div id="days"></div><div id="review"></div></section>'
-    +'<section class="card"><h2>Pul harakati</h2><p class="hint">Kassadagi pulni bankka topshirish, bankdan naqd olish, boshqa kirim yoki o‘z pulingizni kiritish.</p><div class="row"><button class="ghost" data-mv="transfer">⇄ O‘tkazma</button><button class="ghost" data-mv="income">＋ Kirim</button></div><div id="moveBox"></div></section>'
-    +'<section class="card"><h2>Kassani o‘zim sanayman</h2><div class="row"><button class="ghost" id="openCount">Sanashni boshlash</button></div><div id="ownCount"></div></section>';
+    +'<section class="card"><h2>Kunlar</h2><div id="days"></div><div id="review"></div></section>';
   haloBranch(document.getElementById('branch'));document.getElementById('branch').addEventListener('change',load);
-  document.getElementById('openCount').addEventListener('click',function(){countForm(document.getElementById('ownCount'),load)});
+  document.getElementById('openCount').addEventListener('click',function(){document.getElementById('moveBox').innerHTML='';var box=document.getElementById('ownCount');box.style.marginTop='14px';countForm(box,load)});
   document.getElementById('openSettle').addEventListener('click',function(){var s=document.getElementById('settle');s.hidden=!s.hidden});
   document.querySelectorAll('[data-mv]').forEach(function(b){b.addEventListener('click',function(){moveForm(b.dataset.mv)})});
   load();
 }
 
-var SUMMARY=null;
+var SUMMARY=null,DAYS_ALL=false;
 function load(){
   document.getElementById('balances').innerHTML='<p class="hint">Yuklanmoqda…</p>';
   api({action:'summary',branchId:branch()}).then(function(res){
@@ -189,11 +191,15 @@ function load(){
 function renderDays(){
   var s=SUMMARY,today=s.date;
   if(!s.days.length){document.getElementById('days').innerHTML='<p class="hint">So‘nggi 14 kunda harakat yo‘q.</p>';return}
-  document.getElementById('days').innerHTML=s.days.map(function(d){var badge,action='';
+  /* Ro'yxat qisqa bo'lsin: oxirgi 7 kun va ko'rib chiqishni kutayotgan kunlar; qolgani tugma ostida. */
+  var shown=DAYS_ALL?s.days:s.days.filter(function(d,i){return i<7||(d.counted&&!d.closed)}),hiddenCount=s.days.length-shown.length;
+  document.getElementById('days').innerHTML=shown.map(function(d){var badge,action='';
     if(d.closed){badge=d.variance?'<span class="badge '+(d.variance<0?'bad':'warn')+'">Yopildi · farq '+won(d.variance)+'</span>':'<span class="badge ok">Yopildi ✓</span>'}
     else if(d.counted){badge='<span class="badge warn">Sanalgan · '+esc(d.countedBy||'')+'</span>';action='<button class="ghost" data-review="'+esc(d.date)+'">Ko‘rish va yopish</button>'}
     else{badge=d.date<today?'<span class="badge bad">Sanalmagan</span>':'<span class="badge warn">Bugun · hali sanalmagan</span>'}
-    return '<div class="day"><div><b>'+esc(d.date)+'</b><br>'+badge+'</div>'+action+'</div>'}).join('');
+    return '<div class="day"><div><b>'+esc(d.date)+'</b><br>'+badge+'</div>'+action+'</div>'}).join('')
+    +(hiddenCount>0?'<button class="ghost block" id="daysMore" style="margin-top:10px">Oldingi '+hiddenCount+' kunni ko‘rsatish</button>':'');
+  var more=document.getElementById('daysMore');if(more)more.addEventListener('click',function(){DAYS_ALL=true;renderDays()});
   document.querySelectorAll('[data-review]').forEach(function(b){b.addEventListener('click',function(){review(b.dataset.review)})});
 }
 
@@ -245,6 +251,7 @@ function renderSettle(){
 }
 
 function moveForm(kind){
+  var own=document.getElementById('ownCount');if(own)own.innerHTML='';
   var box=document.getElementById('moveBox');box.innerHTML='<p class="hint">Yuklanmoqda…</p>';
   api({action:'accounts',branchId:branch()}).then(function(res){
     if(!res.ok){box.innerHTML='<div class="msg bad">'+esc(res.error)+'</div>';return}

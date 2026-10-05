@@ -33,6 +33,31 @@ turkumning bo‘limlari ko‘rinadi. “Chiqish” faqat oynaning o‘zida turad
 Rahbar savdoni «Kiritish»da kiritadi; HALO HISOB va Xodim ilovasi — xodimlar ishlatadigan oynalar, shu sabab ular
 «Xodimlar sozlamasi» turkumida. Har ishning bitta yo'li bor — [bitta-yol.md](bitta-yol.md).
 
+## Sahifa ichidagi tartib
+
+Har bir bo‘limda ma’lumot bir xil ketma-ketlikda turadi:
+
+1. **Asosiy raqam** — sahifaning bosh ko‘rsatkichi (jami qarz, to‘lash qolgan maosh, pul qayerda, ochiq vazifalar…).
+2. **Asosiy amal** — bitta sariq tugma (📦 Yangi kirim, 🧮 Kassani sanash, ＋ Yangi vazifa…). Forma tugma
+   bosilganda ochiladi — sahifani egallab turmaydi.
+3. **Diqqat talab qiladigani** — yozilmagan, kutilayotgan, tekshirilmagan narsalar.
+4. **Ro‘yxat** — yozuvlar; uzun ro‘yxat qisqartirib ko‘rsatiladi («yana ko‘rsatish»).
+5. **Kam ishlatiladigani** — pastda, yig‘ilgan holda (bosilsa ochiladi): tarix, sozlash, hisobot matni.
+
+| Sahifa | Raqam | Asosiy amal | Pastda (yig‘ilgan / kam ishlatiladigan) |
+| --- | --- | --- | --- |
+| Bosh sahifa | Savdo: bugun, kecha, oy boshidan | — | Kunlik Telegram hisobot |
+| Kiritish → Xarajat | — | Xarajat kiritish | Har oy avtomatik xarajatlar · Chicken moyi (forma ostida, yig‘ilgan) |
+| Kassa | Pul qayerda | Kassani sanash · O‘tkazma · Kirim | Oldingi kunlar (7 kundan eskisi) |
+| Kunlik nazorat | Bugungi tekshiruv | — | Oshxona qoidalari (sozlash) |
+| Yetkazib beruvchilar | Jami qarz | Yangi kirim | Shu oy kirimlari |
+| Menyu | Food cost | Yangi taom | Menyu tahlili · Narx kalkulyatori havolalari |
+| Maosh | To‘lash qolgan | xodim → varaqa | Xodimlar ro‘yxati va stavkalar |
+| Vazifalar | Bajarilmagan vazifalar | Yangi vazifa | — |
+
+Yig‘iladigan bo‘lak — umumiy ko‘rinish: `<section class="card fold"><details><summary><span><b>Nomi</b><small>izoh</small></span></summary>…`
+(`app/core/ui-shell.ts`). Tartibni `tests/v2-sahifa-tartibi.test.mjs` qo‘riqlaydi.
+
 ## Qoidalar
 
 - Har bir bo‘lim faqat bitta joyda turadi.

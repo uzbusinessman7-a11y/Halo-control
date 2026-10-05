@@ -100,13 +100,15 @@ function load(){
     var r=res.report,p=r.prime,s=r.sales,pp=p.primePercent,color=pp==null?'var(--line)':pp<=62?'var(--ok)':pp<=68?'var(--warn)':'var(--bad)';
     var bad=r.alerts.filter(function(a){return a.level==='bad'}).length;
     document.getElementById('sub').textContent=r.today+' · '+(r.alerts.length?(bad?bad+' ta jiddiy, ':'')+r.alerts.length+' ta diqqat talab qiladi':'hammasi joyida ✓');
+    /* Tartib: 1) savdo raqamlari, 2) diqqat talab qiladigani, 3) grafik va ko'rsatkichlar, 4) kam ishlatiladigani — pastda. */
     body.innerHTML=
-      '<section class="card"><h2>Diqqat talab qiladi</h2>'+(r.alerts.length?r.alerts.map(function(a){return '<a class="alert '+a.level+'" href="/api/v2/'+a.page+'"><span>'+esc(a.text)+'</span><span class="go">Ochish ›</span></a>'}).join(''):'<div class="msg ok">✓ Hammasi joyida — muammo topilmadi</div>')+'</section>'
-      +'<section class="card"><h2>Savdo</h2><div class="grid">'
+      '<section class="card"><h2>Savdo</h2><div class="grid">'
       +kpi('Bugun',won(s.today),'kun hali tugamagan')
       +kpi('Kecha',won(s.yesterday)+chg(s.yesterday,s.weekAgo),'o‘tgan hafta shu kun: '+won(s.weekAgo))
       +kpi('Oy boshidan',won(s.monthToDate)+chg(s.monthToDate,s.lastMonthSamePeriod),'o‘tgan oy shu davr: '+won(s.lastMonthSamePeriod))
-      +'</div><div style="margin-top:14px">'+chart(s.days)+'</div></section>'
+      +'</div></section>'
+      +'<section class="card"><h2>Diqqat talab qiladi</h2>'+(r.alerts.length?r.alerts.map(function(a){return '<a class="alert '+a.level+'" href="/api/v2/'+a.page+'"><span>'+esc(a.text)+'</span><span class="go">Ochish ›</span></a>'}).join(''):'<div class="msg ok">✓ Hammasi joyida — muammo topilmadi</div>')+'</section>'
+      +'<section class="card"><h2>Savdo · so‘nggi 14 kun</h2>'+chart(s.days)+'</section>'
       +'<section class="card"><h2>Prime cost · oy boshidan</h2><div class="row" style="justify-content:space-between;align-items:baseline"><span class="big" style="color:'+(pp==null?'inherit':color)+'">'+(pp==null?'—':pp+'%')+'</span><span class="hint" style="margin:0">Maqsad: 62% dan past</span></div>'
       +'<div class="gauge"><i style="width:'+Math.min(100,pp||0)+'%;background:'+color+'"></i></div>'
       +'<p class="hint">Oziq-ovqat tannarxi + ish haqi, savdoga nisbatan. Restoranning eng muhim ko‘rsatkichi.</p>'
@@ -123,7 +125,7 @@ function load(){
       +kpi('Maosh · shu oy qoldi',won(r.payroll.thisMonthToPay),r.payroll.unpaidPast?'o‘tgan oylardan: '+won(r.payroll.unpaidPast):'o‘tgan oylar to‘langan')
       +'</div></section>'
       +(BRANCHES.length>1?'<section class="card"><h2>Filiallar solishtiruvi</h2><div id="cmp"><button class="ghost" id="cmpGo">Ikkala filialni solishtirish</button></div></section>':'')
-      +'<section class="card"><h2>Kunlik Telegram hisobot</h2><pre id="flash">'+esc(res.text)+'</pre><div class="row"><button id="tg">✈️ Telegramga yuborish</button><button class="ghost" id="copy">📋 Nusxa</button></div><div id="tmsg"></div></section>';
+      +'<section class="card fold"><details><summary><span><b>✈️ Kunlik Telegram hisobot</b><small>Matnini ko‘rish, yuborish yoki nusxa olish</small></span></summary><pre id="flash">'+esc(res.text)+'</pre><div class="row"><button id="tg">✈️ Telegramga yuborish</button><button class="ghost" id="copy">📋 Nusxa</button></div><div id="tmsg"></div></details></section>';
     document.getElementById('copy').addEventListener('click',function(){
       var done=function(){document.getElementById('tmsg').innerHTML='<div class="msg ok">✓ Nusxa olindi</div>'};
       if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(res.text).then(done,function(){prompt('Matnni nusxalang:',res.text)})}else{prompt('Matnni nusxalang:',res.text)}

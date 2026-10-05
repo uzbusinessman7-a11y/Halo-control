@@ -123,10 +123,12 @@ function page(branches: Array<{ id: string; name: string }>, joy = false): strin
     title: joy ? "Keldim / ketdim joyi" : "Maosh", active: joy ? "joy" : "maosh", heading: joy ? "Keldim / ketdim joyi" : "Maosh",
     subtitle: joy ? "Xodim «ISHNI BOSHLADIM / TUGATDIM»ni faqat oshxona yaqinida bosa oladi" : "Har bir xodim uchun oylik hisob varaqasi",
     headerRight: `<div class="row"><input type="month" id="month"${joy ? " hidden" : ""}><select id="branch"></select></div>`,
-    body: `<section class="card noprint" id="checkCard"${joy ? " hidden" : ""}><h2>Nazorat</h2><div id="checks"><p class="hint">Yuklanmoqda…</p></div></section>
-<section class="noprint"><div class="row"${joy ? " hidden" : ""}><button class="ghost" id="manage">👥 Xodimlar ro‘yxati va stavkalar</button></div><div id="staffBox"></div></section>
+    // Tartib: 1) to'lash qolgan summa, 2) nazorat, 3) xodimlar ro'yxati (bosilsa — varaqa), 4) sozlash — pastda.
+    body: `<section class="card noprint" id="sumCard"${joy ? " hidden" : ""}><div id="sum"><p class="hint" style="margin:0">Yuklanmoqda…</p></div></section>
+<section class="card noprint" id="checkCard"${joy ? " hidden" : ""}><h2>Nazorat</h2><div id="checks"><p class="hint">Yuklanmoqda…</p></div></section>
 <section class="card noprint" id="listCard"${joy ? " hidden" : ""}><h2>Xodimlar</h2><div id="list"></div></section>
-<section class="card" id="slipCard" hidden></section>${STAFF_DAYS_STYLE}`,
+<section class="card" id="slipCard" hidden></section>
+<section class="noprint"><div class="row"${joy ? " hidden" : ""}><button class="ghost" id="manage">👥 Xodimlar ro‘yxati va stavkalar</button></div><div id="staffBox"></div></section>${STAFF_DAYS_STYLE}`,
     script: `
 var BRANCHES=${boot},MONTH='',OLD={},STAFF=null,ACC=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -140,7 +142,7 @@ function load(){
   document.getElementById('slipCard').hidden=true;
   api({branchId:sel.value,month:mon.value||undefined}).then(function(res){
     var list=document.getElementById('list'),checks=document.getElementById('checks');
-    if(!res.ok){checks.innerHTML='<div class="msg bad">'+esc(res.error)+'</div>';list.innerHTML='';return}
+    if(!res.ok){checks.innerHTML='<div class="msg bad">'+esc(res.error)+'</div>';list.innerHTML='';document.getElementById('sum').innerHTML='';return}
     MONTH=res.month;mon.value=res.month;OLD={};res.employees.forEach(function(e){OLD[e.employeeId]=e.oldId});var c=res.checks,out=[];
     if(c.mismatched)out.push('<div class="msg bad">⚠ '+c.mismatched+' ta oyda eski tizim bilan farq bor</div>');
     if(c.invalid.length)out.push('<div class="msg bad">⚠ '+c.invalid.length+' ta yozuv kiritilmadi: '+c.invalid.slice(0,3).map(esc).join(' · ')+'</div>');
@@ -150,7 +152,8 @@ function load(){
     if(c.corrected)out.push('<div class="msg warn">'+c.corrected+' ta yozuv eski tizimda keyin o‘zgartirilgan — tarixi saqlandi</div>');
     if(!out.length)out.push('<div class="msg ok">✓ Hammasi eski tizim bilan wonma-won mos, muammo yo‘q</div>');
     checks.innerHTML=out.join('');
-    list.innerHTML='<div class="total">'+won(res.totals.remaining)+'</div><p class="hint">'+esc(res.month)+' uchun to‘lash qolgan · jami hisoblangan '+won(res.totals.earned)+'</p>'
+    document.getElementById('sum').innerHTML='<div class="total">'+won(res.totals.remaining)+'</div><p class="hint" style="margin:0">'+esc(res.month)+' uchun to‘lash qolgan · jami hisoblangan '+won(res.totals.earned)+'</p>';
+    list.innerHTML=(res.employees.length?'':'<p class="hint">Xodim yo‘q. Pastdagi «Xodimlar ro‘yxati va stavkalar» orqali qo‘shing.</p>')
       +res.employees.map(function(e){var m=e.current;
         return '<div class="emp" data-id="'+esc(e.employeeId)+'"><b>'+esc(e.name)+(e.active?'':'<span class="tag warn">ishdan ketgan</span>')+(m&&m.difference?'<span class="tag bad">farq '+won(m.difference)+'</span>':'')+'</b><span class="v">'+won(m?m.ledgerRemaining:0)+'</span>'
           +'<small>'+(m?m.workedDays+' kun · '+hours(m.workedMinutes)+' · hisoblandi '+won(m.earned+m.bonus-m.deduction)+(m.advance+m.paid?' · berildi '+won(m.advance+m.paid):''):'Bu oyda yozuv yo‘q')+' · Varaqa ›</small></div>'}).join('');

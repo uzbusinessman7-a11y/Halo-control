@@ -1,6 +1,9 @@
 /**
  * HALO V2 — yagona dizayn: ranglar, shriftlar, tugmalar va ilova qobig'i
  * (kompyuterda chap menyu, telefonda pastki menyu). Hamma V2 sahifalari shu yerdan quriladi.
+ *
+ * Sahifa tartibi (hamma bo'limda bir xil): 1) asosiy raqam, 2) asosiy amal tugmasi, 3) diqqat talab qiladigani,
+ * 4) ro'yxat, 5) kam ishlatiladigani — pastda, yig'ilgan holda (.fold: <section class="card fold"><details>…).
  */
 
 /**
@@ -200,6 +203,14 @@ pre{white-space:pre-wrap;font:14px/1.55 ui-monospace,Menlo,monospace;background:
 .skeleton{height:18px;border-radius:8px;background:linear-gradient(90deg,var(--line),var(--card-2),var(--line));background-size:200% 100%;animation:sk 1.2s infinite}
 @keyframes sk{to{background-position:-200% 0}}
 details summary{cursor:pointer;color:var(--muted);font-size:14px}
+.fold>details>summary{list-style:none;display:flex;align-items:center;gap:10px}
+.fold>details>summary::-webkit-details-marker{display:none}
+.fold>details>summary>span{flex:1;min-width:0}
+.fold>details>summary b{display:block;color:var(--text);font-size:17px;font-weight:700;letter-spacing:-.01em}
+.fold>details>summary small{display:block;font-size:13.5px;margin-top:2px}
+.fold>details>summary::after{content:"›";flex:0 0 auto;font-size:24px;line-height:1;transform:rotate(90deg);transition:transform .15s}
+.fold>details[open]>summary::after{transform:rotate(-90deg)}
+.fold>details[open]>summary{margin-bottom:12px}
 [hidden]{display:none!important}
 .content>*,.card{min-width:0}
 .chipbar{display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;min-width:0}.chipbar>button{flex:0 0 auto;min-height:36px;padding:4px 10px;border-radius:99px;font-size:14px;white-space:nowrap}

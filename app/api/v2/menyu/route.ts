@@ -66,7 +66,7 @@ function page(branches: Array<{ id: string; name: string }>, analysis: boolean):
     // Ikki ko'rinish — ikki alohida bo'lim (menyuda har biri o'z nomi bilan). Bir-biriga bitta tugma bilan o'tiladi.
     body: `<div id="rec" style="display:${analysis ? "none" : "grid"};gap:16px"></div>
 <div id="body" style="display:${analysis ? "grid" : "none"};gap:16px"><section class="card"><div class="skeleton"></div><div class="skeleton" style="margin-top:12px"></div></section></div>
-<section class="card"><a href="${analysis ? PAGE_PATH : `${PAGE_PATH}?b=tahlil`}" style="text-decoration:none"><button class="ghost block" type="button">${analysis ? "🍽 Taom tannarxi va narxlar ›" : "📊 Menyu tahlili — ko‘p va kam sotiladigan taomlar ›"}</button></a></section>`,
+<section class="card"><a href="${analysis ? PAGE_PATH : `${PAGE_PATH}?b=tahlil`}" style="text-decoration:none"><button class="ghost block" type="button">${analysis ? "🍽 Taom tannarxi va narxlar ›" : "📊 Menyu tahlili — ko‘p va kam sotiladigan taomlar ›"}</button></a>${analysis ? "" : '<a href="/api/v2/kalkulyator" style="text-decoration:none"><button class="ghost block" type="button" style="margin-top:10px">🧮 Narx kalkulyatori ›</button></a>'}</section>`,
     script: `
 var BRANCHES=${boot},ANA=${analysis ? "true" : "false"};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -131,7 +131,7 @@ function drawRecipes(){
     +'<div class="kpi"><small>35% dan yuqori</small><b style="color:var(--'+(high.length?'bad':'ok')+')">'+high.length+' ta</b></div>'
     +'<div class="kpi"><small>Tannarxi to‘liq emas</small><b style="color:var(--'+(broken.length?'warn':'ok')+')">'+broken.length+' ta</b></div></div>'
     +(stale.length?'<div class="msg warn" style="margin-top:12px">'+stale.length+' ta taomda eski narx “muzlatib” saqlangan — hisobotlarda foyda noto‘g‘ri chiqadi. Taomni ochib “Saqlash”ni bossangiz, hozirgi narxga o‘tadi.</div>':'')+'</section>'
-    +'<section class="card"><div class="row" style="margin-bottom:10px"><input id="rq" placeholder="🔍 Taom qidirish" value="'+esc(RQ)+'" style="flex:1"><button id="rNew">+ Yangi taom</button><a href="/api/v2/kalkulyator" style="text-decoration:none"><button class="ghost" type="button">🧮 Kalkulyator</button></a></div>'
+    +'<section class="card"><div class="row" style="margin-bottom:10px"><input id="rq" placeholder="🔍 Taom qidirish" value="'+esc(RQ)+'" style="flex:1"><button id="rNew">+ Yangi taom</button></div>'
     +haloCatChips(RD.categories,RCAT,RD.recipes.length)
     +(RCAT&&rcatOf(RCAT).fallback&&list.length?'<p class="hint">Bu yerda kategoriyasi yo‘q taomlar. Har birining yonidan kategoriyasini tanlang yoki ⚙️ Kategoriyalar → avtomatik taqsimlash.</p>':'')
     +(list.length?(!RCAT&&!f?RD.categories.map(function(c){var items=list.filter(function(r){return r.categoryId===c.id});return items.length?'<div class="cat-head">'+esc(c.name)+' · '+items.length+'</div>'+items.map(function(r){return recRow(r,false)}).join(''):''}).join(''):list.map(function(r){return recRow(r,!RCAT)}).join('')):'<p class="hint">Taom topilmadi.</p>')+'</section>';

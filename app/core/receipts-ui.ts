@@ -104,8 +104,8 @@ function settleForm(key){
 function drawHistory(){
   var card=document.getElementById('histCard'),open=!!(card.querySelector('details')||{}).open;
   var total=HIST.reduce(function(s,r){return s+r.amount},0);
-  card.innerHTML='<details'+(open?' open':'')+'><summary><b style="color:var(--text);font-size:17px">🧾 Shu oy kirimlari</b> · '+HIST.length+' ta · '+won(total)+'</summary>'
-    +'<p class="hint" style="margin-top:10px">Shu oyda omborga kirgan hamma mahsulot. Xato kiritilgan bo‘lsa «Olib tashlash» — ombor, qarz va pul qanday o‘zgarishini oldin ko‘rsatadi.</p>'
+  card.innerHTML='<details'+(open?' open':'')+'><summary><span><b>🧾 Shu oy kirimlari</b><small>'+HIST.length+' ta · '+won(total)+'</small></span></summary>'
+    +'<p class="hint">Shu oyda omborga kirgan hamma mahsulot. Xato kiritilgan bo‘lsa «Olib tashlash» — ombor, qarz va pul qanday o‘zgarishini oldin ko‘rsatadi.</p>'
     +(HIST.length?HIST.slice(0,80).map(function(r){return '<div class="list-row"><div style="min-width:0"><b style="overflow-wrap:anywhere">'+esc(r.lines||r.source)+'</b><br><small style="color:var(--muted)">'+esc(r.date)+' · '+esc(r.source)+(r.supplier?' · '+esc(r.supplier):'')+(r.veg?' · sabzavot / sous':'')+'</small>'+(r.money==='pending'?' <span class="tag warn" style="margin-left:0">to‘lovi yozilmagan</span>':r.money==='settled'?' <span class="tag ok" style="margin-left:0">puli yozilgan</span>':'')+'</div>'
       +'<div style="text-align:right"><b>'+won(r.amount)+'</b><br><button class="ghost" data-hr="'+esc(r.id)+'" style="min-height:30px;padding:2px 10px;margin-top:4px">Olib tashlash</button></div></div>'}).join(''):'<p class="hint">Bu oyda kirim yo‘q.</p>')
     +'</details>';
