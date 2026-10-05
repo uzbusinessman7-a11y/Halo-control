@@ -1,6 +1,6 @@
 /**
  * Qarzlar sahifasi uchun: «Yangi kirim» oynasi va yetkazib beruvchining mahsulotlar ro'yxati (brauzer skripti).
- * Sahifadagi mavjud yordamchilardan foydalanadi: esc, won, api, sel, PARTIES, TODAY, load, openStatement.
+ * Sahifadagi mavjud yordamchilardan foydalanadi: esc, won, api, sel, PARTIES, TODAY, load, openStatement, isMarket (receipts-ui).
  * Diqqat: bu matn ichida teskari tirnoq va dollar-qavs ishlatilmaydi (sahifa skriptiga qo'shiladi).
  */
 export const SUPPLIER_INTAKE_STYLE = String.raw`<style>
@@ -16,6 +16,8 @@ export const SUPPLIER_INTAKE_STYLE = String.raw`<style>
 .nk-list{display:flex;justify-content:space-between;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--line)}
 .nk-list>div:first-child{flex:1 1 150px;min-width:0}
 .nk-list b{overflow-wrap:anywhere}
+.st-more{gap:8px}
+.st-more button{min-height:40px;padding:6px 12px;font-size:14.5px}
 </style>`;
 
 export const SUPPLIER_INTAKE_SCRIPT = String.raw`
@@ -35,7 +37,8 @@ function openIntake(partyId){
   box.innerHTML='<p class="hint">Yuklanmoqda…</p>';
   api({action:'profile',branchId:sel.value,supplierId:p.oldId}).then(function(r){
     if(!r.ok){box.innerHTML='<div class="msg bad">'+esc(r.error||'Ochilmadi.')+'</div>';return}
-    PROFILE=r;IN={partyId:partyId,lines:[],pay:'debt',acc:(r.accounts[0]||{}).id||'',part:'',op:uuid4(),date:r.today};
+    var market=isMarket(partyId);
+    PROFILE=r;IN={partyId:partyId,market:market,lines:[],pay:market?'paid':'debt',acc:(r.accounts[0]||{}).id||'',part:'',op:uuid4(),date:r.today};
     drawIntake();box.scrollIntoView({behavior:'smooth',block:'start'});
   });
 }
@@ -55,20 +58,20 @@ function intakeTotal(){
   var t=IN.lines.reduce(function(s,l){return s+digits(l.a)},0),el=document.getElementById('nTotal'),d=document.getElementById('nDebt');
   var paid=IN.pay==='debt'?0:IN.pay==='paid'?t:Math.min(t,digits(IN.part));
   if(el)el.textContent=won(t);
-  if(d)d.textContent=!t?'':IN.pay==='debt'?'Hammasi qarzga yoziladi':IN.pay==='paid'?'To‘liq to‘landi — qarz oshmaydi':'To‘landi '+won(paid)+' · qarzga '+won(t-paid);
+  if(d)d.textContent=!t?'':IN.market?'Naqd to‘landi':IN.pay==='debt'?'Hammasi qarzga yoziladi':IN.pay==='paid'?'To‘liq to‘landi — qarz oshmaydi':'To‘landi '+won(paid)+' · qarzga '+won(t-paid);
   return {total:t,paid:paid};
 }
 function drawIntake(){
   var p=PARTIES[IN.partyId],box=document.getElementById('entry'),pr=PROFILE.products,used={};
   IN.lines.forEach(function(l){if(l.productId)used[l.productId]=1});
-  box.innerHTML='<div class="card" style="background:var(--card-2)"><h2>📦 Yangi kirim — '+esc(p.name)+'</h2>'
-    +'<p class="hint">Bitta saqlash omborga kirimni, qarzni va to‘lovni birga yozadi. Shu yukni «Ombor kirimi»ga yoki «+ Xarid»ga qayta kiritmang.</p>'
+  box.innerHTML='<div class="card" style="background:var(--card-2)"><h2>'+(IN.market?'🛒 Bozor / naqd xarid':'📦 Yangi kirim — '+esc(p.name))+'</h2>'
+    +'<p class="hint">'+(IN.market?'Yetkazib beruvchisiz olingan mahsulot: omborga kiradi, pul tanlangan hisobdan chiqadi. Qarz yozilmaydi.':'Bitta saqlash omborga kirimni, qarzni va to‘lovni birga yozadi — boshqa joyga qayta kiritish kerak emas.')+'</p>'
     +'<label class="field"><span>Sana</span><input type="date" id="nDate" value="'+esc(IN.date)+'" max="'+esc(PROFILE.today)+'"></label>'
     +(pr.length?'<p class="hint" style="margin:0 0 6px">Ro‘yxatdan bosing:</p><div class="nk-chips">'+pr.map(function(x){return '<button class="ghost" data-chip="'+esc(x.id)+'"'+(used[x.id]||x.missing?' disabled':'')+'><b>'+esc(x.name)+'</b><small>'+(x.missing?'omborda topilmadi':priceText(x))+'</small></button>'}).join('')+'</div>'
-      :'<div class="msg warn">Bu yetkazib beruvchida saqlangan mahsulot hali yo‘q. Pastdagi tugma bilan qo‘shing — «Ro‘yxatga saqlansin» belgilansa, keyingi safar bir bosishda chiqadi.</div>')
+      :'<div class="msg warn">'+(IN.market?'Bu yerda':'Bu yetkazib beruvchida')+' saqlangan mahsulot hali yo‘q. Pastdagi tugma bilan qo‘shing — «Ro‘yxatga saqlansin» belgilansa, keyingi safar bir bosishda chiqadi.</div>')
     +'<div id="nLines">'+IN.lines.map(lineHtml).join('')+'</div>'
     +'<div class="row" style="margin-top:10px"><button class="ghost" id="nManual">+ Ro‘yxatda yo‘q mahsulot</button></div><div id="nManualBox"></div>'
-    +'<h3 style="margin:18px 0 8px">To‘lov</h3><div class="nk-pay">'+[['debt','Qarzga'],['paid','To‘landi'],['part','Bir qismi']].map(function(x){return '<button class="'+(IN.pay===x[0]?'':'ghost')+'" data-pay="'+x[0]+'">'+x[1]+'</button>'}).join('')+'</div>'
+    +'<h3 style="margin:18px 0 8px">To‘lov</h3>'+(IN.market?'':'<div class="nk-pay">'+[['debt','Qarzga'],['paid','To‘landi'],['part','Bir qismi']].map(function(x){return '<button class="'+(IN.pay===x[0]?'':'ghost')+'" data-pay="'+x[0]+'">'+x[1]+'</button>'}).join('')+'</div>')
     +(IN.pay==='part'?'<label class="field" style="margin-top:10px"><span>Qancha to‘landi (₩)</span><input id="nPart" inputmode="numeric" value="'+esc(IN.part)+'" placeholder="0" style="width:100%;text-align:right"></label>':'')
     +(IN.pay!=='debt'?(PROFILE.accounts.length?'<label class="field" style="margin-top:10px"><span>Qaysi hisobdan to‘landi</span><select id="nAcc">'+PROFILE.accounts.map(function(a){return '<option value="'+esc(a.id)+'"'+(a.id===IN.acc?' selected':'')+'>'+esc(a.name)+'</option>'}).join('')+'</select></label>':'<div class="msg bad" style="margin-top:10px">Kassa yoki bank hisobi topilmadi.</div>'):'')
     +'<div class="row" style="justify-content:space-between;margin-top:14px"><div><div class="total" id="nTotal">0 ₩</div><small class="hint" id="nDebt"></small></div><div class="row"><button id="nSave">Saqlash</button><button class="ghost" id="nCancel">Bekor</button></div></div><div id="nMsg"></div></div>';

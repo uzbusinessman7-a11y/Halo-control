@@ -101,7 +101,7 @@ test('ishlagan kunlar: rahbar bir nechta kunni birdaniga kiritadi — hammasi yo
   // Bitta kun xato bo'lsa — hech biri yozilmaydi va qaysi kunligi aytiladi.
   const clash = await call({ ...body, operationId: crypto.randomUUID(), dates: [day(3), day(0)] });
   assert.equal(clash.status, 409);
-  assert.match(clash.body.error, new RegExp(`^${day(0)}: bu kunda smena allaqachon bor`));
+  assert.match(clash.body.error, new RegExp(`^${day(0)}: Bu vaqtda xodimning boshqa smenasi bor`), 'shu kunga shu vaqtda ikkinchi marta yozilmaydi');
   assert.equal(mine().length, 3, 'day(3) ham yozilmadi');
   // Dam/kasal/kelmadi deb belgilangan kun — ishlagan kun bo'lmaydi.
   assert.equal((await call({ action: 'dayStatus', operationId: crypto.randomUUID(), staffId: vali.id, date: day(3), status: 'sick', payMode: 'unpaid' })).status, 200);
@@ -132,4 +132,16 @@ test('ishlagan kunlar: rahbar bir nechta kunni birdaniga kiritadi — hammasi yo
   const again = await call({ ...body, operationId: crypto.randomUUID(), dates: [day(5)], from: '10:00', to: '18:00', breakMinutes: 0 });
   assert.equal(again.status, 200, 'bekor qilingan kun qayta kiritiladi');
   assert.equal(mine().length, 5);
+  // Bir kunda ikki smena (masalan, kunduzi va kechqurun) — vaqti ustma-ust tushmasa shu oynadan kiritiladi.
+  // (Alohida «＋ Smena» tugmasi yo'q: smena kiritishning bitta yo'li — «Ishlagan kunlar».)
+  const second = await call({ ...body, operationId: crypto.randomUUID(), dates: [day(5)], from: '19:00', to: '22:00', breakMinutes: 0 });
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  assert.equal(mine().filter((shift) => shift.date === day(5)).length, 2);
+  const overlap = await call({ ...body, operationId: crypto.randomUUID(), dates: [day(5)], from: '17:00', to: '20:00', breakMinutes: 0 });
+  assert.equal(overlap.status, 409);
+  assert.match(overlap.body.error, /ustma-ust/);
+  assert.equal(mine().length, 6);
+  const html = await (await GET(new Request(url, { headers: owner }))).text();
+  assert.doesNotMatch(html, /data-act="shift"/, '«＋ Smena» tugmasi yo‘q — bitta yo‘l');
+  assert.match(html, /data-act="days"/);
 });

@@ -32,7 +32,6 @@ export const NAV_GROUPS: NavGroup[] = [
   ] },
   { key: "kundalik", label: "Kundalik", title: "Kundalik ish", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>', pages: [
     { key: "kiritish", href: "/api/v2/kiritish", label: "Kiritish" },
-    { href: "/pos", label: "HALO HISOB" },
     { key: "kassa", href: "/api/v2/kassa", label: "Kassa" },
     { key: "nazorat", href: "/api/v2/nazorat", label: "Kunlik nazorat" },
   ] },
@@ -62,10 +61,12 @@ export const NAV_MORE: NavGroup[] = [
     { key: "monitor", href: "/api/v2/monitor", label: "Monitor menyu", hint: "Televizordagi menyu" },
     { key: "club", href: "/api/v2/club", label: "Telegram do‘kon", hint: "HALO CLUB bilan ulanish" },
   ] },
+  // Rahbar savdoni «Kiritish»da kiritadi; HALO HISOB va Xodim ilovasi — xodimlar ishlatadigan oynalar.
   { key: "xodim-sozlash", label: "Xodimlar", title: "Xodimlar sozlamasi", icon: "👥", pages: [
     { key: "joy", href: "/api/v2/maosh?b=joy", label: "Keldim / ketdim joyi", hint: "Oshxona joyi — faqat yaqindan bosiladi" },
     { key: "akkauntlar", href: "/api/v2/sozlamalar?b=akkaunt", label: "Akkauntlar", hint: "Xodim login va parollari" },
     { href: "/api/v2/xodim", label: "Xodim ilovasi", hint: "Xodim ko‘radigan ekran" },
+    { href: "/pos", label: "HALO HISOB", hint: "Do‘kondagi savdo oynasi (xodimlar uchun)" },
   ] },
   { key: "sozlash", label: "Sozlash", title: "Sozlash", icon: "⚙️", pages: [
     { key: "filiallar", href: "/api/v2/sozlamalar?b=filial", label: "Filiallar", hint: "Filial qo‘shish va nomlash" },

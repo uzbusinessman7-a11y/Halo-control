@@ -8,7 +8,7 @@ doim ko‘z oldida, **kam ishlatiladiganlar** “⋯ Yana” ichida turkum-turku
 | Guruh | Bo‘limlar |
 | --- | --- |
 | Bosh | Bosh sahifa |
-| Kundalik ish | Kiritish · HALO HISOB · Kassa · Kunlik nazorat |
+| Kundalik ish | Kiritish · Kassa · Kunlik nazorat |
 | Xarid va qarz | Yetkazib beruvchilar · MEZANA |
 | Ombor va menyu | Ombor · Menyu |
 | Xodimlar | Maosh · Vazifalar |
@@ -22,13 +22,16 @@ Kompyuterda hammasi chap ustunda guruh sarlavhalari bilan.
 | --- | --- |
 | 📊 Hisobot | Hisobot va zaxira · Oy yakuni sanog‘i · O‘zgarishlar tarixi |
 | 🍽️ Menyu vositalari | Narx kalkulyatori · Monitor menyu · Telegram do‘kon |
-| 👥 Xodimlar sozlamasi | Keldim / ketdim joyi · Akkauntlar · Xodim ilovasi |
+| 👥 Xodimlar sozlamasi | Keldim / ketdim joyi · Akkauntlar · Xodim ilovasi · HALO HISOB |
 | ⚙️ Sozlash | Filiallar · Soliq va komissiyalar · Ulanishlar |
 | 🧰 Tizim | Ilovani o‘rnatish · To‘liq o‘tish · Ma’lumot ko‘chirish · Eski ko‘rinish · Chiqish |
 
 Oynada har bo‘lim ostida bir qatorlik izoh bor. Shu bo‘limlardan biri ochiq
 bo‘lsa: pastda “Yana” yoqiladi, tepada (kompyuterda — chap ustunda) shu
 turkumning bo‘limlari ko‘rinadi. “Chiqish” faqat oynaning o‘zida turadi.
+
+Rahbar savdoni «Kiritish»da kiritadi; HALO HISOB va Xodim ilovasi — xodimlar ishlatadigan oynalar, shu sabab ular
+«Xodimlar sozlamasi» turkumida. Har ishning bitta yo'li bor — [bitta-yol.md](bitta-yol.md).
 
 ## Qoidalar
 

@@ -43,7 +43,7 @@ sozlash oynasida bir marta kiritadi:
 - Cheklov **«Keldim»ga ham, «Ketdim»ga ham** tegishli. Xodim ketishni unutib uzoqlashsa, smena ochiq qoladi —
   rahbar Maosh → «Yozuvlar / tuzatish»dan vaqtni to'g'rilaydi.
 - GPS aniqligi 100 metrdan (yoki belgilangan doiradan) yomon bo'lsa, joylashuv qabul qilinmaydi — qayta urinish so'raladi.
-- Xodim bosa olmagan kunni rahbar «🗓 Ishlagan kunlar» yoki «＋ Smena» orqali o'zi kiritadi.
+- Xodim bosa olmagan kunni rahbar «🗓 Ishlagan kunlar» orqali o'zi kiritadi (bitta kun ham, bir nechta kun ham).
 - Nuqta belgilanmaguncha cheklov yoqilmaydi; o'chirilsa — xodim avvalgidek istalgan joydan bosadi.
 - Masofa 30–1000 metr oralig'ida.
 

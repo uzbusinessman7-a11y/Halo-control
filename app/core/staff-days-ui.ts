@@ -33,7 +33,8 @@ function daysForm(staffId,employeeId,name){
     var free=function(d){var k=iso(d);return k<=today&&!shiftOf[k]&&!statusOf[k]};
     function cell(d){
       var k=iso(d),s=shiftOf[k],st=statusOf[k],on=picked[k];
-      if(s)return '<button class="ghost has" disabled title="'+hm(s.clockIn)+'–'+(s.clockOut?hm(s.clockOut):'ishda')+'"><b>'+d+'</b><small>'+(s.clockOut?hm(s.clockIn).slice(0,2)+'–'+hm(s.clockOut).slice(0,2):'ishda')+'</small></button>';
+      if(s&&!s.clockOut)return '<button class="ghost has" disabled title="'+hm(s.clockIn)+' — ishda"><b>'+d+'</b><small>ishda</small></button>';
+      if(s)return '<button class="'+(on?'':'ghost has')+'" data-day="'+d+'" aria-pressed="'+(on?'true':'false')+'" title="'+hm(s.clockIn)+'–'+hm(s.clockOut)+' — shu kunga yana smena"><b>'+d+'</b><small'+(on?' style="color:inherit"':'')+'>'+(on?'yana':hm(s.clockIn).slice(0,2)+'–'+hm(s.clockOut).slice(0,2))+'</small></button>';
       if(st)return '<button class="ghost st" disabled><b>'+d+'</b><small>'+esc(SHORT[st.status]||st.status)+'</small></button>';
       if(k>today)return '<button class="ghost" disabled><b>'+d+'</b><small>&nbsp;</small></button>';
       return '<button class="'+(on?'':'ghost')+'" data-day="'+d+'" aria-pressed="'+(on?'true':'false')+'"><b>'+d+'</b><small'+(on?' style="color:inherit"':'')+'>'+(on?'✓':'&nbsp;')+'</small></button>';
@@ -49,7 +50,7 @@ function daysForm(staffId,employeeId,name){
       summary();
     }
     box.innerHTML='<div class="card" style="background:var(--card-2);margin-top:12px"><h2>'+esc(name)+' — ishlagan kunlar · '+esc(MONTH)+'</h2>'
-      +'<p class="hint">Xodim telefondan belgilamagan kunlarni shu yerda o‘zingiz kiritasiz: kunlarni bosing, vaqtni yozing, saqlang. Yashil soatli kunlar allaqachon kiritilgan — qayta yozilmaydi.</p>'
+      +'<p class="hint">Xodim telefondan belgilamagan kunlarni shu yerda o‘zingiz kiritasiz: kunlarni bosing, vaqtni yozing, saqlang. Bitta kun ham, bir nechta kun ham shu yerdan. Yashil soatli kunda smena bor — shu kunga yana bitta smena kerak bo‘lsa, ustiga bosing (vaqti ustma-ust tushmasin).</p>'
       +'<div class="cal" id="dCal"></div>'
       +'<div class="row" style="margin-bottom:12px"><button class="ghost" id="dAll" style="min-height:38px;padding:4px 12px">Bo‘sh kunlarning hammasi</button><button class="ghost" id="dNone" style="min-height:38px;padding:4px 12px">Tozalash</button></div>'
       +'<div class="row"><label class="field" style="flex:1"><span>Boshladi</span><input type="time" id="dFrom" value="'+esc(from)+'"></label><label class="field" style="flex:1"><span>Tugatdi</span><input type="time" id="dTo" value="'+esc(to)+'"></label><label class="field" style="flex:1"><span>Tanaffus (daq)</span><input id="dBreak" inputmode="numeric" value="'+esc(brk)+'"></label></div>'

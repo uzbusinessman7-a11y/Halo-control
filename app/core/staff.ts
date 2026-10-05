@@ -119,9 +119,8 @@ export function addShifts(state: Row, body: Row, today: string) {
     if (rows(next.workShifts).some((shift) => shift.id === `v2-shift:${dayOp}`)) continue;
     const day = rows(next.attendanceDays).find((entry) => entry.staffId === staffId && entry.date === date && entry.voided !== true);
     if (day) throw new StaffError(`${date}: bu kun «${STATUS[String(day.status)] || String(day.status)}» deb belgilangan. Avval kun holatini bekor qiling.`, 409);
-    if (rows(next.workShifts).some((shift) => shift.staffId === staffId && shift.date === date && shift.status !== "void")) {
-      throw new StaffError(`${date}: bu kunda smena allaqachon bor. Shu kunga yana smena kerak bo'lsa, «＋ Smena» orqali kiriting.`, 409);
-    }
+    // Shu kunda smena bo'lsa ham ruxsat: bir kunda ikki smena (masalan, ertalab va kechqurun) bo'lishi mumkin.
+    // Vaqti ustma-ust tushsa, addShift o'zi rad etadi — bir kun ikki marta yozilib qolmaydi.
     try {
       const out = addShift(next, { ...body, operationId: dayOp, date }, today);
       next = out.state;
