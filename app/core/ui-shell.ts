@@ -21,7 +21,7 @@ export type NavKey =
   | "maosh" | "vazifalar"
   | "tahlil" | "eksport" | "sanoq" | "tarix"
   | "kalkulyator" | "monitor" | "club"
-  | "joy" | "akkauntlar"
+  | "joy" | "vaqt" | "akkauntlar"
   | "filiallar" | "ushlanmalar" | "ulanishlar"
   | "kochish";
 
@@ -68,6 +68,7 @@ export const NAV_MORE: NavGroup[] = [
   // Rahbar savdoni «Kiritish»da kiritadi; HALO HISOB va Xodim ilovasi — xodimlar ishlatadigan oynalar.
   { key: "xodim-sozlash", label: "Xodimlar", title: "Xodimlar sozlamasi", icon: "👥", pages: [
     { key: "joy", href: "/api/v2/maosh?b=joy", label: "Keldim / ketdim joyi", hint: "Oshxona joyi — faqat yaqindan bosiladi" },
+    { key: "vaqt", href: "/api/v2/maosh?b=vaqt", label: "Qat’iy ish vaqti", hint: "Erta kelsa ham hisob belgilangan vaqtdan" },
     { key: "akkauntlar", href: "/api/v2/sozlamalar?b=akkaunt", label: "Akkauntlar", hint: "Xodim login va parollari" },
     { href: "/api/v2/xodim", label: "Xodim ilovasi", hint: "Xodim ko‘radigan ekran" },
     { href: "/pos", label: "HALO HISOB", hint: "Do‘kondagi savdo oynasi (xodimlar uchun)" },

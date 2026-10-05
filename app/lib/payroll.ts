@@ -488,13 +488,13 @@ export function staffHourlyRate(member: StaffMember): number {
 export function freezeWorkShiftRates(member: StaffMember, shifts: WorkShift[]): WorkShift[] {
   return shifts.map((shift) => {
     if (shift.staffId !== member.id) return shift;
-    const payWindow = staffPayWindowForInstant(member, new Date(shift.clockIn));
+    // Hisob oynasi (qat'iy ish vaqti) faqat smena ochilgan paytda yoziladi. Bu yerda u qo'shilmaydi: aks holda
+    // ish vaqti keyin belgilangan xodimning oldingi kunlari orqaga qarab kesilib qolardi.
     return (
     (
       !(Number(shift.hourlyRateAtShift) > 0)
       || !(Number(shift.overtimeAfterHoursAtShift) > 0)
       || !(Number(shift.overtimeMultiplierAtShift) >= 1)
-      || (payWindow && (!shift.payWindowStartAtShift || !shift.payWindowEndAtShift))
     )
       ? {
           ...shift,
@@ -507,8 +507,6 @@ export function freezeWorkShiftRates(member: StaffMember, shifts: WorkShift[]): 
           overtimeMultiplierAtShift: Number(shift.overtimeMultiplierAtShift) >= 1
             ? shift.overtimeMultiplierAtShift
             : member.overtimeMultiplier || 1,
-          payWindowStartAtShift: shift.payWindowStartAtShift || payWindow?.start,
-          payWindowEndAtShift: shift.payWindowEndAtShift || payWindow?.end,
         }
       : shift
     );

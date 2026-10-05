@@ -22,7 +22,7 @@ Kompyuterda hammasi chap ustunda guruh sarlavhalari bilan.
 | --- | --- |
 | 📊 Hisobot | Menyu tahlili · Hisobot va zaxira · Oy yakuni sanog‘i · O‘zgarishlar tarixi |
 | 🍽️ Menyu vositalari | Narx kalkulyatori · Monitor menyu · Telegram do‘kon |
-| 👥 Xodimlar sozlamasi | Keldim / ketdim joyi · Akkauntlar · Xodim ilovasi · HALO HISOB |
+| 👥 Xodimlar sozlamasi | Keldim / ketdim joyi · Qat’iy ish vaqti · Akkauntlar · Xodim ilovasi · HALO HISOB |
 | ⚙️ Sozlash | Filiallar · Soliq va komissiyalar · Ulanishlar |
 | 🧰 Tizim | Ilovani o‘rnatish · To‘liq o‘tish · Ma’lumot ko‘chirish · Eski ko‘rinish · Chiqish |
 
@@ -69,6 +69,7 @@ Yig‘iladigan bo‘lak — umumiy ko‘rinish: `<section class="card fold"><det
 - `Akkauntlar` va `Filiallar` — bitta sahifaning ikki ko‘rinishi
   (`/api/v2/sozlamalar?b=akkaunt`, `?b=filial`).
 - `Keldim / ketdim joyi` — Maosh sahifasining alohida ko‘rinishi
+- `Qat’iy ish vaqti` — Maosh sahifasining alohida ko‘rinishi (`?b=vaqt`), batafsil: `docs/qatiy-ish-vaqti.md`
   (`/api/v2/maosh?b=joy`).
 - `Menyu tahlili` — Menyu sahifasining alohida ko‘rinishi (`/api/v2/menyu?b=tahlil`):
   qaysi taom ko‘p sotiladi, qaysi biri sotilmaydi, qaysi biri foyda keltiradi. Menyu sahifasining

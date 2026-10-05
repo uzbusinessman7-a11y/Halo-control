@@ -3,7 +3,6 @@ import {
   normalizeStaff,
   normalizeAttendanceDays,
   normalizeWorkShifts,
-  staffPayWindowForInstant,
   staffHourlyRate,
   toWorkerAttendanceShift,
   workerMonthlyEarnings,
@@ -15,6 +14,7 @@ import { maybeSendWorkerKitchenRules } from "../../lib/worker-tasks";
 import { isAccountingMonthClosed } from "../../lib/month-end";
 import type { D1Like } from "../../lib/full-migration";
 import { checkAttendanceLocation, logAttendanceAttempt, PlaceError, readAttendancePlace, type AttendancePlace } from "../../core/attendance-place";
+import { clockInPayWindow, shiftPayWindow, workHoursOf } from "../../core/work-hours";
 
 declare global {
   var __HALO_CONTROL_DB__: D1Database | undefined;
@@ -59,6 +59,9 @@ function ownAttendance(state: Record<string, unknown>, workerId: string, month: 
     member: { id: member.id, name: member.name },
     businessDate,
     openShift: toWorkerAttendanceShift(openShift),
+    // Qat'iy ish vaqti: xodim ko'rib turishi uchun (qoida va ochiq smenada haq qaysi vaqtdan yurishi).
+    hours: workHoursOf(member),
+    pay: shiftPayWindow(openShift),
     todayStatus: todayStatus ? { status: todayStatus.status, note: todayStatus.note } : null,
     earnings: workerMonthlyEarnings(member, shifts, month, now),
   };
@@ -158,7 +161,8 @@ export async function POST(request: Request) {
           overtimeAfterHoursAtShift: member.overtimeAfterHours || member.dailyHours,
           overtimeMultiplierAtShift: member.overtimeMultiplier || 1,
           ...(() => {
-            const window = staffPayWindowForInstant(member, now);
+            // Erta kelsa — hisob belgilangan ish vaqtidan (rahbar sozlaydi: Xodimlar sozlamasi → Qat'iy ish vaqti).
+            const window = clockInPayWindow(member, now);
             return window ? { payWindowStartAtShift: window.start, payWindowEndAtShift: window.end } : {};
           })(),
           note: "Xodim ilovasidan boshlandi",

@@ -8,6 +8,7 @@
 import { conflictingWorkShiftIds, normalizeStaff, normalizeWorkShifts, staffHourlyRate } from "../lib/payroll";
 import { isAccountingMonthClosed } from "../lib/month-end";
 import { seoulLocalDateTimeToIso } from "../lib/business-time";
+import { shiftPayWindow, workHoursOf } from "./work-hours";
 
 type Row = Record<string, unknown>;
 export class StaffError extends Error {
@@ -26,6 +27,7 @@ export function staffList(state: Row) {
     id: member.id, name: member.name, payType: member.payType, hourlyRate: member.hourlyRate, monthlySalary: member.monthlySalary,
     workDays: member.workDays, dailyHours: member.dailyHours, overtimeAfterHours: member.overtimeAfterHours, overtimeMultiplier: member.overtimeMultiplier,
     active: member.active, effectiveHourlyRate: Math.round(staffHourlyRate(member)), hasAccount: Boolean(member.workerId),
+    workHours: workHoursOf(member),
   })).sort((left, right) => Number(right.active) - Number(left.active) || left.name.localeCompare(right.name));
 }
 
@@ -228,7 +230,7 @@ export function staffRecords(state: Row, staffId: string, month: string) {
   const accounts = new Map(rows(state.accounts).map((account) => [String(account.id), String(account.name || account.id)]));
   return {
     shifts: rows(state.workShifts).filter((shift) => shift.staffId === staffId && inMonth(shift.date))
-      .map((shift) => ({ id: String(shift.id), date: String(shift.date), clockIn: String(shift.clockIn || ""), clockOut: String(shift.clockOut || ""), breakMinutes: Number(shift.breakMinutes) || 0, status: String(shift.status || ""), note: String(shift.note || ""), voidReason: String(shift.voidReason || ""), source: String(shift.source || "") }))
+      .map((shift) => ({ id: String(shift.id), date: String(shift.date), clockIn: String(shift.clockIn || ""), clockOut: String(shift.clockOut || ""), breakMinutes: Number(shift.breakMinutes) || 0, status: String(shift.status || ""), note: String(shift.note || ""), voidReason: String(shift.voidReason || ""), source: String(shift.source || ""), pay: shiftPayWindow(shift) }))
       .sort((a, b) => b.date.localeCompare(a.date) || b.clockIn.localeCompare(a.clockIn)),
     days: rows(state.attendanceDays).filter((day) => day.staffId === staffId && inMonth(day.date))
       .map((day) => ({ id: String(day.id), date: String(day.date), status: String(day.status), payMode: String(day.payMode || "unpaid"), note: String(day.note || ""), voided: day.voided === true, voidReason: String(day.voidReason || "") }))
@@ -242,7 +244,11 @@ export function staffRecords(state: Row, staffId: string, month: string) {
   };
 }
 
-/** Smena vaqtini tuzatish (xodim noto'g'ri belgilagan yoki ketishni unutgan). */
+/**
+ * Smena vaqtini tuzatish (xodim noto'g'ri belgilagan yoki ketishni unutgan).
+ * Qat'iy ish vaqti yozilgan smenada qoida saqlanadi. `free: true` — bir martalik istisno: rahbar yozgan vaqt to'liq
+ * hisoblanadi (masalan, xodimni o'zi erta chaqirgan); olib tashlangan oyna tuzatish tarixida qoladi.
+ */
 export function editShift(state: Row, body: Row) {
   const shifts = rows(state.workShifts);
   const shift = findOne(shifts, clean(body.id, 160), "Smena");
@@ -263,9 +269,14 @@ export function editShift(state: Row, body: Row) {
   if (breakMinutes * 60_000 >= Date.parse(clockOut) - Date.parse(clockIn)) throw new StaffError("Tanaffus smenadan uzun bo'lmaydi.");
   const now = new Date().toISOString();
   const edits = rows(shift.edits);
+  const free = body.free === true && Boolean(shiftPayWindow(shift));
+  const { payWindowStartAtShift, payWindowEndAtShift, ...withoutWindow } = shift;
   const updated = {
-    ...shift, clockIn, clockOut, breakMinutes, status: "closed", updatedAt: now,
-    edits: [{ at: now, by: "Rahbar", reason, before: { clockIn: shift.clockIn, clockOut: shift.clockOut || "", breakMinutes: shift.breakMinutes || 0 } }, ...edits].slice(0, 20),
+    ...(free ? withoutWindow : shift), clockIn, clockOut, breakMinutes, status: "closed", updatedAt: now,
+    edits: [{
+      at: now, by: "Rahbar", reason,
+      before: { clockIn: shift.clockIn, clockOut: shift.clockOut || "", breakMinutes: shift.breakMinutes || 0, ...(free ? { payWindowStartAtShift, payWindowEndAtShift } : {}) },
+    }, ...edits].slice(0, 20),
   };
   const next = shifts.map((entry) => (entry.id === shift.id ? updated : entry));
   const conflicts = new Set(conflictingWorkShiftIds(normalizeWorkShifts(next).filter((entry) => entry.staffId === shift.staffId)));
