@@ -109,16 +109,20 @@ export async function GET() {
 var T={
  uz:{check:'Nazorat ro‘yxati',install:'Telefonga ilova qilib o‘rnatish',hello:'Salom',login:'Kirish',branch:'Filial',user:'Login',pin:'PIN',start:'ISHNI BOSHLADIM',finish:'ISHNI TUGATDIM',working:'Ishdasiz',month:'Mening hisobim — bu oy',days:'kun',hours:'soat',earned:'Hisoblangan',logout:'Chiqish',notLinked:'Rahbar akkauntingizni xodim profiliga bog‘lamagan. Davomat uchun rahbarga ayting.',sureOut:'Ishni tugatasizmi?',off:'Bugun sizga dam belgilangan',err:'Xatolik. Qayta urinib ko‘ring.',net:'Internet aloqasini tekshiring.',back:'← Orqaga',
   actions:'Nima kiritmoqchisiz?',tasks:'Rahbardan vazifalar',noTasks:'Yangi vazifa yo‘q',taskStart:'Boshladim',taskDone:'✓ Bajarildi',due:'Muddat',
-  aHisob:'HALO HISOB',aHisobD:'Naqd, hisob-raqam, delivery, oshxona',aPos:'POS hisobot',aPosD:'Kunlik POS Excel faylini yuklash',aIn:'Mahsulot kirimi',aInD:'Miqdor va narx · qarz yozilmaydi',aExp:'Xarajat',aExpD:'Bugungi xarajatni yozish',aMez:'MEZANA',aMezD:'Olib turildi, qaytarildi, qarzga olindi',aWaste:'Minus tavar',aWasteD:'Buzilgan yoki yo‘qolgan mahsulot',aCount:'Kassani sanash',aCountD:'Kun oxiri, summa ko‘rinmaydi',locked:'Rahbar ruxsat bermagan',allDays:'Hamma kunlar'},
+  aHisob:'HALO HISOB',aHisobD:'Naqd, hisob-raqam, delivery, oshxona',aPos:'POS hisobot',aPosD:'Kunlik POS Excel faylini yuklash',aIn:'Mahsulot kirimi',aInD:'Miqdor va narx · qarz yozilmaydi',aExp:'Xarajat',aExpD:'Bugungi xarajatni yozish',aMez:'MEZANA',aMezD:'Olib turildi, qaytarildi, qarzga olindi',aWaste:'Minus tavar',aWasteD:'Buzilgan yoki yo‘qolgan mahsulot',aCount:'Kassani sanash',aCountD:'Kun oxiri, summa ko‘rinmaydi',locked:'Rahbar ruxsat bermagan',allDays:'Hamma kunlar',
+  locHint:'Bu tugma faqat oshxonada ishlaydi',locWait:'Joylashuv aniqlanmoqda…',locDenied:'Joylashuvga ruxsat bering: telefon sozlamalarida brauzer (ilova) uchun «Joylashuv»ni yoqing va qayta bosing.',locFail:'Joylashuv aniqlanmadi. GPS yoqilganini tekshiring va qayta bosing.',locNone:'Bu telefon joylashuvni bera olmaydi. Rahbarga ayting.',locWeak:'Joylashuv aniq emas (±{a} m). GPS’ni yoqing, bir oz kuting va qayta bosing.',locFar:'Siz oshxonadan {d} uzoqdasiz. Bu tugma faqat oshxonadan {r} metr ichida ishlaydi.'},
  ru:{install:'Установить как приложение',hello:'Привет',login:'Войти',branch:'Филиал',user:'Логин',pin:'PIN',start:'НАЧАЛ РАБОТУ',finish:'ЗАКОНЧИЛ РАБОТУ',working:'Вы на работе',month:'Мой учёт — этот месяц',days:'дн.',hours:'ч',earned:'Начислено',logout:'Выйти',notLinked:'Руководитель не привязал ваш аккаунт к профилю сотрудника.',sureOut:'Закончить работу?',off:'Сегодня у вас выходной',err:'Ошибка. Попробуйте ещё раз.',net:'Проверьте интернет.',back:'← Назад',
   actions:'Что вводим?',tasks:'Задачи от руководителя',noTasks:'Новых задач нет',taskStart:'Начал',taskDone:'✓ Готово',due:'Срок',
-  aHisob:'HALO HISOB',aHisobD:'Наличные, счёт, доставка, кухня',aPos:'POS отчёт',aPosD:'Загрузить дневной Excel с POS',aIn:'Приход товара',aInD:'Количество и цена',aExp:'Расход',aExpD:'Внести расход',aMez:'MEZANA',aMezD:'Взяли, вернули, купили в долг',aWaste:'Списание',aWasteD:'Испорченный или потерянный товар',aCount:'Пересчёт кассы',aCountD:'В конце дня',locked:'Нет разрешения',allDays:'Все дни'},
+  aHisob:'HALO HISOB',aHisobD:'Наличные, счёт, доставка, кухня',aPos:'POS отчёт',aPosD:'Загрузить дневной Excel с POS',aIn:'Приход товара',aInD:'Количество и цена',aExp:'Расход',aExpD:'Внести расход',aMez:'MEZANA',aMezD:'Взяли, вернули, купили в долг',aWaste:'Списание',aWasteD:'Испорченный или потерянный товар',aCount:'Пересчёт кассы',aCountD:'В конце дня',locked:'Нет разрешения',allDays:'Все дни',
+  locHint:'Кнопка работает только на кухне',locWait:'Определяем местоположение…',locDenied:'Разрешите доступ к геолокации: в настройках телефона включите «Местоположение» для браузера (приложения) и нажмите снова.',locFail:'Местоположение не определено. Проверьте, включён ли GPS, и нажмите снова.',locNone:'Этот телефон не может определить местоположение. Сообщите руководителю.',locWeak:'Местоположение неточное (±{a} м). Включите GPS, подождите немного и нажмите снова.',locFar:'Вы в {d} от кухни. Кнопка работает только в пределах {r} м от кухни.'},
  en:{install:'Install as an app',hello:'Hi',login:'Log in',branch:'Branch',user:'Login',pin:'PIN',start:'STARTED WORK',finish:'FINISHED WORK',working:'You are at work',month:'My account — this month',days:'days',hours:'h',earned:'Earned',logout:'Log out',notLinked:'The manager has not linked your account to a staff profile.',sureOut:'Finish work?',off:'Today is your day off',err:'Error. Please try again.',net:'Check your internet.',back:'← Back',
   actions:'What do you want to enter?',tasks:'Tasks from the manager',noTasks:'No new tasks',taskStart:'Started',taskDone:'✓ Done',due:'Due',
-  aHisob:'HALO HISOB',aHisobD:'Cash, transfer, delivery, kitchen',aPos:'POS report',aPosD:'Upload the daily POS Excel',aIn:'Goods receipt',aInD:'Quantity and price',aExp:'Expense',aExpD:'Enter an expense',aMez:'MEZANA',aMezD:'Borrowed, returned, bought on credit',aWaste:'Stock deduction',aWasteD:'Damaged or missing product',aCount:'Count the cash',aCountD:'End of day',locked:'Not permitted',allDays:'All days'},
+  aHisob:'HALO HISOB',aHisobD:'Cash, transfer, delivery, kitchen',aPos:'POS report',aPosD:'Upload the daily POS Excel',aIn:'Goods receipt',aInD:'Quantity and price',aExp:'Expense',aExpD:'Enter an expense',aMez:'MEZANA',aMezD:'Borrowed, returned, bought on credit',aWaste:'Stock deduction',aWasteD:'Damaged or missing product',aCount:'Count the cash',aCountD:'End of day',locked:'Not permitted',allDays:'All days',
+  locHint:'This button works only at the kitchen',locWait:'Getting your location…',locDenied:'Allow location access: turn on Location for the browser (app) in your phone settings and press again.',locFail:'Could not get your location. Check that GPS is on and press again.',locNone:'This phone cannot provide a location. Tell the manager.',locWeak:'Location is not accurate (±{a} m). Turn on GPS, wait a moment and press again.',locFar:'You are {d} from the kitchen. This button works only within {r} m of the kitchen.'},
  ko:{install:'앱으로 설치',hello:'안녕하세요',login:'로그인',branch:'지점',user:'아이디',pin:'PIN',start:'업무 시작',finish:'업무 종료',working:'근무 중',month:'내 근무 — 이번 달',days:'일',hours:'시간',earned:'누적 급여',logout:'로그아웃',notLinked:'관리자가 계정을 직원 프로필에 연결하지 않았습니다.',sureOut:'업무를 종료할까요?',off:'오늘은 휴무입니다',err:'오류가 발생했습니다.',net:'인터넷을 확인하세요.',back:'← 뒤로',
   actions:'무엇을 입력할까요?',tasks:'관리자 업무',noTasks:'새 업무 없음',taskStart:'시작',taskDone:'✓ 완료',due:'마감',
-  aHisob:'HALO HISOB',aHisobD:'현금, 계좌, 배달, 주방',aPos:'POS 보고서',aPosD:'일일 POS 엑셀 업로드',aIn:'상품 입고',aInD:'수량과 금액',aExp:'지출',aExpD:'지출 입력',aMez:'MEZANA',aMezD:'빌림, 반납, 외상 구매',aWaste:'재고 차감',aWasteD:'파손 또는 분실',aCount:'현금 세기',aCountD:'마감 시',locked:'권한 없음',allDays:'전체'}};
+  aHisob:'HALO HISOB',aHisobD:'현금, 계좌, 배달, 주방',aPos:'POS 보고서',aPosD:'일일 POS 엑셀 업로드',aIn:'상품 입고',aInD:'수량과 금액',aExp:'지출',aExpD:'지출 입력',aMez:'MEZANA',aMezD:'빌림, 반납, 외상 구매',aWaste:'재고 차감',aWasteD:'파손 또는 분실',aCount:'현금 세기',aCountD:'마감 시',locked:'권한 없음',allDays:'전체',
+  locHint:'이 버튼은 주방에서만 작동합니다',locWait:'위치 확인 중…',locDenied:'위치 권한을 허용해 주세요: 휴대폰 설정에서 브라우저(앱)의 위치를 켜고 다시 누르세요.',locFail:'위치를 확인하지 못했습니다. GPS가 켜져 있는지 확인하고 다시 누르세요.',locNone:'이 휴대폰은 위치를 제공할 수 없습니다. 관리자에게 알려 주세요.',locWeak:'위치가 정확하지 않습니다 (±{a} m). GPS를 켜고 잠시 후 다시 누르세요.',locFar:'주방에서 {d} 떨어져 있습니다. 이 버튼은 주방에서 {r} m 이내에서만 작동합니다.'}};
 var L='uz';try{L=localStorage.getItem('halo-lang')||'uz'}catch(e){}if(!T[L])L='uz';
 function t(k){return T[L][k]||T.uz[k]||k}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -127,6 +131,17 @@ function won(n){n=Number(n||0);return Math.round(Math.abs(n)).toLocaleString('en
 function uuid(){return crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g,function(){return (Math.random()*16|0).toString(16)})}
 function req(url,method,body){return fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,credentials:'same-origin'}).then(function(r){return r.json().then(function(j){return {status:r.status,body:j}})}).catch(function(){return {status:0,body:{error:t('net')}}})}
 function form(url,fd){return fetch(url,{method:'POST',body:fd,credentials:'same-origin'}).then(function(r){return r.json().then(function(j){return {status:r.status,body:j}})}).catch(function(){return {status:0,body:{error:t('net')}}})}
+function locate(){return new Promise(function(done){
+  if(!navigator.geolocation){done({error:'locNone'});return}
+  // Ruxsat so'rovi javobsiz qolsa ham tugma osilib qolmasin: 30 soniyadan keyin xabar chiqadi.
+  var over=false,guard=setTimeout(function(){if(!over){over=true;done({error:'locDenied'})}},30000);
+  var end=function(v){if(over)return;over=true;clearTimeout(guard);done(v)};
+  navigator.geolocation.getCurrentPosition(function(p){end({location:{lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy}})},function(e){end({error:e&&e.code===1?'locDenied':'locFail'})},{enableHighAccuracy:true,timeout:20000,maximumAge:0})})}
+function locMsg(b){var far=function(m){return m>=1000?(m/1000).toFixed(1)+' km':m+' m'};
+  if(b.code==='TOO_FAR')return t('locFar').replace('{d}',far(Number(b.distance)||0)).replace('{r}',b.radius);
+  if(b.code==='LOCATION_WEAK')return t('locWeak').replace('{a}',b.accuracy);
+  if(b.code==='LOCATION_REQUIRED')return t('locDenied');
+  return b.error||t('err')}
 function toast(text,bad){var x=document.createElement('div');x.className='toast'+(bad?' bad':'');x.textContent=text;document.body.appendChild(x);setTimeout(function(){x.remove()},bad?4500:2200)}
 var app=document.getElementById('app'),SESSION=null,TIMER=null,DATA=null;
 function langBar(){return '<div class="lang">'+['uz','ru','en','ko'].map(function(k){return '<button class="'+(k===L?'':'ghost')+'" data-l="'+k+'">'+k.toUpperCase()+'</button>'}).join('')+'</div>'}
@@ -167,7 +182,7 @@ function home(){
     var att='';
     if(!a.linked)att='<div class="msg warn">'+t('notLinked')+'</div>';
     else{var open=a.openShift;att='<section class="card">'+(a.todayStatus?'<div class="msg warn">'+t('off')+'</div>':'')
-      +(open?'<p style="text-align:center;margin:0 0 12px"><b>'+t('working')+'</b> · <span id="el"></span></p><button class="huge out" id="att">'+t('finish')+'</button>':'<button class="huge" id="att">'+t('start')+'</button>')+'<div id="am"></div></section>'}
+      +(open?'<p style="text-align:center;margin:0 0 12px"><b>'+t('working')+'</b> · <span id="el"></span></p><button class="huge out" id="att">'+t('finish')+'</button>':'<button class="huge" id="att">'+t('start')+'</button>')+(a.place&&a.place.required?'<p class="hint" style="text-align:center;margin:10px 0 0">📍 '+t('locHint')+'</p>':'')+'<div id="am"></div></section>'}
     var tk='<section class="card"><h2>'+t('tasks')+(tasks.length?' · '+tasks.length:'')+'</h2>'+(tasks.length?tasks.map(function(x){
       return '<div class="task"><div class="row" style="justify-content:space-between;gap:8px"><b>'+esc(x.title)+'</b><span class="pr '+esc(x.priority)+'">'+esc(x.priority==='urgent'?'!!':x.priority==='important'?'!':'·')+'</span></div>'
         +(x.description?'<p style="margin:6px 0;color:var(--muted)">'+esc(x.description)+'</p>':'')+(x.dueAt?'<small>'+t('due')+': '+esc(String(x.dueAt).slice(0,16).replace('T',' '))+'</small>':'')
@@ -193,8 +208,13 @@ function home(){
     if(chk)loadChecklist();
     if(a.linked){var open2=a.openShift;
       if(open2){var tick=function(){var ms=Date.now()-Date.parse(open2.clockIn),h=Math.floor(ms/3600000),m=Math.floor(ms%3600000/60000);var el=document.getElementById('el');if(el)el.textContent=h+':'+String(m).padStart(2,'0')};tick();TIMER=setInterval(tick,30000)}
-      document.getElementById('att').addEventListener('click',function(){if(open2&&!confirm(t('sureOut')))return;var btn=this;btn.disabled=true;
-        req('/api/attendance','POST',{action:open2?'clock-out':'clock-in'}).then(function(x){btn.disabled=false;if(x.status>=400){document.getElementById('am').innerHTML='<div class="msg bad">'+esc(x.body.error||t('err'))+'</div>';return}home()})})}
+      document.getElementById('att').addEventListener('click',function(){if(open2&&!confirm(t('sureOut')))return;var btn=this,am=document.getElementById('am');btn.disabled=true;
+        // Joy cheklovi yoqilgan bo'lsa, avval telefon joylashuvi olinadi (server masofani o'zi tekshiradi).
+        var send=function(loc,retried){req('/api/attendance','POST',{action:open2?'clock-out':'clock-in',location:loc||undefined}).then(function(x){
+          if(x.status>=400&&x.body.code==='LOCATION_REQUIRED'&&!loc&&!retried){withLoc(true);return}
+          btn.disabled=false;if(x.status>=400){am.innerHTML='<div class="msg bad">'+esc(locMsg(x.body))+'</div>';return}home()})};
+        var withLoc=function(retried){am.innerHTML='<div class="msg warn">📍 '+t('locWait')+'</div>';locate().then(function(g){if(g.error){btn.disabled=false;am.innerHTML='<div class="msg bad">'+esc(t(g.error))+'</div>';return}am.innerHTML='';send(g.location,retried)})};
+        if(a.place&&a.place.required)withLoc(false);else send(null,false)})}
   });
 }
 function dayRow(d){return '<div class="list-row"><span>'+esc(String(d.date).slice(5))+' · '+hm(d.clockIn)+'–'+(d.clockOut?hm(d.clockOut):'…')+'</span><b>'+(d.amount?won(d.amount):'')+'</b></div>'}

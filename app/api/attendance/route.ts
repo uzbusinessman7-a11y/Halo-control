@@ -13,6 +13,20 @@ import { authenticateWorkerRequest } from "../../lib/worker-auth";
 import { seoulCalendarDate } from "../../lib/business-time";
 import { maybeSendWorkerKitchenRules } from "../../lib/worker-tasks";
 import { isAccountingMonthClosed } from "../../lib/month-end";
+import type { D1Like } from "../../lib/full-migration";
+import { checkAttendanceLocation, logAttendanceAttempt, PlaceError, readAttendancePlace, type AttendancePlace } from "../../core/attendance-place";
+
+declare global {
+  var __HALO_CONTROL_DB__: D1Database | undefined;
+  var __HALO_SELF_HOSTED__: boolean | undefined;
+}
+/** Davomat joyi (yangi saytda): xodim tugmani faqat oshxona yaqinida bosa oladi. Eski saytda — cheklov yo'q. */
+const placeDb = (): D1Like | null => (globalThis.__HALO_SELF_HOSTED__ === true && globalThis.__HALO_CONTROL_DB__ ? globalThis.__HALO_CONTROL_DB__ as unknown as D1Like : null);
+async function placeFor(branchId: string): Promise<AttendancePlace | null> {
+  const db = placeDb();
+  return db ? readAttendancePlace(db, branchId) : null;
+}
+const placeView = (place: AttendancePlace | null) => ({ required: Boolean(place?.enabled), radius: place?.radius ?? 0 });
 
 class AttendanceError extends Error {
   status: number;
@@ -67,7 +81,9 @@ export async function GET(request: Request) {
         reminderHours: current.state.kitchenRuleReminderHours,
       }).catch(() => undefined);
     }
-    return Response.json(attendance, {
+    // Sozlama o'qilmasa sahifa baribir ochiladi — tugma bosilganda server yana tekshiradi.
+    const place = await placeFor(session.branchId).catch(() => null);
+    return Response.json({ ...attendance, place: placeView(place) }, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch {
@@ -79,13 +95,27 @@ export async function POST(request: Request) {
   try {
     const session = await authenticateWorkerRequest(request);
     if (!session) return Response.json({ error: "PIN bilan kiring." }, { status: 401 });
-    const body = await request.json() as { action?: unknown; month?: unknown };
+    const body = await request.json() as { action?: unknown; month?: unknown; location?: unknown };
     const action = String(body.action || "");
     const month = requestedMonth(body.month);
     if (action !== "clock-in" && action !== "clock-out") {
       return Response.json({ error: "Noto‘g‘ri amal." }, { status: 400 });
     }
     const now = new Date();
+    // Joy cheklovi: uzoqda yoki joylashuvsiz bosilgan tugma yozilmaydi; urinish jurnalda qoladi (koordinatasiz).
+    const place = await placeFor(session.branchId);
+    let located: { distance: number; accuracy: number } | null = null;
+    if (place?.enabled) {
+      try {
+        located = checkAttendanceLocation(place, body.location);
+      } catch (error) {
+        if (!(error instanceof PlaceError)) throw error;
+        await logAttendanceAttempt(placeDb()!, session.branchId, {
+          staffName: session.name, action, ok: false, distance: error.details.distance ?? null, accuracy: error.details.accuracy ?? null, reason: error.code,
+        }, now.toISOString());
+        return Response.json({ error: error.message, code: error.code, ...error.details }, { status: error.status });
+      }
+    }
     const mutation = await mutateHaloState((state) => {
       const staff = normalizeStaff(state.staff);
       const member = staff.find((entry) => entry.workerId === session.userId && entry.active);
@@ -184,6 +214,9 @@ export async function POST(request: Request) {
         result: { unchanged: false },
       };
     }, 5, session.branchId, session.name, action === "clock-in" ? "Ishni boshladi" : "Ishni tugatdi", "Davomat");
+    if (located && !mutation.result.unchanged) {
+      await logAttendanceAttempt(placeDb()!, session.branchId, { staffName: session.name, action, ok: true, distance: located.distance, accuracy: located.accuracy, reason: "" }, now.toISOString());
+    }
     const current = await readHaloState(session.branchId);
     const attendance = ownAttendance(current.state, session.userId, month, now);
     const telegramRules = action === "clock-in" && !mutation.result.unchanged && attendance.linked && attendance.openShift
@@ -203,6 +236,7 @@ export async function POST(request: Request) {
       updatedAt: mutation.updatedAt,
       ...mutation.result,
       ...attendance,
+      place: placeView(place),
       telegramRules,
     });
   } catch (error) {
