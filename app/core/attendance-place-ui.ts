@@ -39,7 +39,7 @@ function drawPlace(r,note){
   document.getElementById('plClose').addEventListener('click',function(){box.innerHTML=''});
   /* Manzil bo'yicha qidirish (Kakao). Kalit bir marta kiritiladi va sahifaga qaytarilmaydi. */
   var GEO=r.geo||{hasKey:false};
-  function keyState(){document.getElementById('plKeyState').innerHTML=GEO.hasKey?'Kakao kaliti kiritilgan ✓ · <a href="#" id="plKeyChange">almashtirish</a>':'Kakao kaliti hali kiritilmagan';
+  function keyState(){document.getElementById('plKeyState').innerHTML=GEO.hasKey?'Kakao kaliti kiritilgan ✓ · <a href="#" id="plKeyChange">almashtirish</a>':GEO.viaShop?'Telegram do‘kon orqali qidiriladi ✓ — kalit kerak emas':'Kakao kaliti hali kiritilmagan';
     var ch=document.getElementById('plKeyChange');if(ch)ch.addEventListener('click',function(e){e.preventDefault();keyForm('')})}
   function keyForm(why){
     var kb=document.getElementById('plKeyBox');
@@ -62,10 +62,10 @@ function drawPlace(r,note){
   function find(){
     var q=document.getElementById('plQ').value.trim(),res=document.getElementById('plRes'),btn=document.getElementById('plFind');
     if(q.length<2){res.innerHTML='<div class="msg bad">Manzil yoki joy nomini yozing.</div>';return}
-    if(!GEO.hasKey){keyForm('Avval Kakao kalitini kiriting — keyin qidiruv ishlaydi.');return}
+    if(!GEO.hasKey&&!GEO.viaShop){keyForm('Avval Kakao kalitini kiriting — keyin qidiruv ishlaydi.');return}
     btn.disabled=true;res.innerHTML='<p class="hint">Qidirilmoqda…</p>';
     api({action:'geocode',branchId:sel.value,query:q}).then(function(x){btn.disabled=false;
-      if(!x.ok){if(x.code==='NO_KEY'||x.code==='BAD_KEY'){GEO={hasKey:x.code!=='NO_KEY'};keyState();res.innerHTML='';keyForm(x.error);return}res.innerHTML='<div class="msg bad">'+esc(x.error||'Topilmadi.')+'</div>';return}
+      if(!x.ok){if(x.code==='NO_KEY'||(x.code==='BAD_KEY'&&GEO.hasKey)){GEO={hasKey:x.code!=='NO_KEY',viaShop:false};keyState();res.innerHTML='';keyForm(x.error);return}res.innerHTML='<div class="msg bad">'+esc(x.error||'Topilmadi.')+'</div>';return}
       var list=x.results||[];
       if(!list.length){res.innerHTML='<div class="msg warn">Hech narsa topilmadi. Manzilni koreyscha, Kakao Map’dagidek yozib ko‘ring yoki do‘kon nomini yozing.</div>';return}
       res.innerHTML='<p class="hint" style="margin:0 0 4px">'+list.length+' ta joy topildi — o‘zingiznikini tanlang:</p>'+list.map(function(g,i){

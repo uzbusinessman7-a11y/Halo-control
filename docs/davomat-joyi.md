@@ -18,7 +18,16 @@ Sozlash: HALO Control → **Maosh** → **📍 Keldim / ketdim joyi** (har filia
    (`app/core/geocode.ts`): avval aniq manzillar, keyin joy nomlari. Qidiruvning o'zi hech narsa saqlamaydi.
 3. **Koordinatani qo'lda yozish** — `37.456300, 126.705200` ko'rinishida.
 
-### Kakao kaliti
+### Kalitsiz: Telegram do'kon orqali
+
+Telegram do'kon (HALO CLUB) ulangan bo'lsa, kalit kiritish shart emas: HALO Control qidiruvni do'konga yuboradi
+(`POST {do'kon}/api/halo/geocode`), do'kon o'zidagi Kakao kaliti bilan qidirib, natijani qaytaradi. Kakao kaliti do'konda
+qoladi. So'rov ulanish kaliti xeshidan hosil qilingan imzo bilan boradi (`X-Halo-Signature` = HMAC-SHA256(xesh,
+"geocode\nvaqt\nmatn")) — kalitning o'zi ham, xeshi ham tarmoqqa chiqmaydi; 2 daqiqadan eski so'rov rad etiladi; do'kon
+soatiga 60 tadan ko'p qidiruvni qabul qilmaydi. Do'kon o'z manzilini menyu sinxronida bildiradi (`shopUrl`,
+`v2_club_shop` jadvali; faqat `https://sayt-nomi` qabul qilinadi). Ulanish bekor qilinsa — bu yo'l ham to'xtaydi.
+
+### Kakao kaliti (ixtiyoriy)
 
 Manzil qidirish uchun Kakao **REST API 키** kerak (developers.kakao.com → 내 애플리케이션 → ilova → 앱 키). Rahbar uni
 sozlash oynasida bir marta kiritadi:

@@ -167,7 +167,7 @@ test('manzil bo‘yicha qidirish (Kakao): kalit tekshirib saqlanadi va qaytarilm
   };
   try {
     // Kalitsiz: qidiruv ishlamaydi, holat — "kiritilmagan".
-    assert.deepEqual((await ownerCall({ action: 'place' })).geo, { hasKey: false, savedAt: '' });
+    assert.deepEqual((await ownerCall({ action: 'place' })).geo, { hasKey: false, savedAt: '', viaShop: false });
     const noKey = await ownerCall({ action: 'geocode', query: '인천 남동구 구월로 123' });
     assert.deepEqual([noKey.status, noKey.code], [400, 'NO_KEY']);
     assert.equal(calls.length, 0, 'kalitsiz Kakao’ga so‘rov ketmaydi');
@@ -216,6 +216,70 @@ test('manzil bo‘yicha qidirish (Kakao): kalit tekshirib saqlanadi va qaytarilm
     assert.equal((await ownerCall({ action: 'place' })).place.lat, 37.4899);
     assert.equal(sqlite.prepare("SELECT kakao_key FROM v2_geocode WHERE id = 'main'").get().kakao_key, '');
     assert.ok(geocode.GeocodeError);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('kalitsiz: ulangan Telegram do‘kon orqali qidiriladi — imzo bilan, Kakao kaliti do‘konda qoladi', async () => {
+  const club = await import('../app/core/club.ts');
+  const syncRoute = await import('../app/api/integrations/v1/club/sync/route.ts');
+  const db = globalThis.__HALO_CONTROL_DB__;
+  const sha = async (value) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const hmac = async (secret, message) => { const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']); return [...new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message)))].map((b) => b.toString(16).padStart(2, '0')).join(''); };
+  const sync = async (key, body) => { const r = await syncRoute.POST(new Request(base + '/api/integrations/v1/club/sync', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` }, body: JSON.stringify(body) })); return { status: r.status, ...(await r.json()) }; };
+  const catalog = { products: [{ id: 'p1', name: 'Lavash', category: 'Lavash', price: 7000, active: true }], addons: [] };
+
+  assert.equal((await ownerCall({ action: 'place' })).geo.viaShop, false, 'do‘kon ulanmagan');
+  assert.equal((await ownerCall({ action: 'geocode', query: 'HALO' })).code, 'NO_KEY');
+  const KEY = await club.createClubKey(db, 'main');
+  // Do'kon manzili faqat to'g'ri https://sayt-nomi ko'rinishida qabul qilinadi.
+  for (const bad of ['http://shop.example.com', 'https://10.0.0.5', 'https://shop.example.com/admin', 'https://shop.example.com:8443', 'https://localhost', 'https://printer.local', 'javascript:alert(1)', 'https://']) {
+    assert.equal((await sync(KEY, { ...catalog, shopUrl: bad })).status, 200, bad);
+    assert.equal(await club.clubShopLink(db), null, `${bad} saqlanmadi`);
+  }
+  assert.equal((await ownerCall({ action: 'place' })).geo.viaShop, false);
+  assert.equal((await sync(KEY, { ...catalog, shopUrl: 'https://Shop.Example.com' })).status, 200);
+  assert.deepEqual(await club.clubShopLink(db), { keyHash: await sha(KEY), url: 'https://shop.example.com' });
+  assert.equal((await sync(KEY, catalog)).status, 200);
+  assert.equal((await club.clubShopLink(db)).url, 'https://shop.example.com', 'manzilsiz sinxron saqlanganini o‘chirmaydi');
+  assert.deepEqual((await ownerCall({ action: 'place' })).geo, { hasKey: false, savedAt: '', viaShop: true });
+
+  // Soxta do'kon: haqiqiy do'kon kodi kabi imzoni o'zi hisoblab tekshiradi.
+  const seen = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(typeof input === 'string' ? input : input.url);
+    assert.equal(url, 'https://shop.example.com/api/halo/geocode', `kutilmagan tashqi so‘rov: ${url}`);
+    const body = JSON.parse(init.body);
+    const signature = String(init.headers['X-Halo-Signature'] || '');
+    seen.push({ body, signature, raw: init.body + JSON.stringify(init.headers) });
+    if (body.query === 'eskirgan') return Response.json({ ok: false, error: 'Imzo noto‘g‘ri yoki so‘rov eskirgan.' }, { status: 401 });
+    if (body.query === 'cheklov') return Response.json({ ok: false, code: 'QUOTA', error: 'Bir soatda juda ko‘p qidiruv.' }, { status: 429 });
+    const expected = await hmac(await sha(KEY), `geocode\n${body.time}\n${body.query}`);
+    if (signature !== expected || Math.abs(Date.now() / 1000 - body.time) > 120) return Response.json({ ok: false }, { status: 401 });
+    return Response.json({ ok: true, results: [
+      { label: '인천 남동구 구월로 123 (HALO빌딩)', address: '인천 남동구 구월동 1234', lat: 37.4563, lng: 126.7052 },
+      { label: 'buzuq', address: '', lat: 'x', lng: 1 }, { label: 'nol', address: '', lat: 0, lng: 0 },
+    ] });
+  };
+  try {
+    const found = await ownerCall({ action: 'geocode', query: '  인천 남동구   구월로 123 ' });
+    assert.equal(found.status, 200, JSON.stringify(found));
+    assert.deepEqual(found.results, [{ label: '인천 남동구 구월로 123 (HALO빌딩)', address: '인천 남동구 구월동 1234', lat: 37.4563, lng: 126.7052 }], 'buzuq natijalar tashlanadi');
+    assert.equal(seen[0].body.query, '인천 남동구 구월로 123', 'matn tozalab yuboriladi (imzo shu matnga)');
+    assert.match(seen[0].signature, /^[0-9a-f]{64}$/);
+    assert.equal(seen[0].raw.includes(KEY), false, 'ulanish kaliti tarmoqqa chiqmaydi');
+    assert.equal(seen[0].raw.includes(await sha(KEY)), false, 'kalit xeshi ham yuborilmaydi — faqat imzo');
+    const stale = await ownerCall({ action: 'geocode', query: 'eskirgan' });
+    assert.deepEqual([stale.status, stale.code], [502, 'SHOP_AUTH']);
+    assert.deepEqual([(await ownerCall({ action: 'geocode', query: 'cheklov' })).status], [429]);
+    // Ulanish bekor qilinsa — do'kon orqali qidiruv ham to'xtaydi.
+    await club.revokeClubKey(db, 'main');
+    assert.equal((await ownerCall({ action: 'place' })).geo.viaShop, false);
+    const before = seen.length;
+    assert.equal((await ownerCall({ action: 'geocode', query: 'HALO' })).code, 'NO_KEY');
+    assert.equal(seen.length, before, 'ulanmagan do‘konga so‘rov ketmaydi');
   } finally {
     globalThis.fetch = realFetch;
   }
