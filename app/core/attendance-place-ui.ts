@@ -19,7 +19,7 @@ function drawPlace(r,note){
   var ACT={'clock-in':'Keldim','clock-out':'Ketdim'},WHY={TOO_FAR:'uzoqda',LOCATION_WEAK:'GPS aniq emas',LOCATION_REQUIRED:'joylashuv berilmadi'};
   var when=function(iso){try{return new Date(iso).toLocaleString('en-GB',{timeZone:'Asia/Seoul',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}catch(e){return ''}};
   var dist=function(m){return m==null?'':m>=1000?(m/1000).toFixed(1)+' km':m+' m'};
-  box.innerHTML='<div class="card" style="background:var(--card-2);margin-top:12px"><h2>📍 Keldim / ketdim joyi</h2>'
+  box.innerHTML='<div class="card"><h2>📍 Oshxona joyi</h2>'
     +'<p class="hint">Yoqilsa, xodim «ISHNI BOSHLADIM / TUGATDIM»ni faqat oshxona yaqinida bosa oladi. Xodimning joylashuvi saqlanmaydi — faqat necha metr uzoqda bo‘lgani yoziladi. Har filial uchun alohida.</p>'
     +state
     +'<button class="block" id="plHere" style="margin-top:12px">📍 Hozir turgan joyim — oshxona</button><p class="hint" style="margin:6px 0 12px">Oshxonada turib bosing. Telefon joylashuvga ruxsat so‘raydi.</p><div id="plGeo"></div>'
@@ -31,7 +31,7 @@ function drawPlace(r,note){
     +'<p class="hint" style="margin:-6px 0 12px">Xaritadan nusxalab qo‘yish ham mumkin.'+(p.hasPoint?' <a href="https://map.kakao.com/link/map/Oshxona,'+p.lat+','+p.lng+'" target="_blank" rel="noopener">Kakao xaritada ko‘rish ↗</a> · <a href="https://www.google.com/maps?q='+p.lat+','+p.lng+'" target="_blank" rel="noopener">Google ↗</a>':'')+'</p>'
     +'<label class="field"><span>Necha metr ichida bosa oladi</span><input id="plR" inputmode="numeric" value="'+p.radius+'"></label>'
     +'<label class="row" style="gap:8px;margin-bottom:12px;flex-wrap:nowrap"><input type="checkbox" id="plOn"'+(p.enabled||!p.hasPoint?' checked':'')+' style="width:20px;height:20px;min-height:auto;flex:0 0 auto"> <span>Cheklov yoqilgan</span></label>'
-    +'<div class="row"><button id="plSave">Saqlash</button><button class="ghost" id="plClose">Yopish</button></div><div id="plMsg">'+(note||'')+'</div>'
+    +'<div class="row"><button id="plSave">Saqlash</button><button class="ghost" id="plClose"'+(window.JOY?' hidden':'')+'>Yopish</button></div><div id="plMsg">'+(note||'')+'</div>'
     +'<h3 style="font-size:15px;margin:18px 0 4px">Oxirgi urinishlar</h3>'
     +(r.log.length?r.log.map(function(x){return '<div class="list-row"><div style="min-width:0"><b style="font-size:15px">'+esc(x.staffName)+' · '+esc(ACT[x.action]||x.action)+'</b>'+(x.ok?'':'<span class="tag bad">rad etildi</span>')+'<br><small style="color:var(--muted)">'+esc(when(x.at))+(x.ok?'':' · '+esc(WHY[x.reason]||x.reason))+(x.accuracy!=null?' · GPS ±'+x.accuracy+' m':'')+'</small></div><b style="white-space:nowrap">'+esc(dist(x.distance))+'</b></div>'}).join('')
       :'<p class="hint">Hali yo‘q. Cheklov yoqilgach, har bosilgan «Keldim / Ketdim» shu yerda ko‘rinadi.</p>')

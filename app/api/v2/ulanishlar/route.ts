@@ -84,7 +84,7 @@ export async function GET(request: Request) {
   const branches = (await listHaloBranches()).map((branch) => ({ id: branch.id, name: branch.name }));
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
   return new Response(shell({
-    title: "Ulanishlar", active: "bosh", heading: "Ulanishlar",
+    title: "Ulanishlar", active: "ulanishlar", heading: "Ulanishlar",
     subtitle: "Telegram bot, Google Sheets va boshqa dasturlar bilan bog'lanish",
     headerRight: '<select id="branch"></select>',
     body: `<section class="card"><h2>✈️ Telegram bot</h2><p class="hint">Har kuni belgilangan vaqtda kunlik hisobot va qisqa “flash” hisobot shu chatga keladi.</p><div id="tg"></div></section>

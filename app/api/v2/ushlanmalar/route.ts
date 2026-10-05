@@ -54,7 +54,7 @@ export async function POST(request: Request) {
 function page(branches: Array<{ id: string; name: string }>): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
   return shell({
-    title: "Soliq va komissiyalar", active: "bosh", heading: "Soliq va komissiyalar",
+    title: "Soliq va komissiyalar", active: "ushlanmalar", heading: "Soliq va komissiyalar",
     subtitle: "Bir marta kiriting — har savdodan avtomatik ushlanadi",
     headerRight: '<select id="branch"></select>',
     body: `<div id="form">${"<section class=\"card\"><div class=\"skeleton\" style=\"height:120px\"></div></section>"}</div>`,

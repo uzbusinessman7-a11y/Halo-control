@@ -3,17 +3,63 @@
  * (kompyuterda chap menyu, telefonda pastki menyu). Hamma V2 sahifalari shu yerdan quriladi.
  */
 
-export type NavKey = "bosh" | "kiritish" | "kassa" | "ombor" | "menyu" | "qarz" | "maosh";
+/**
+ * Navigatsiya: hamma bo'lim 6 guruhga bo'lingan. Telefonda pastda — guruhlar, tepada — shu guruhdagi sahifalar;
+ * kompyuterda chap tomonda — guruhlar va sahifalari to'liq ro'yxat bo'lib turadi. Har sahifa faqat bitta guruhda.
+ */
+export type NavKey =
+  | "bosh" | "eksport" | "sanoq" | "tarix"
+  | "kiritish" | "kassa" | "nazorat"
+  | "qarz" | "mezana"
+  | "ombor" | "menyu" | "kalkulyator" | "monitor" | "club"
+  | "maosh" | "vazifalar" | "joy" | "akkauntlar"
+  | "filiallar" | "ushlanmalar" | "ulanishlar" | "kochish";
 
-const NAV: Array<{ key: NavKey; label: string; icon: string }> = [
-  { key: "bosh", label: "Bosh", icon: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>' },
-  { key: "kiritish", label: "Kiritish", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>' },
-  { key: "kassa", label: "Kassa", icon: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="12" cy="14.5" r="2"/>' },
-  { key: "ombor", label: "Ombor", icon: '<path d="M3 8 12 3l9 5v11H3z"/><path d="M7 19v-7h10v7"/><path d="M7 15h10"/>' },
-  { key: "menyu", label: "Menyu", icon: '<path d="M7 3v8a2 2 0 0 0 2 2v8"/><path d="M5 3v5a2 2 0 0 0 4 0V3"/><path d="M17 21V3c-2.2 1.2-3.5 3.6-3.5 7v3H17"/>' },
-  { key: "qarz", label: "Qarz", icon: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 12h7M9 16h5"/>' },
-  { key: "maosh", label: "Maosh", icon: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.3-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c2 .7 3.2 2.4 3.6 5.2"/>' },
+interface NavPage { key?: NavKey; href: string; label: string }
+interface NavGroup { key: string; label: string; title: string; icon: string; pages: NavPage[] }
+export const NAV_GROUPS: NavGroup[] = [
+  { key: "bosh", label: "Bosh", title: "Bosh va hisobot", icon: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>', pages: [
+    { key: "bosh", href: "/api/v2/bosh", label: "Bosh sahifa" },
+    { key: "eksport", href: "/api/v2/eksport", label: "Hisobot va zaxira" },
+    { key: "sanoq", href: "/api/v2/sanoq", label: "Oy yakuni sanog‘i" },
+    { key: "tarix", href: "/api/v2/tarix", label: "O‘zgarishlar tarixi" },
+  ] },
+  { key: "kundalik", label: "Kundalik", title: "Kundalik ish", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>', pages: [
+    { key: "kiritish", href: "/api/v2/kiritish", label: "Kiritish" },
+    { href: "/pos", label: "HALO HISOB" },
+    { key: "kassa", href: "/api/v2/kassa", label: "Kassa" },
+    { key: "nazorat", href: "/api/v2/nazorat", label: "Kunlik nazorat" },
+  ] },
+  { key: "xarid", label: "Xarid", title: "Xarid va qarz", icon: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 12h7M9 16h5"/>', pages: [
+    { key: "qarz", href: "/api/v2/qarz", label: "Yetkazib beruvchilar" },
+    { key: "mezana", href: "/api/v2/mezana", label: "MEZANA" },
+  ] },
+  { key: "ombor", label: "Ombor", title: "Ombor va menyu", icon: '<path d="M3 8 12 3l9 5v11H3z"/><path d="M7 19v-7h10v7"/><path d="M7 15h10"/>', pages: [
+    { key: "ombor", href: "/api/v2/ombor", label: "Ombor" },
+    { key: "menyu", href: "/api/v2/menyu", label: "Menyu" },
+    { key: "kalkulyator", href: "/api/v2/kalkulyator", label: "Narx kalkulyatori" },
+    { key: "monitor", href: "/api/v2/monitor", label: "Monitor menyu" },
+    { key: "club", href: "/api/v2/club", label: "Telegram do‘kon" },
+  ] },
+  { key: "xodimlar", label: "Xodimlar", title: "Xodimlar", icon: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.3-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c2 .7 3.2 2.4 3.6 5.2"/>', pages: [
+    { key: "maosh", href: "/api/v2/maosh", label: "Maosh" },
+    { key: "vazifalar", href: "/api/v2/vazifalar", label: "Vazifalar" },
+    { key: "joy", href: "/api/v2/maosh?b=joy", label: "Keldim / ketdim joyi" },
+    { key: "akkauntlar", href: "/api/v2/sozlamalar?b=akkaunt", label: "Akkauntlar" },
+    { href: "/api/v2/xodim", label: "Xodim ilovasi" },
+  ] },
+  { key: "sozlash", label: "Sozlash", title: "Sozlash", icon: '<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>', pages: [
+    { key: "filiallar", href: "/api/v2/sozlamalar?b=filial", label: "Filiallar" },
+    { key: "ushlanmalar", href: "/api/v2/ushlanmalar", label: "Soliq va komissiyalar" },
+    { key: "ulanishlar", href: "/api/v2/ulanishlar", label: "Ulanishlar" },
+    { href: "/api/v2/ornatish", label: "Ilovani o‘rnatish" },
+    { key: "kochish", href: "/api/v2/kochish", label: "To‘liq o‘tish" },
+    { href: "/api/admin/migration", label: "Ma’lumot ko‘chirish" },
+    { href: "/?eski=1", label: "Eski ko‘rinish" },
+    { href: "/signout-with-chatgpt", label: "Chiqish" },
+  ] },
 ];
+const groupOf = (active: NavKey | null) => NAV_GROUPS.find((group) => group.pages.some((page) => page.key && page.key === active)) || null;
 
 export const DESIGN_CSS = `
 :root{color-scheme:dark;--bg:#0b0b0c;--card:#141416;--card-2:#1b1b1e;--text:#f4f4f5;--muted:#9a9aa2;--line:#27272b;
@@ -33,14 +79,22 @@ a{color:var(--accent)}
 .page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
 .backrow{margin-bottom:-6px}.backbtn{min-height:40px;padding:6px 14px 6px 10px;font-size:15px;border-radius:12px}
 .page-head h1{font-size:26px;line-height:1.15;margin:0;letter-spacing:-.02em}.page-head p{margin:4px 0 0;color:var(--muted);font-size:14px}
-.bottom{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(7,1fr);padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
+.bottom{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(6,1fr);padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
 .nav-a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;border-radius:12px;color:var(--muted);text-decoration:none;font-size:10.5px;font-weight:600;letter-spacing:-.01em}
 .nav-a svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .nav-a.on{color:var(--accent)}.nav-a.on svg{stroke-width:2.2}
+.subnav{display:flex;gap:8px;overflow-x:auto;max-width:980px;margin:0 auto;padding:0 16px 10px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.subnav::-webkit-scrollbar{display:none}
+.sub-a{flex:0 0 auto;padding:7px 14px;border-radius:99px;border:1px solid var(--line);background:var(--card);color:var(--muted);text-decoration:none;font-size:14px;font-weight:700;white-space:nowrap}
+.sub-a.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.side-g{font-size:11.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:14px 12px 4px}
+.side-a{display:block;padding:7px 12px;border-radius:10px;color:var(--text);text-decoration:none;font-size:14.5px;font-weight:600}
+.side-a:hover{background:var(--card-2)}
+.side-a.on{background:var(--accent-soft);color:var(--accent)}
 @media (min-width:900px){
  .app{display:grid;grid-template-columns:232px 1fr}.app.solo{display:block}
- .side{display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh;padding:20px 14px;border-right:1px solid var(--line);background:var(--card)}
- .side .brand{padding:4px 8px 18px}
+ .side{display:flex;flex-direction:column;gap:1px;position:sticky;top:0;height:100vh;overflow-y:auto;padding:20px 12px;border-right:1px solid var(--line);background:var(--card)}
+ .side .brand{padding:4px 8px 6px}
  .side .nav-a{flex-direction:row;gap:12px;font-size:15px;padding:11px 12px}
  .side .nav-a.on{background:var(--accent-soft);color:var(--accent)}
  .side-foot{margin-top:auto;font-size:12px;color:var(--muted);padding:8px}
@@ -110,12 +164,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px}
 .sheet{background:var(--card);border:1px solid var(--line);border-radius:18px 18px 0 0;width:min(560px,100%);max-height:88dvh;overflow-y:auto;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
 .sheet h3{margin:0 0 6px;font-size:19px}.sheet .fx{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}.sheet .fx b{font-variant-numeric:tabular-nums;text-align:right}
 @media (min-width:640px){.sheet-bg{align-items:center}.sheet{border-radius:18px}}
-.more-btn{position:fixed;z-index:20;top:calc(10px + env(safe-area-inset-top));right:14px;width:44px;height:44px;min-height:44px;padding:0;border-radius:12px;background:var(--card);color:var(--text);border:1px solid var(--line);font-size:24px;line-height:1;font-weight:900}
-.more-panel{position:fixed;z-index:30;top:calc(62px + env(safe-area-inset-top));right:14px;width:min(340px,calc(100vw - 28px));max-height:calc(100dvh - 160px);overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:8px;box-shadow:0 20px 50px rgba(0,0,0,.5)}
-.more-head{display:flex;justify-content:space-between;align-items:center;padding:4px 8px 8px}.more-head button{min-height:34px;padding:4px 10px}
-.more-item{display:flex;gap:12px;align-items:center;padding:11px 10px;border-radius:12px;color:var(--text);text-decoration:none}
-.more-item:hover{background:var(--card-2)}.more-item .ico{width:28px;text-align:center;font-size:18px}.more-item small{display:block;color:var(--muted);font-size:12.5px;font-weight:500}
-@media (min-width:900px){.more-btn{top:24px;right:28px}.more-panel{top:76px;right:28px}.page-head{padding-right:60px}}
+
 
 .page-head>*{min-width:0;max-width:100%}.page-head .row>*{flex:1 1 140px;min-width:0}select,input{max-width:100%}.content{min-width:0;overflow-x:clip}
 .card h2{text-transform:none;letter-spacing:-.01em;font-size:17px;color:var(--text);font-weight:700}
@@ -188,38 +237,25 @@ function haloLoading(n){var s='';for(var i=0;i<(n||3);i++)s+='<div class="skelet
 `;
 
 /** "⋯" menyu: kam ishlatiladigan bo'limlar — ulanishlar, sozlamalar, nazorat va chiqish. */
-const MORE_MENU = [
-  ["/pos", "🧾", "HALO HISOB oynasi", "Naqd, hisob-raqam, delivery, oshxona, chiqit"],
-  ["/api/v2/monitor", "📺", "Monitor menyu", "Televizordagi reklama menyu: taom, narx, rasm"],
-  ["/api/v2/mezana", "🤝", "MEZANA", "Olib turish, qaytarish, qarz va to‘lov"],
-  ["/api/v2/club", "🛍", "Telegram do‘kon", "HALO CLUB: buyurtma → savdo, narx, tugagan mahsulot"],
-  ["/api/v2/vazifalar", "✅", "Xodim vazifalari", "Vazifa yuborish va bajarilishi"],
-  ["/api/v2/nazorat", "☑️", "Kunlik nazorat", "Ochilish/yopilish tekshiruvi, oshxona qoidalari"],
-  ["/api/v2/eksport", "📥", "Hisobot va zaxira", "Excel uchun yuklab olish, nusxa, qaytarish"],
-  ["/api/v2/ornatish", "📲", "Ilovani o‘rnatish", "iPhone, Mac, Windows, Android"],
-  ["/api/v2/kalkulyator", "🧮", "Narx kalkulyatori", "Tannarxdan narx: 30/35/40%, foiz qo‘shish/ayirish"],
-  ["/api/v2/ushlanmalar", "％", "Soliq va komissiyalar", "Har savdodan avtomatik ushlanadi"],
-  ["/api/v2/ulanishlar", "🔌", "Ulanishlar", "Telegram, Google Sheets, API"],
-  ["/api/v2/sozlamalar", "⚙️", "Sozlamalar", "Xodim akkauntlari, filiallar"],
-  ["/api/v2/sanoq", "▤", "Oy yakuni sanog‘i", "Pul, ombor, qarz"],
-  ["/api/v2/tarix", "↺", "O‘zgarishlar tarixi", "Nima o‘chirildi, o‘zgartirildi"],
-  ["/api/v2/kochish", "🚀", "To‘liq o‘tish", "Tekshiruv ro‘yxati"],
-  ["/api/v2/xodim", "👷", "Xodim ilovasi", "Xodimlar telefoni uchun"],
-  ["/api/admin/migration", "⇪", "Ma’lumot ko‘chirish", "Eski saytdan yakuniy ko‘chirish"],
-  ["/?eski=1", "🗂", "Eski ko‘rinish (zaxira)", "Hamma eski oynalar"],
-  ["/signout-with-chatgpt", "⎋", "Chiqish", ""],
-].map(([href, icon, label, hint]) => `<a class="more-item" href="${href}"><span class="ico">${icon}</span><span><b>${label}</b>${hint ? `<small>${hint}</small>` : ""}</span></a>`).join("");
-const MORE_UI = `<button class="more-btn" id="moreBtn" aria-label="Yana" aria-expanded="false">⋯</button>
-<div class="more-panel" id="morePanel" hidden><div class="more-head"><b>Yana</b><button class="ghost" id="moreClose" aria-label="Yopish">✕</button></div>${MORE_MENU}</div>`;
-const MORE_SCRIPT = `(function(){var b=document.getElementById('moreBtn'),p=document.getElementById('morePanel');if(!b)return;
-function set(o){p.hidden=!o;b.setAttribute('aria-expanded',o?'true':'false')}
-b.addEventListener('click',function(e){e.stopPropagation();set(p.hidden)});document.getElementById('moreClose').addEventListener('click',function(){set(false)});
-document.addEventListener('click',function(e){if(!p.hidden&&!p.contains(e.target)&&e.target!==b)set(false)});document.addEventListener('keydown',function(e){if(e.key==='Escape')set(false)})})();
-`;
-
-function navLinks(active: NavKey | null, cls: string) {
-  return NAV.map((item) => `<a class="nav-a ${cls}${item.key === active ? " on" : ""}" href="/api/v2/${item.key}"${item.key === active ? ' aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span>${item.label}</span></a>`).join("");
+/** Telefon: pastki qator — 6 guruh. */
+function bottomNav(active: NavKey | null) {
+  const current = groupOf(active);
+  return NAV_GROUPS.map((group) => `<a class="nav-a${group === current ? " on" : ""}" href="${group.pages[0].href}"${group === current ? ' aria-current="true"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true">${group.icon}</svg><span>${group.label}</span></a>`).join("");
 }
+/** Telefon: tepada — shu guruhdagi sahifalar (surib ko'riladi). */
+function subNav(active: NavKey | null) {
+  const current = groupOf(active);
+  if (!current) return "";
+  return `<nav class="subnav" aria-label="${current.title}">${current.pages.map((page) => `<a class="sub-a${page.key && page.key === active ? " on" : ""}" href="${page.href}"${page.key && page.key === active ? ' aria-current="page"' : ""}>${page.label}</a>`).join("")}</nav>`;
+}
+/** Kompyuter: chap tomonda — hamma guruh va sahifalari. */
+function sideNav(active: NavKey | null) {
+  return NAV_GROUPS.map((group) => `<div class="side-g">${group.title}</div>${group.pages.map((page) => `<a class="side-a${page.key && page.key === active ? " on" : ""}" href="${page.href}"${page.key && page.key === active ? ' aria-current="page"' : ""}>${page.label}</a>`).join("")}`).join("");
+}
+
+/** Yoqilgan sahifa tugmasi ko'rinib tursin (uzun qatorda o'ngda qolib ketmasin). */
+const SUBNAV_SCRIPT = `(function(){var a=document.querySelector('.subnav .sub-a.on');if(a&&a.scrollIntoView)a.scrollIntoView({block:'nearest',inline:'center'})})();
+`;
 
 const BRAND = '<a class="brand" href="/api/v2/bosh"><span class="logo">H</span><span><b>HALO</b><small>Control</small></span></a>';
 
@@ -280,13 +316,13 @@ export function shell(input: ShellInput): string {
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23d4a84b'/%3E%3Ctext x='16' y='23' font-family='Arial' font-weight='900' font-size='20' text-anchor='middle' fill='%23111'%3EH%3C/text%3E%3C/svg%3E">
 <style>${DESIGN_CSS}</style></head><body>
 <div class="app${withNav ? "" : " solo"}">
-${withNav ? `<aside class="side">${BRAND}${navLinks(input.active, "")}<div class="side-foot">Yangi tizim · sinov rejimi</div></aside>` : ""}
+${withNav ? `<aside class="side">${BRAND}${sideNav(input.active)}<div class="side-foot">Yangi tizim · sinov rejimi</div></aside>` : ""}
 <div>
-<div class="top"><div class="top-in">${BRAND}</div></div>
-<main class="content">${input.back === false ? "" : `<div class="backrow"><button class="ghost backbtn" id="haloBack" type="button" data-fallback="${input.back || "/api/v2/bosh"}">‹ Orqaga</button></div>`}${head}${input.body}</main>
+<div class="top"><div class="top-in">${BRAND}</div>${withNav ? subNav(input.active) : ""}</div>
+<main class="content">${input.back === false || withNav ? "" : `<div class="backrow"><button class="ghost backbtn" id="haloBack" type="button" data-fallback="${input.back || "/api/v2/bosh"}">‹ Orqaga</button></div>`}${head}${input.body}</main>
 </div>
 </div>
-${withNav ? `<nav class="bottom">${navLinks(input.active, "")}</nav>${MORE_UI}` : ""}
-<script>${INSTALL_SCRIPT}${BACK_SCRIPT}${COMMON_SCRIPT}${withNav ? MORE_SCRIPT : ""}${input.script}</script>
+${withNav ? `<nav class="bottom">${bottomNav(input.active)}</nav>` : ""}
+<script>${INSTALL_SCRIPT}${BACK_SCRIPT}${COMMON_SCRIPT}${withNav ? SUBNAV_SCRIPT : ""}${input.script}</script>
 </body></html>`;
 }

@@ -85,7 +85,7 @@ export async function POST(request: Request) {
 function page(branches: Array<{ id: string; name: string }>): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
   return shell({
-    title: "Monitor menyu", active: "menyu", heading: "Monitor menyu",
+    title: "Monitor menyu", active: "monitor", heading: "Monitor menyu",
     subtitle: "Televizordagi reklama menyu: taomlar, narxlar, rasmlar",
     headerRight: '<select id="branch"></select>',
     body: `<section class="card"><div class="row" id="scr"></div><div id="scrInfo" style="margin-top:12px"></div></section>

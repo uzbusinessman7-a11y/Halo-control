@@ -21,7 +21,7 @@ export async function GET(request: Request) {
   const branches = (await listHaloBranches()).map((branch) => ({ id: branch.id, name: branch.name }));
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
   return new Response(shell({
-    title: "Xodim vazifalari", active: "maosh", heading: "Xodim vazifalari",
+    title: "Vazifalar", active: "vazifalar", heading: "Vazifalar",
     subtitle: "Vazifa yuboring — xodim ilovasida chiqadi, bajarilganini shu yerda ko‘rasiz",
     headerRight: '<select id="branch"></select>',
     body: `<section class="card"><h2>Yangi vazifa</h2>

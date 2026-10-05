@@ -29,7 +29,7 @@ export async function GET(request: Request) {
 
 function page(deduction: { taxPct: number; cardPct: number }): string {
   return shell({
-    title: "Narx kalkulyatori", active: "menyu", heading: "Narx va foiz kalkulyatori",
+    title: "Narx kalkulyatori", active: "kalkulyator", heading: "Narx kalkulyatori",
     subtitle: "Tannarxdan sotuv narxini topish, foiz qo‘shish va ayirish",
     body: `<section class="card"><div class="row" id="tabs" style="gap:8px"></div></section><div id="pane" style="display:grid;gap:16px"></div>`,
     script: `

@@ -26,7 +26,7 @@ function page(branches: Array<{ id: string; name: string }>): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
   const kinds = JSON.stringify(Object.entries(exportKinds).map(([id, label]) => ({ id, label }))).replace(/</g, "\\u003c");
   return shell({
-    title: "Hisobot va zaxira", active: "bosh", heading: "Hisobot va zaxira",
+    title: "Hisobot va zaxira", active: "eksport", heading: "Hisobot va zaxira",
     subtitle: "Excel uchun yuklab olish, to‘liq nusxa va avvalgi holatga qaytarish",
     headerRight: '<div class="row"><select id="branch"></select></div>',
     body: `<section class="card"><h2>📥 Hisobotlarni yuklab olish</h2><p class="hint">CSV fayl — Excel, Google Sheets yoki Numbers’da ochiladi. Buxgalterga yuborish mumkin.</p>

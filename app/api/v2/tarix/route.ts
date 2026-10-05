@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 function page(branches: Array<{ id: string; name: string }>): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
   return shell({
-    title: "O'zgarishlar tarixi", active: "bosh", heading: "O'zgarishlar tarixi",
+    title: "O‘zgarishlar tarixi", active: "tarix", heading: "O‘zgarishlar tarixi",
     subtitle: "Har bir o'chirilgan, keyin o'zgartirilgan yoki tuzatilgan yozuv — hech narsa yashirin qolmaydi",
     headerRight: '<select id="branch"></select>',
     body: `<section class="card"><div class="row" id="chips"></div></section><section class="card"><div id="list">${'<div class="skeleton" style="margin:10px 0"></div>'.repeat(4)}</div></section>`,
