@@ -12,6 +12,11 @@ import {
   applySupplierIntake, intakeInventoryChoices, listSupplierProducts, rememberIntakePrices, removeSupplierProduct, saveSupplierProduct, SupplierIntakeError,
 } from "../../../core/supplier-intake";
 import { SUPPLIER_INTAKE_SCRIPT, SUPPLIER_INTAKE_STYLE } from "../../../core/supplier-intake-ui";
+import {
+  dismissReceipts, ensureMarketSupplier, listDismissedReceipts, MARKET_SUPPLIER_ID, monthReceipts, pendingReceipts, ReceiptError, receiptSettlement,
+} from "../../../core/receipts";
+import { RECEIPTS_SCRIPT } from "../../../core/receipts-ui";
+import { POST as supplierRecords } from "../../supplier-records/route";
 import { shell } from "../../../core/ui-shell";
 
 declare global {
@@ -94,13 +99,62 @@ export async function POST(request: Request) {
       const date = String(body.date || "");
       // Pul chiqadigan bo'lsa — kassada yopilgan kunga yozilmaydi (yopilgan kun qoldig'i o'zgarmasligi kerak).
       if (Number(body.paidAmount) > 0) await assertV2DayOpen(branchId, date);
+      const market = supplierId === MARKET_SUPPLIER_ID;
+      // Bozor / naqd xarid — yetkazib beruvchisiz: qarz bo'lmaydi, shu sabab to'liq to'langan bo'lishi shart.
+      if (market && Number(body.paidAmount) !== list(body.lines).reduce((sum, line) => sum + (Number(line.amount) || 0), 0)) {
+        throw new SupplierIntakeError("Bozor / naqd xarid darhol to‘liq to‘lanadi. Qarzga olingan bo‘lsa — yetkazib beruvchini tanlang.");
+      }
       const products = await listSupplierProducts(database(), branchId, supplierId);
-      const mutation = await mutateHaloState((cur) => applySupplierIntake(cur as Row, { ...body, supplierId }, products, today), 5, branchId, "Rahbar",
+      const mutation = await mutateHaloState((cur) => applySupplierIntake((market ? ensureMarketSupplier(cur as Row).state : cur) as Row, { ...body, supplierId }, products, today), 5, branchId, "Rahbar",
         `Yangi kirim (yetkazib beruvchi) · ₩${(Array.isArray(body.lines) ? body.lines as Row[] : []).reduce((sum, line) => sum + (Number(line?.amount) || 0), 0).toLocaleString("en-US")}`, "Qarzlar (yangi)", true);
       const result = mutation.result;
       let remembered = true;
       try { await rememberIntakePrices(database(), branchId, result); } catch { remembered = false; }
       return json({ ok: true, result, remembered, ...(await profile(mutation.state as Row, supplierId)) });
+    }
+    // Yetkazib beruvchisiz xarid uchun doimiy hisob («Bozor / naqd xarid») — birinchi marta kerak bo'lganda ochiladi.
+    const openMarket = async () => {
+      const current = await readHaloState(branchId);
+      if (list((current.state as Row).suppliers).some((entry) => entry.id === MARKET_SUPPLIER_ID)) return current.state as Row;
+      const mutation = await mutateHaloState((cur) => ({ state: ensureMarketSupplier(cur as Row).state, result: null }), 5, branchId, "Rahbar",
+        "«Bozor / naqd xarid» hisobi ochildi (yetkazib beruvchisiz xaridlar uchun)", "Qarzlar (yangi)");
+      return mutation.state as Row;
+    };
+    if (body.action === "market") {
+      await openMarket();
+      return json({ ok: true, supplierId: MARKET_SUPPLIER_ID });
+    }
+    if (body.action === "dismiss") {
+      // Puli oldin yozilgan (yoki pul kerak bo'lmagan) kirim ro'yxatdan olinadi. Ombor va qarzga tegilmaydi.
+      const current = await readHaloState(branchId);
+      const pending = pendingReceipts(current.state as Row, today, await listDismissedReceipts(database(), branchId));
+      const keys = body.all === true ? pending.map((entry) => entry.key) : (Array.isArray(body.keys) ? body.keys as unknown[] : []).map((key) => String(key));
+      const count = await dismissReceipts(database(), branchId, keys, pending, String(body.note || ""));
+      return json({ ok: true, count });
+    }
+    if (body.action === "settle") {
+      // To'lovi yozilmagan kirimning pul tomoni: qarzga yoki to'landi. Mahsulot omborga ikkinchi marta kirmaydi.
+      const supplierId = String(body.supplierId || "");
+      const paid = body.pay === "paid";
+      if (supplierId === MARKET_SUPPLIER_ID && !paid) throw new ReceiptError("Bozor / naqd xarid darhol to‘lanadi — «To‘landi»ni tanlang.");
+      const base = supplierId === MARKET_SUPPLIER_ID ? await openMarket() : (await readHaloState(branchId)).state as Row;
+      const plan = receiptSettlement(base, String(body.key || ""), supplierId, today, await listDismissedReceipts(database(), branchId));
+      const accountId = String(body.accountId || "");
+      if (paid) {
+        if (!moneyAccounts(base).some((account) => account.id === accountId)) throw new ReceiptError("Pul qaysi hisobdan to‘langanini tanlang.");
+        await assertV2DayOpen(branchId, plan.transaction.date);
+      }
+      // Yozuv eski tizimning tekshirilgan dvigateli orqali: qarz qayta hisoblanadi, takror va yopilgan oy himoyalari ishlaydi.
+      const headers = new Headers(request.headers);
+      headers.delete("content-length");
+      headers.set("content-type", "application/json");
+      const inner = await supplierRecords(new Request(new URL(`/api/supplier-records?branch=${encodeURIComponent(branchId)}`, request.url), {
+        method: "POST", headers,
+        body: JSON.stringify({ action: paid ? "savePurchaseAndPayment" : "saveTransaction", transaction: plan.transaction, ...(paid ? { accountId } : {}), duplicateReason: String(body.duplicateReason || "").trim() || undefined }),
+      }));
+      const saved = await inner.json().catch(() => ({})) as Row;
+      if (!inner.ok || saved.ok !== true) return json({ error: String(saved.error || "Saqlanmadi."), code: saved.duplicate ? "DUPLICATE" : undefined }, inner.ok ? 400 : inner.status);
+      return json({ ok: true, amount: plan.transaction.amount, supplierName: plan.supplierName, paid });
     }
     const { state } = await readHaloState(branchId);
     const bridge = await runDebtBridge(database(), scope, state as Record<string, unknown>, today);
@@ -111,8 +165,13 @@ export async function POST(request: Request) {
     const accounts = (Array.isArray((state as Record<string, unknown>).accounts) ? (state as Record<string, unknown>).accounts as Array<Record<string, unknown>> : [])
       .filter((account) => (account.type === "cash" || account.type === "bank") && account.active !== false)
       .map((account) => ({ id: String(account.id), name: String(account.name || account.id), type: String(account.type) }));
-    return json({ ok: true, today, bridge, accounts });
+    const dismissed = await listDismissedReceipts(database(), branchId);
+    return json({
+      ok: true, today, bridge, accounts, marketId: MARKET_SUPPLIER_ID,
+      pending: pendingReceipts(state as Row, today, dismissed), receipts: monthReceipts(state as Row, today.slice(0, 7), dismissed),
+    });
   } catch (error) {
+    if (error instanceof ReceiptError) return json({ error: error.message, code: error.code || undefined }, error.status);
     if (error instanceof SupplierIntakeError) return json({ error: error.message, code: error.code || undefined, details: error.details }, error.status);
     if (error instanceof ClosedDayError) return json({ error: error.message }, 409);
     if (error instanceof VegetableExpenseError) return json({ error: error.message }, 400);
@@ -129,9 +188,14 @@ function page(branches: Array<{ id: string; name: string }>): string {
     title: "Yetkazib beruvchilar", active: "qarz", heading: "Yetkazib beruvchilar",
     subtitle: "Mahsulot kirimi, qarz, to‘lov va solishtirish akti",
     headerRight: '<select id="branch"></select>',
-    body: `<section class="card noprint"><div class="row"><button id="addSup">+ Yangi yetkazib beruvchi</button><a href="/api/v2/mezana" style="text-decoration:none"><button class="ghost" type="button">🤝 MEZANA hisobi ›</button></a></div><div id="supForm"></div></section>
-<section class="card noprint" id="listCard"><h2>Yetkazib beruvchilarga qarz</h2><div id="list"><p class="hint">Yuklanmoqda…</p></div></section>
-<section class="card" id="stCard" hidden></section>${SUPPLIER_INTAKE_STYLE}`,
+    body: `<section class="card noprint"><div id="sum"><p class="hint" style="margin:0">Yuklanmoqda…</p></div>
+<button class="block" id="newIn" style="margin-top:14px">📦 Yangi kirim</button>
+<p class="hint" style="margin:8px 0 0">Mahsulot kelganda shu tugma: omborga, qarzga va to‘lovga bitta saqlashda yoziladi.</p><div id="pick"></div></section>
+<section class="card noprint" id="pendCard" hidden></section>
+<section class="card noprint" id="listCard"><h2>Yetkazib beruvchilar</h2><div id="list"><p class="hint">Yuklanmoqda…</p></div>
+<button class="ghost" id="addSup" style="margin-top:12px">+ Yangi yetkazib beruvchi</button><div id="supForm"></div></section>
+<section class="card" id="stCard" hidden></section>
+<section class="card noprint" id="histCard"></section>${SUPPLIER_INTAKE_STYLE}`,
     script: `
 var BRANCHES=${boot},TODAY='',PARTIES={},ACCOUNTS=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -139,19 +203,23 @@ function won(n){n=Number(n||0);return (n<0?'−':'')+Math.abs(n).toLocaleString(
 function api(b){return fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json()}).catch(function(){return {ok:false,error:'Internet aloqasini tekshiring.'}})}
 var sel=document.getElementById('branch');sel.innerHTML=BRANCHES.map(function(b){return '<option value="'+esc(b.id)+'">'+esc(b.name)+'</option>'}).join('');haloBranch(sel);
 var KIND={opening:'Boshlang‘ich qarz',purchase:'Xarid',payment:'To‘lov',adjustment:'Tuzatish',reversal:'Bekor qilindi'};
-function load(){
+function load(then){
   document.getElementById('stCard').hidden=true;
   api({branchId:sel.value}).then(function(res){
     var box=document.getElementById('list');
     if(!res.ok){box.innerHTML='<div class="msg bad">'+esc(res.error)+'</div>';return}
     TODAY=res.today;var b=res.bridge;PARTIES={};b.parties.forEach(function(p){PARTIES[p.partyId]=p});ACCOUNTS=res.accounts||[];
+    MARKET=res.marketId||'';PEND=res.pending||[];HIST=res.receipts||[];
     var warn=[];if(b.changed.length)warn.push(b.changed.length+' ta eski yozuv keyin o‘zgartirilgan');if(b.invalid.length)warn.push(b.invalid.length+' ta yozuv noto‘g‘ri');
-    box.innerHTML='<div class="total">'+won(b.totalDebt)+'</div><p class="hint">Jami qarz · '+b.parties.length+' ta yetkazib beruvchi</p>'
-      +(warn.length?'<div class="msg bad">⚠ '+warn.map(esc).join(' · ')+'</div>':'')
+    document.getElementById('sum').innerHTML='<div class="total">'+won(b.totalDebt)+'</div><p class="hint" style="margin:0">Jami qarz · '+realParties().length+' ta yetkazib beruvchi</p>'
+      +(warn.length?'<div class="msg bad">⚠ '+warn.map(esc).join(' · ')+'</div>':'');
+    drawPending();drawHistory();
+    box.innerHTML=(b.parties.length?'':'<p class="hint">Hali yetkazib beruvchi yo‘q. Pastdagi tugma bilan qo‘shing.</p>')
       +b.parties.map(function(p){var late=p.ageDays!=null&&p.ageDays>30;
         return '<div class="party" data-id="'+esc(p.partyId)+'"><b>'+esc(p.name)+(p.difference?'<span class="tag bad">tarix bilan farq '+won(p.difference)+'</span>':'')+(late?'<span class="tag warn">'+p.ageDays+' kun</span>':'')+'</b><span class="v">'+won(p.ledgerBalance)+(p.ledgerBalance<0?' (avans)':'')+'</span>'
           +'<small>'+(p.oldestUnpaidDate?'Eng eski to‘lanmagan xarid: '+esc(p.oldestUnpaidDate)+' ('+p.ageDays+' kun)':p.ledgerBalance>0?'':'Qarz yo‘q')+(p.difference?' · eski tizimda '+won(p.oldBalance)+' saqlangan':'')+' · Akt uchun bosing ›</small></div>'}).join('');
     box.querySelectorAll('.party').forEach(function(el){el.addEventListener('click',function(){openStatement(el.dataset.id)})});
+    if(typeof then==='function')then();
   });
 }
 function openStatement(partyId,from,to){
@@ -167,17 +235,16 @@ function openStatement(partyId,from,to){
       +s.lines.map(function(l){return '<tr><td>'+esc(l.date)+'</td><td>'+esc(KIND[l.kind]||l.kind)+(l.memo?'<br><small style="color:var(--muted)">'+esc(l.memo)+'</small>':'')+'</td><td class="n">'+(l.amount>0?'+':'−')+won(Math.abs(l.amount))+'</td><td class="n">'+won(l.balance)+'</td></tr>'}).join('')
       +'<tr><td colspan="3"><b>'+esc(s.to)+' holatiga qarz</b></td><td class="n"><b>'+won(s.closing)+'</b></td></tr></table>'
       +'<p class="hint" style="margin-top:10px">Jami xarid: '+won(s.purchases)+' · Jami to‘lov: '+won(s.payments)+'</p>'
-      +'<div class="row noprint" style="margin:14px 0 4px"><button id="addIn">📦 Yangi kirim</button><button class="ghost" id="prods">🗂 Mahsulotlari</button></div><p class="hint noprint" style="margin:0">Mahsulot kelgan bo‘lsa — «Yangi kirim»: omborga ham, qarzga ham o‘zi yozadi. «+ Xarid» — faqat mahsulotsiz qarz uchun.</p>'
-      +'<div class="row noprint" style="margin:14px 0 6px"><button id="addPur">+ Xarid (qarz oshadi)</button><button class="ghost" id="addPay">+ To‘lov qildim</button></div><div id="entry" class="noprint" style="margin-bottom:12px"></div>'
-      +'<div class="row noprint"><button id="copy">📋 Nusxa olish (xabar uchun)</button><button class="ghost" id="print">🖨 Chop etish / PDF</button></div><div id="cmsg" class="noprint"></div>'
-      +'<div class="row noprint" style="margin-top:10px"><button class="ghost" id="recs">🧾 Yozuvlar / bekor qilish</button><button class="ghost" id="bal">⚖️ Qoldiqni tuzatish</button><button class="ghost" id="edit">✏️ Ma’lumotlari</button></div><div id="fix" class="noprint"></div>';
+      +'<div class="nk-pay noprint" style="grid-template-columns:'+(isMarket(partyId)?'1fr':'1fr 1fr')+';margin:14px 0 8px"><button id="addIn">📦 Yangi kirim</button>'+(isMarket(partyId)?'':'<button class="ghost" id="addPay">💸 To‘lov qildim</button>')+'</div>'
+      +'<p class="hint noprint" style="margin:0 0 12px">'+(isMarket(partyId)?'Yetkazib beruvchisiz, naqd olingan mahsulotlar. Har xarid darhol to‘lanadi — qarz bo‘lmaydi.':'Mahsulot keldi — «Yangi kirim» (omborga ham, qarzga ham o‘zi yozadi). Pul berdingiz — «To‘lov qildim».')+'</p><div id="entry" class="noprint" style="margin-bottom:12px"></div>'
+      +'<div class="row noprint st-more"><button class="ghost" id="prods">🗂 Mahsulotlari</button><button class="ghost" id="copy">📋 Nusxa olish</button><button class="ghost" id="print">🖨 Chop etish / PDF</button>'
+      +'<button class="ghost" id="recs">🧾 Yozuvlar / bekor qilish</button><button class="ghost" id="bal">⚖️ Qoldiqni tuzatish</button><button class="ghost" id="edit">✏️ Ma’lumotlari</button></div><div id="cmsg" class="noprint"></div><div id="fix" class="noprint"></div>';
     document.getElementById('stGo').addEventListener('click',function(){openStatement(partyId,document.getElementById('stFrom').value,document.getElementById('stTo').value)});
     document.getElementById('print').addEventListener('click',function(){window.print()});
     document.getElementById('addIn').addEventListener('click',function(){openIntake(partyId)});
     document.getElementById('prods').addEventListener('click',function(){openProducts(partyId)});
     if(FLASH){document.getElementById('entry').innerHTML=FLASH;FLASH=''}
-    document.getElementById('addPur').addEventListener('click',function(){entryForm(partyId,'purchase')});
-    document.getElementById('addPay').addEventListener('click',function(){entryForm(partyId,'payment')});
+    var payBtn=document.getElementById('addPay');if(payBtn)payBtn.addEventListener('click',function(){entryForm(partyId,'payment')});
     document.getElementById('recs').addEventListener('click',function(){fixRecords(partyId,from,to)});
     document.getElementById('bal').addEventListener('click',function(){fixBalance(partyId,from,to)});
     document.getElementById('edit').addEventListener('click',function(){fixInfo(partyId)});
@@ -185,6 +252,7 @@ function openStatement(partyId,from,to){
       var done=function(){document.getElementById('cmsg').innerHTML='<div class="msg ok" style="margin-top:10px">✓ Nusxa olindi — Telegram yoki KakaoTalk’ga joylang</div>'};
       if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(res.text).then(done,function(){prompt('Matnni nusxalang:',res.text)})}else{prompt('Matnni nusxalang:',res.text)}
     });
+    if(AFTER){var next=AFTER;AFTER=null;next()}
   });
 }
 var TXK={purchase:'Xarid',payment:'To‘lov'};
@@ -235,7 +303,10 @@ function entryForm(partyId,type){
     send();
   });
 }
-sel.addEventListener('change',load);load();
+sel.addEventListener('change',function(){PSHOW=5;load()});
+document.getElementById('newIn').addEventListener('click',function(){pickSupplier()});
+/* Kiritish sahifasidagi «Mahsulot kirimi» shu yerga olib keladi: tanlash oynasi darhol ochiladi. */
+load(function(){if(/[?&]kirim=1/.test(location.search))pickSupplier()});
 
 document.getElementById('addSup').addEventListener('click',function(){
   var box=document.getElementById('supForm'),id='sup-'+(crypto.randomUUID?crypto.randomUUID():String(Date.now()));
@@ -253,9 +324,9 @@ document.getElementById('addSup').addEventListener('click',function(){
     fetch('/api/supplier-records?branch='+encodeURIComponent(sel.value),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveSupplier',supplier:{id:id,name:name,phone:document.getElementById('sPhone').value,bankAccount:document.getElementById('sBank').value}})})
     .then(function(r){return r.json()}).catch(function(){return {error:'Internet aloqasini tekshiring.'}}).then(function(x){btn.disabled=false;
       if(!x.ok){msg.innerHTML='<div class="msg bad">'+esc(x.error||'Saqlanmadi.')+'</div>';return}
-      box.innerHTML='<div class="msg ok" style="margin-top:12px">✓ '+esc(name)+' qo‘shildi. Endi uni bosib xarid yoki to‘lov kiritasiz.</div>';load()});
+      box.innerHTML='<div class="msg ok" style="margin-top:12px">✓ '+esc(name)+' qo‘shildi. Mahsulot kelganda «Yangi kirim»ni bosib, uni tanlang.</div>';load()});
   });
 });
-${SUPPLIER_INTAKE_SCRIPT}`,
+${SUPPLIER_INTAKE_SCRIPT}${RECEIPTS_SCRIPT}`,
   });
 }

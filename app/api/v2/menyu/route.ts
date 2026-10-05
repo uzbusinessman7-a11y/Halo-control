@@ -22,7 +22,8 @@ export async function GET(request: Request) {
     return new Response(null, { status: 303, headers: { Location: `/signin-with-chatgpt?return_to=${encodeURIComponent(PAGE_PATH)}` } });
   }
   const branches = (await listHaloBranches()).map((branch) => ({ id: branch.id, name: branch.name }));
-  return new Response(page(branches), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  // ?b=tahlil — «Menyu tahlili» (qaysi taom ko'p sotiladi, qaysi biri sotilmaydi); aks holda — taom tannarxi.
+  return new Response(page(branches, new URL(request.url).searchParams.get("b") === "tahlil"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -56,17 +57,18 @@ export async function POST(request: Request) {
   }
 }
 
-function page(branches: Array<{ id: string; name: string }>): string {
+function page(branches: Array<{ id: string; name: string }>, analysis: boolean): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
   return shell({
-    title: "Menyu", active: "menyu", heading: "Menyu",
-    subtitle: "Taom tannarxi, narxlar va qaysi taom pul topib beryapti",
-    headerRight: '<div class="row"><select id="days"><option value="7">7 kun</option><option value="30" selected>30 kun</option><option value="90">90 kun</option></select><select id="branch"></select></div>',
-    body: `<section class="card"><div class="row"><button data-m="rec">🍽 Taom tannarxi</button><button class="ghost" data-m="ana">📊 Tahlil</button></div></section>
-<div id="rec" style="display:grid;gap:16px"></div>
-<div id="body" style="display:none;gap:16px"><section class="card"><div class="skeleton"></div><div class="skeleton" style="margin-top:12px"></div></section></div>`,
+    title: analysis ? "Menyu tahlili" : "Menyu", active: analysis ? "tahlil" : "menyu", heading: analysis ? "Menyu tahlili" : "Menyu",
+    subtitle: analysis ? "Qaysi taom ko‘p sotiladi, qaysi biri sotilmaydi va qaysi biri pul topib beryapti" : "Taom tannarxi va narxlar",
+    headerRight: `<div class="row"><select id="days"${analysis ? "" : " hidden"}><option value="7">7 kun</option><option value="30" selected>30 kun</option><option value="90">90 kun</option></select><select id="branch"></select></div>`,
+    // Ikki ko'rinish — ikki alohida bo'lim (menyuda har biri o'z nomi bilan). Bir-biriga bitta tugma bilan o'tiladi.
+    body: `<div id="rec" style="display:${analysis ? "none" : "grid"};gap:16px"></div>
+<div id="body" style="display:${analysis ? "grid" : "none"};gap:16px"><section class="card"><div class="skeleton"></div><div class="skeleton" style="margin-top:12px"></div></section></div>
+<section class="card"><a href="${analysis ? PAGE_PATH : `${PAGE_PATH}?b=tahlil`}" style="text-decoration:none"><button class="ghost block" type="button">${analysis ? "🍽 Taom tannarxi va narxlar ›" : "📊 Menyu tahlili — ko‘p va kam sotiladigan taomlar ›"}</button></a></section>`,
     script: `
-var BRANCHES=${boot};
+var BRANCHES=${boot},ANA=${analysis ? "true" : "false"};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function won(n){if(n==null)return '—';n=Number(n);return (n<0?'−':'')+Math.abs(n).toLocaleString('en-US')+' ₩'}
 function api(b){return fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json()}).catch(function(){return {ok:false,error:'Internet aloqasini tekshiring.'}})}
@@ -86,7 +88,10 @@ function load(){
 }
 function render(){
   var r=R,body=document.getElementById('body');
-  var list=r.items.filter(function(i){return FILTER==='all'?true:FILTER==='flag'?i.flags.length:i.cls===FILTER});
+  var list=r.items.filter(function(i){return FILTER==='all'?true:FILTER==='flag'?i.flags.length:FILTER==='top'?i.sold>0:FILTER==='none'?!(i.sold>0):i.cls===FILTER});
+  if(FILTER==='top')list=list.slice().sort(function(a,b){return b.sold-a.sold||b.revenue-a.revenue});
+  var none=r.items.filter(function(i){return !(i.sold>0)}).length;
+  var title=FILTER==='top'?'Ko‘p sotilgan taomlar · soni bo‘yicha':FILTER==='none'?'Bu davrda umuman sotilmagan taomlar':'Taomlar · foyda bo‘yicha';
   body.innerHTML='<section class="card"><h2>'+esc(r.from)+' — '+esc(r.to)+'</h2><div class="grid">'
     +'<div class="kpi"><small>Sotilgan taomlar</small><b>'+r.totals.sold.toLocaleString('en-US')+' ta</b></div>'
     +'<div class="kpi"><small>Savdo (taomlar bo‘yicha)</small><b>'+won(r.totals.revenue)+'</b></div>'
@@ -94,16 +99,16 @@ function render(){
     +'</div></section>'
     +'<section class="card"><h2>Guruhlar</h2><div class="grid">'+['star','plowhorse','puzzle','dog'].map(function(k){
       return '<div class="kpi" data-f="'+k+'" style="cursor:pointer'+(FILTER===k?';border-color:var(--accent)':'')+'"><small>'+CLS[k][0]+'</small><b>'+r.counts[k]+' ta</b><div class="hint">'+CLS[k][1]+'</div></div>'}).join('')
-    +'</div><div class="row" style="margin-top:12px"><button class="'+(FILTER==='all'?'':'ghost')+'" data-f="all">Hammasi</button><button class="'+(FILTER==='flag'?'':'ghost')+'" data-f="flag">⚠ Muammolilar</button></div>'
+    +'</div><div class="row" style="margin-top:12px"><button class="'+(FILTER==='all'?'':'ghost')+'" data-f="all">Hammasi</button><button class="'+(FILTER==='top'?'':'ghost')+'" data-f="top">🔥 Ko‘p sotilgan</button><button class="'+(FILTER==='none'?'':'ghost')+'" data-f="none">🚫 Sotilmagan · '+none+'</button><button class="'+(FILTER==='flag'?'':'ghost')+'" data-f="flag">⚠ Muammolilar</button></div>'
     +(r.incomplete?'<div class="msg warn" style="margin-top:12px">'+r.incomplete+' ta taomning retsepti yoki tannarxi to‘liq emas — ular guruhlanmadi. Retseptni to‘ldiring.</div>':'')
     +'</section>'
-    +'<section class="card"><h2>Taomlar · foyda bo‘yicha</h2>'+(list.length?list.map(function(i){var c=i.cls?CLS[i.cls]:null;
-      return '<div class="item"><b>'+esc(i.name)+(c?'<span class="tag '+c[2]+'">'+c[0]+'</span>':'')+'</b><span class="v">'+won(i.contribution)+'</span>'
+    +'<section class="card"><h2>'+title+'</h2>'+(list.length?list.map(function(i,n){var c=i.cls?CLS[i.cls]:null;
+      return '<div class="item"><b>'+(FILTER==='top'?(n+1)+'. ':'')+esc(i.name)+(c?'<span class="tag '+c[2]+'">'+c[0]+'</span>':'')+'</b><span class="v">'+(FILTER==='top'?i.sold.toLocaleString('en-US')+' ta':won(i.contribution))+'</span>'
         +'<small>'+i.sold.toLocaleString('en-US')+' ta sotildi · narx '+won(i.price)+' · tannarx '+won(i.cost)+(i.costPercent!=null?' ('+i.costPercent+'%)':'')+' · donasidan foyda '+won(i.unitMargin)
-        +(i.flags.length?'<br><span style="color:var(--warn)">⚠ '+i.flags.map(esc).join(' · ')+'</span>':'')+'</small></div>'}).join(''):'<p class="hint">Bu guruhda taom yo‘q.</p>')+'</section>';
+        +(i.flags.length?'<br><span style="color:var(--warn)">⚠ '+i.flags.map(esc).join(' · ')+'</span>':'')+'</small></div>'}).join(''):'<p class="hint">'+(FILTER==='none'?'Bu davrda har bir taom kamida bir marta sotilgan.':'Bu guruhda taom yo‘q.')+'</p>')+'</section>';
   body.querySelectorAll('[data-f]').forEach(function(el){el.addEventListener('click',function(){FILTER=el.dataset.f;render()})});
 }
-sel.addEventListener('change',load);days.addEventListener('change',load);load();
+if(ANA){sel.addEventListener('change',load);days.addEventListener('change',load);load()}
 /* ---------- Taom tannarxi ---------- */
 var RD=null,RQ='',EDIT=null;
 function uuid(){return crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16)})}
@@ -113,8 +118,6 @@ function num(v){var n=Number(String(v==null?'':v).replace(',','.').replace(/[^0-
 function money(v){return Number(String(v==null?'':v).replace(/[^0-9]/g,''))||0}
 function pct(n){return n==null?'—':n+'%'}
 function fcColor(n){return n==null?'var(--muted)':n<=30?'var(--ok)':n<=35?'var(--warn)':'var(--bad)'}
-document.querySelectorAll('[data-m]').forEach(function(b){b.addEventListener('click',function(){var r=b.dataset.m==='rec';document.querySelectorAll('[data-m]').forEach(function(x){x.className=x===b?'':'ghost'});document.getElementById('rec').style.display=r?'grid':'none';document.getElementById('body').style.display=r?'none':'grid';document.getElementById('days').style.display=r?'none':''})});
-document.getElementById('days').style.display='none';
 function loadRecipes(){rpost({action:'recipes',branchId:sel.value}).then(function(x){if(!x.body.ok){document.getElementById('rec').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}RD=x.body;if(!EDIT)drawRecipes()})}
 function drawRecipes(){
   var box=document.getElementById('rec'),f=RQ.toLowerCase();
@@ -238,7 +241,7 @@ function saveEditor(){
     if(!x.body.ok){msg.innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}
     RD=x.body;var r=RD.recipes.find(function(q){return q.id===x.body.id});openEditor(r);document.getElementById('eMsg').innerHTML='<div class="msg ok">✓ Saqlandi — tannarx hozirgi narxlar bilan hisoblandi</div>'});
 }
-sel.addEventListener('change',function(){EDIT=null;loadRecipes()});loadRecipes();
+if(!ANA){sel.addEventListener('change',function(){EDIT=null;loadRecipes()});loadRecipes()}
 
 `,
   });
