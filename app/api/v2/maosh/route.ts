@@ -6,6 +6,8 @@ import { runPayrollBridge } from "../../../core/payroll-bridge";
 import { isMonth, payslip, payslipText } from "../../../core/payroll-ledger";
 import type { D1Like } from "../../../lib/full-migration";
 import { STAFF_DAYS_SCRIPT, STAFF_DAYS_STYLE } from "../../../core/staff-days-ui";
+import { listAttendanceAttempts, PlaceError, readAttendancePlace, saveAttendancePlace } from "../../../core/attendance-place";
+import { ATTENDANCE_PLACE_SCRIPT } from "../../../core/attendance-place-ui";
 import { shell } from "../../../core/ui-shell";
 import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
 
@@ -59,6 +61,11 @@ export async function POST(request: Request) {
     const action = String(body.action || "");
     if (action === "pay") await assertV2DayOpen(branchId, String(body.date || today));
     if (action === "voidPay") await assertV2DayOpen(branchId, today);
+    if (action === "place" || action === "savePlace") {
+      // Keldim / ketdim joyi: filial bo'yicha nuqta, masofa va oxirgi urinishlar (xodim koordinatasi saqlanmaydi).
+      const place = action === "savePlace" ? await saveAttendancePlace(database(), branchId, body) : await readAttendancePlace(database(), branchId);
+      return json({ ok: true, place, log: await listAttendanceAttempts(database(), branchId, 30) });
+    }
     if (action === "records") {
       const st = (await readHaloState(branchId)).state as Record<string, unknown>;
       return json({ ok: true, today, records: staffRecords(st, String(body.staffId || ""), month) });
@@ -94,6 +101,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof StaffError) return json({ error: error.message }, error.status);
+    if (error instanceof PlaceError) return json({ error: error.message }, error.status);
     if (error instanceof ClosedDayError) return json({ error: error.message }, 409);
     if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     if (error instanceof LedgerError || (error instanceof Error && /filial/i.test(error.message))) return json({ error: error.message }, 400);
@@ -108,7 +116,7 @@ function page(branches: Array<{ id: string; name: string }>): string {
     subtitle: "Har bir xodim uchun oylik hisob varaqasi",
     headerRight: '<div class="row"><input type="month" id="month"><select id="branch"></select></div>',
     body: `<section class="card noprint" id="checkCard"><h2>Nazorat</h2><div id="checks"><p class="hint">Yuklanmoqda…</p></div></section>
-<section class="card noprint"><div class="row"><button class="ghost" id="manage">👥 Xodimlar ro‘yxati va stavkalar</button></div><div id="staffBox"></div></section>
+<section class="card noprint"><div class="row"><button class="ghost" id="manage">👥 Xodimlar ro‘yxati va stavkalar</button><button class="ghost" id="place">📍 Keldim / ketdim joyi</button></div><div id="staffBox"></div></section>
 <section class="card noprint" id="listCard"><h2>Xodimlar</h2><div id="list"></div></section>
 <section class="card" id="slipCard" hidden></section>${STAFF_DAYS_STYLE}`,
     script: `
@@ -255,6 +263,8 @@ function staffForm(m){
   });
 }
 sel.addEventListener('change',function(){STAFF=null;ACC=null;load()});mon.addEventListener('change',load);load();
-${STAFF_DAYS_SCRIPT}`,
+${STAFF_DAYS_SCRIPT}${ATTENDANCE_PLACE_SCRIPT}
+document.getElementById('place').addEventListener('click',function(){placeBox('')});
+`,
   });
 }

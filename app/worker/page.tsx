@@ -214,7 +214,26 @@ type AttendanceView = {
   openShift?: WorkerAttendanceShift | null;
   todayStatus?: { status: "off" | "absent" | "sick"; note: string } | null;
   earnings?: WorkerMonthlyEarnings;
+  /** Davomat joyi: yoqilgan bo'lsa tugma faqat oshxona yaqinida ishlaydi (server tekshiradi). */
+  place?: { required: boolean; radius: number };
 };
+type WorkerLocation = { lat: number; lng: number; accuracy: number };
+/** Telefon joylashuvi (faqat davomat joyi yoqilgan filialda so'raladi; serverda saqlanmaydi — masofa hisoblanadi). */
+function workerLocation(): Promise<WorkerLocation> {
+  return new Promise((resolve, reject) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      reject(new Error("Bu telefon joylashuvni bera olmaydi. Rahbarga ayting."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy }),
+      (error) => reject(new Error(error.code === 1
+        ? "Joylashuvga ruxsat bering: telefon sozlamalarida brauzer uchun «Joylashuv»ni yoqing va qayta bosing."
+        : "Joylashuv aniqlanmadi. GPS yoqilganini tekshiring va qayta bosing.")),
+      { enableHighAccuracy: true, timeout: 20_000, maximumAge: 0 },
+    );
+  });
+}
 type WorkerOperationsView = {
   role: "worker";
   date: string;
@@ -1011,12 +1030,21 @@ export default function WorkerPage() {
     setAttendanceBusy(true);
     setAttendanceNotice("");
     try {
-      const response = await fetch("/api/attendance", {
+      type SaveResult = AttendanceView & { error?: string; code?: string; updatedAt?: string; telegramRules?: { sent?: boolean } };
+      const send = (location?: WorkerLocation) => fetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, month: attendanceMonth }),
+        body: JSON.stringify({ action, month: attendanceMonth, ...(location ? { location } : {}) }),
       });
-      const value = await response.json() as AttendanceView & { error?: string; updatedAt?: string; telegramRules?: { sent?: boolean } };
+      // Davomat joyi yoqilgan bo'lsa, avval telefon joylashuvi olinadi; server masofani o'zi tekshiradi.
+      let location = attendance?.place?.required ? await workerLocation() : undefined;
+      let response = await send(location);
+      let value = await response.json() as SaveResult;
+      if (!response.ok && value.code === "LOCATION_REQUIRED" && !location) {
+        location = await workerLocation();
+        response = await send(location);
+        value = await response.json() as SaveResult;
+      }
       if (!response.ok) throw new Error(value.error || t("attendance.saveError"));
       // Ignore every GET response that started while this mutation was pending.
       attendanceVersion.current += 1;
