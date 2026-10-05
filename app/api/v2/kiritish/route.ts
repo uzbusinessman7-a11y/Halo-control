@@ -266,7 +266,7 @@ function drawRecent(){
 }
 
 /* ---------- Xarajat ---------- */
-var EXP={cat:'',acc:''};
+var EXP={cat:'',acc:''},FOLD={rec:false,oil:false};
 function renderExpense(){
   var pane=document.getElementById('pane'),d=DATA;
   if(!EXP.acc&&d.accounts.length)EXP.acc=d.accounts[0].id;
@@ -289,6 +289,7 @@ function renderExpense(){
   document.getElementById('xAcc').addEventListener('change',function(){EXP.acc=this.value});
   document.getElementById('xSave').addEventListener('click',function(){saveExpense()});
   document.getElementById('reNew').addEventListener('click',function(){recurringForm(null)});
+  pane.querySelectorAll('details[data-fold]').forEach(function(el){el.addEventListener('toggle',function(){FOLD[el.dataset.fold]=el.open})});
   bindOil();
   pane.querySelectorAll('[data-re]').forEach(function(b){b.addEventListener('click',function(){recurringForm((DATA.recurring||[]).find(function(r){return r.id===b.dataset.re}))})});
   pane.querySelectorAll('[data-xc]').forEach(function(b){b.addEventListener('click',function(){var e=d.expenses.find(function(x){return x.id===b.dataset.xc});
@@ -297,12 +298,12 @@ function renderExpense(){
 /* ---------- Chicken moyi ---------- */
 var OILT='purchase';
 function oilCard(d){var o=d.oil||{entries:[],bought:{cans:0,amount:0},sold:{cans:0,amount:0},canLiters:18};
-  return '<section class="card"><h2>🛢 Chicken moyi · shu oy</h2><div class="grid" style="margin-bottom:12px"><div class="kpi"><small>Sotib olindi</small><b>'+o.bought.cans+' kanistr</b><span class="hint">'+won(o.bought.amount)+'</span></div><div class="kpi"><small>Ishlatilgani sotildi</small><b>'+o.sold.cans+' kanistr</b><span class="hint">'+won(o.sold.amount)+'</span></div></div>'
+  return '<section class="card fold"><details data-fold="oil"'+(FOLD.oil?' open':'')+'><summary><span><b>🛢 Chicken moyi</b><small>Shu oy: olindi '+o.bought.cans+' kanistr · '+won(o.bought.amount)+(o.sold.cans?' · sotildi '+o.sold.cans+' kanistr':'')+'</small></span></summary><div class="grid" style="margin-bottom:12px"><div class="kpi"><small>Sotib olindi</small><b>'+o.bought.cans+' kanistr</b><span class="hint">'+won(o.bought.amount)+'</span></div><div class="kpi"><small>Ishlatilgani sotildi</small><b>'+o.sold.cans+' kanistr</b><span class="hint">'+won(o.sold.amount)+'</span></div></div>'
     +'<div class="pay" style="grid-template-columns:1fr 1fr;margin-bottom:12px"><button class="'+(OILT==='purchase'?'':'ghost')+'" data-oil="purchase">Yangi moy xaridi</button><button class="'+(OILT==='resale'?'':'ghost')+'" data-oil="resale">Ishlatilganini sotish</button></div>'
     +'<div class="row"><label class="field" style="flex:1"><span>Kanistr soni ('+o.canLiters+' L)</span><input id="oC" inputmode="numeric" placeholder="1"></label><label class="field" style="flex:1"><span>1 kanistr narxi (₩)</span><input id="oP" inputmode="numeric" placeholder="0"></label></div>'
     +'<label class="field"><span>'+(OILT==='purchase'?'Qaysi hisobdan to‘landi':'Pul qaysi hisobga tushdi')+'</span><select id="oA">'+d.accounts.map(function(a){return '<option value="'+esc(a.id)+'">'+esc(a.name)+'</option>'}).join('')+'</select></label>'
     +'<div class="row" style="justify-content:space-between"><b id="oT">0 ₩</b><button id="oS">Saqlash</button></div><div id="oMsg"></div>'
-    +(o.entries.length?'<div style="margin-top:12px">'+o.entries.map(function(e){return '<div class="list-row"><div><b>'+(e.type==='purchase'?'Xarid':'Sotuv')+' · '+e.cans+' kanistr</b><br><small style="color:var(--muted)">'+esc(e.date)+(e.account?' · '+esc(e.account):'')+'</small></div><div style="text-align:right"><b>'+won(e.amount)+'</b><br><button class="ghost" data-orm="'+esc(e.id)+'" style="min-height:30px;padding:2px 10px;margin-top:4px">Olib tashlash</button></div></div>'}).join('')+'</div>':'')+'</section>'}
+    +(o.entries.length?'<div style="margin-top:12px">'+o.entries.map(function(e){return '<div class="list-row"><div><b>'+(e.type==='purchase'?'Xarid':'Sotuv')+' · '+e.cans+' kanistr</b><br><small style="color:var(--muted)">'+esc(e.date)+(e.account?' · '+esc(e.account):'')+'</small></div><div style="text-align:right"><b>'+won(e.amount)+'</b><br><button class="ghost" data-orm="'+esc(e.id)+'" style="min-height:30px;padding:2px 10px;margin-top:4px">Olib tashlash</button></div></div>'}).join('')+'</div>':'')+'</details></section>'}
 function bindOil(){var c=document.getElementById('oC'),pr=document.getElementById('oP');if(!c)return;
   var tot=function(){var n=digits(c.value)*digits(pr.value);document.getElementById('oT').textContent=won(n);return n};
   pr.addEventListener('input',function(){var v=digits(pr.value);pr.value=v?v.toLocaleString('en-US'):'';tot()});c.addEventListener('input',tot);
@@ -318,9 +319,9 @@ function bindOil(){var c=document.getElementById('oC'),pr=document.getElementByI
 /* ---------- Har oy avtomatik xarajatlar ---------- */
 var REC=null;
 function recurringCard(d){var list=d.recurring||[],act=list.filter(function(r){return r.active});
-  return '<section class="card"><h2>🔁 Har oy avtomatik xarajatlar · '+won(act.reduce(function(s2,r){return s2+r.amount},0))+'</h2><p class="hint">Ijara, internet, sug‘urta kabi har oy bir xil to‘lovlar. Belgilangan kuni o‘zi yoziladi — har oy qo‘lda kiritish shart emas.</p>'
+  return '<section class="card fold"><details data-fold="rec"'+(FOLD.rec?' open':'')+'><summary><span><b>🔁 Har oy avtomatik xarajatlar</b><small>'+(act.length?act.length+' ta · har oy '+won(act.reduce(function(s2,r){return s2+r.amount},0)):'Hali yo‘q — ijara, internet kabi to‘lovlar uchun')+'</small></span></summary><p class="hint">Ijara, internet, sug‘urta kabi har oy bir xil to‘lovlar. Belgilangan kuni o‘zi yoziladi — har oy qo‘lda kiritish shart emas.</p>'
     +(list.length?list.map(function(r){return '<div class="list-row"><div style="min-width:0"><b>'+esc(r.name)+'</b>'+(r.active?'':' <span class="tag warn">to‘xtatilgan</span>')+'<br><small style="color:var(--muted)">'+esc(r.category)+' · har oy '+r.billingDay+'-kuni · '+esc(r.account)+(r.active&&r.nextDue?' · keyingisi '+esc(r.nextDue):'')+'</small></div><div style="text-align:right"><b>'+won(r.amount)+'</b><br><button class="ghost" data-re="'+esc(r.id)+'" style="min-height:30px;padding:2px 10px;margin-top:4px">'+(r.active?'Tahrir':'Qayta yoqish')+'</button></div></div>'}).join(''):'<p class="hint">Hali yo‘q.</p>')
-    +'<button class="ghost block" id="reNew" style="margin-top:10px">+ Oylik xarajat qo‘shish</button><div id="reForm"></div></section>'}
+    +'<button class="ghost block" id="reNew" style="margin-top:10px">+ Oylik xarajat qo‘shish</button><div id="reForm"></div></details></section>'}
 function recurringForm(r){var d=DATA,box=document.getElementById('reForm'),cats=d.categories.filter(function(c){return c!=='Soliq'});
   var day=r?r.billingDay:Number((d.today||'').slice(8,10))||1;
   box.innerHTML='<div class="card" style="background:var(--card-2);margin-top:12px"><h2>'+(r?'Tahrirlash — '+esc(r.name):'Yangi oylik xarajat')+'</h2>'

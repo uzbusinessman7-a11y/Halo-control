@@ -83,7 +83,7 @@ function page(branches: Array<{ id: string; name: string }>): string {
     headerRight: '<div class="row"><input type="date" id="date"><select id="branch"></select></div>',
     body: `<section class="card"><h2 id="sum">Tekshiruv</h2><p class="hint">Xodimlar ilovasida smena davomida belgilaydi. Siz ham shu yerda belgilashingiz yoki belgini olib tashlashingiz mumkin.</p><div id="phases"></div></section>
 <section class="card"><h2>Oxirgi kunlar</h2><div id="hist"></div></section>
-<section class="card"><h2>🍳 Oshxona qoidalari</h2><p class="hint">Xodim ishni boshlaganda va smena davomida belgilangan oraliqda Telegram guruhiga eslatiladi.</p><div id="rules"></div></section>`,
+<section class="card fold"><details><summary><span><b>🍳 Oshxona qoidalari</b><small>Xodimlarga eslatiladigan qoidalar — sozlash</small></span></summary><p class="hint">Xodim ishni boshlaganda va smena davomida belgilangan oraliqda Telegram guruhiga eslatiladi.</p><div id="rules"></div></details></section>`,
     script: `
 var BRANCHES=${boot},D=null;
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}

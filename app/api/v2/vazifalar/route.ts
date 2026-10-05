@@ -24,13 +24,16 @@ export async function GET(request: Request) {
     title: "Vazifalar", active: "vazifalar", heading: "Vazifalar",
     subtitle: "Vazifa yuboring — xodim ilovasida chiqadi, bajarilganini shu yerda ko‘rasiz",
     headerRight: '<select id="branch"></select>',
-    body: `<section class="card"><h2>Yangi vazifa</h2>
+    // Tartib: 1) nechta vazifa ochiq, 2) «Yangi vazifa» tugmasi (forma bosilganda ochiladi), 3) vazifalar ro'yxati.
+    body: `<section class="card"><div id="sum"><p class="hint" style="margin:0">Yuklanmoqda…</p></div>
+<button class="block" id="newBtn" style="margin-top:14px">＋ Yangi vazifa</button>
+<div id="newForm" hidden style="margin-top:16px"><h2>Yangi vazifa</h2>
 <label class="field"><span>Nima qilish kerak?</span><input id="tt" maxlength="120" placeholder="masalan: muzlatkichni tozalash"></label>
 <label class="field"><span>Batafsil (ixtiyoriy)</span><textarea id="td" maxlength="600" rows="3" style="width:100%"></textarea></label>
 <div class="row" style="gap:10px"><label class="field" style="flex:1"><span>Muhimligi</span><select id="tp"><option value="normal">Oddiy</option><option value="important">Muhim</option><option value="urgent">Shoshilinch</option></select></label>
 <label class="field" style="flex:1"><span>Muddat (ixtiyoriy)</span><input type="datetime-local" id="tdue"></label></div>
 <div class="field"><span>Kimga?</span><div id="who" style="display:grid;gap:6px;margin-top:6px"></div></div>
-<button class="block" id="send">Yuborish</button><div id="msg"></div></section>
+<div class="row"><button id="send" style="flex:1">Yuborish</button><button class="ghost" id="newX">Bekor</button></div></div><div id="msg"></div></section>
 <section class="card"><h2>Vazifalar</h2><div id="list"></div></section><style>.tag.ok{background:var(--ok-soft);color:var(--ok)}</style>`,
     script: `
 var BRANCHES=${boot};
@@ -47,6 +50,8 @@ function load(){
     document.getElementById('who').innerHTML=accs.length?'<label class="row" style="gap:8px"><input type="checkbox" id="all" style="width:18px;height:18px;min-height:auto"> <b>Hammasi</b></label>'+accs.map(function(a){return '<label class="row" style="gap:8px"><input type="checkbox" class="w" value="'+esc(a.id)+'" style="width:18px;height:18px;min-height:auto"> '+esc(a.name)+(a.telegramChatId?' <small style="color:var(--muted)">✈ Telegram</small>':'')+'</label>'}).join(''):'<p class="hint">Bu filialda xodim akkaunti yo‘q. Sozlamalar’da yarating.</p>';
     var all=document.getElementById('all');if(all)all.addEventListener('change',function(){document.querySelectorAll('.w').forEach(function(c){c.checked=all.checked})});
     var tasks=r[1].body.tasks||[];
+    var open=tasks.filter(function(t){return t.status==='new'||t.status==='started'}),done=tasks.filter(function(t){return t.status==='done'}).length;
+    document.getElementById('sum').innerHTML='<div class="total">'+open.length+' ta</div><p class="hint" style="margin:0">Bajarilmagan vazifa'+(open.length?' · yangi '+open.filter(function(t){return t.status==='new'}).length+' · boshlangan '+open.filter(function(t){return t.status==='started'}).length:'')+(done?' · bajarilgan '+done:'')+'</p>';
     document.getElementById('list').innerHTML=tasks.length?tasks.map(function(t){var st=ST[t.status]||[t.status,''];
       return '<div class="item" style="display:block"><div class="row" style="justify-content:space-between;gap:8px"><b>'+esc(t.title)+' '+(PR[t.priority]||'')+'</b><span class="tag '+st[1]+'">'+st[0]+'</span></div>'
         +(t.description?'<p style="margin:6px 0;color:var(--muted)">'+esc(t.description)+'</p>':'')
@@ -62,9 +67,12 @@ document.getElementById('send').addEventListener('click',function(){var btn=this
   var due=document.getElementById('tdue').value;
   btn.disabled=true;req('/api/worker-tasks','POST',{action:'create-bulk',branchId:sel.value,branchName:bname(),workerIds:ids,title:document.getElementById('tt').value.trim(),description:document.getElementById('td').value.trim(),priority:document.getElementById('tp').value,dueAt:due||''}).then(function(x){btn.disabled=false;
     if(!x.body.ok){m.innerHTML='<div class="msg bad">'+esc(x.body.error||'Yuborilmadi.')+'</div>';return}
-    m.innerHTML='<div class="msg ok">✓ '+x.body.created+' ta xodimga yuborildi'+(x.body.telegram&&x.body.telegram.sent?' · Telegram: '+x.body.telegram.sent:'')+'</div>';
-    document.getElementById('tt').value='';document.getElementById('td').value='';document.getElementById('tdue').value='';load()});
+    m.innerHTML='<div class="msg ok" style="margin-top:12px">✓ '+x.body.created+' ta xodimga yuborildi'+(x.body.telegram&&x.body.telegram.sent?' · Telegram: '+x.body.telegram.sent:'')+'</div>';
+    document.getElementById('tt').value='';document.getElementById('td').value='';document.getElementById('tdue').value='';showForm(false);load()});
 });
+function showForm(on){document.getElementById('newForm').hidden=!on;document.getElementById('newBtn').hidden=on;if(on){document.getElementById('msg').innerHTML='';document.getElementById('tt').focus()}}
+document.getElementById('newBtn').addEventListener('click',function(){showForm(true)});
+document.getElementById('newX').addEventListener('click',function(){showForm(false)});
 sel.addEventListener('change',load);load();
 `,
   }), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });

@@ -195,7 +195,7 @@ function page(branches: Array<{ id: string; name: string }>): string {
 <section class="card noprint" id="listCard"><h2>Yetkazib beruvchilar</h2><div id="list"><p class="hint">Yuklanmoqda…</p></div>
 <button class="ghost" id="addSup" style="margin-top:12px">+ Yangi yetkazib beruvchi</button><div id="supForm"></div></section>
 <section class="card" id="stCard" hidden></section>
-<section class="card noprint" id="histCard"></section>${SUPPLIER_INTAKE_STYLE}`,
+<section class="card fold noprint" id="histCard"></section>${SUPPLIER_INTAKE_STYLE}`,
     script: `
 var BRANCHES=${boot},TODAY='',PARTIES={},ACCOUNTS=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
