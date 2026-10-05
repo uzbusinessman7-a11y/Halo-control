@@ -292,7 +292,26 @@ const SCHEMA = [
     PRIMARY KEY (branch_id, order_id)
   )`,
   "CREATE INDEX IF NOT EXISTS v2_club_orders_recent ON v2_club_orders (branch_id, received_at)",
+  // Do'konning ochiq manzili (sinxronda o'zi bildiradi) — HALO Control do'konga murojaat qilishi uchun (manzil qidirish).
+  "CREATE TABLE IF NOT EXISTS v2_club_shop (branch_id TEXT PRIMARY KEY NOT NULL, url TEXT NOT NULL DEFAULT '', seen_at TEXT NOT NULL)",
 ];
+/** Do'kon manzili: faqat https://sayt-nomi (yo'l, port va IP manzilsiz) — boshqa narsa saqlanmaydi. */
+export function cleanShopUrl(value: unknown): string {
+  const url = String(value ?? "").trim().toLowerCase();
+  const host = url.startsWith("https://") ? url.slice(8) : "";
+  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(host) || /^\d+(\.\d+){3}$/.test(host) || host.length > 120) return "";
+  if (/(^|\.)(localhost|local|internal|lan|home|test|invalid)$/.test(host)) return "";
+  return `https://${host}`;
+}
+/** Ulangan do'kon: kalit xeshi (imzo uchun) va manzili. Ulanmagan yoki manzil hali kelmagan bo'lsa — null. */
+export async function clubShopLink(db: D1Like): Promise<{ keyHash: string; url: string } | null> {
+  await ensureClubSchema(db);
+  const row = await db.prepare(
+    "SELECT s.key_hash AS key_hash, p.url AS url FROM v2_club_settings s JOIN v2_club_shop p ON p.branch_id = s.branch_id WHERE s.key_hash <> '' AND p.url <> '' ORDER BY p.seen_at DESC LIMIT 1",
+  ).first<{ key_hash: string; url: string }>();
+  const url = cleanShopUrl(row?.url);
+  return row?.key_hash && url ? { keyHash: row.key_hash, url } : null;
+}
 // Jadvallar bir marta tekshiriladi (har so'rovda emas): do'kon boshqa mintaqadan chaqiradi, har bir baza so'rovi ~0,2 soniya turadi.
 const schemaReady = new WeakSet<object>();
 export async function ensureClubSchema(db: D1Like) {
@@ -417,7 +436,9 @@ export async function syncClubCatalog(db: D1Like, settings: ClubSettings, body: 
      ON CONFLICT(branch_id, kind, external_id) DO UPDATE SET name = excluded.name, category = excluded.category, price = excluded.price, active = excluded.active, seen_at = excluded.seen_at`,
   ).bind(branchId, item.kind, item.id, item.name, item.category, item.price, item.active ? 1 : 0, now, now));
   // Oxirgi to'plamga vaqt belgisi va ro'yxatni o'qish ham qo'shiladi — bitta baza so'rovi.
+  const shopUrl = cleanShopUrl(source.shopUrl);
   const tail = [
+    ...(shopUrl ? [db.prepare("INSERT INTO v2_club_shop (branch_id, url, seen_at) VALUES (?, ?, ?) ON CONFLICT(branch_id) DO UPDATE SET url = excluded.url, seen_at = excluded.seen_at").bind(branchId, shopUrl, now)] : []),
     db.prepare("INSERT OR IGNORE INTO v2_club_settings (branch_id, updated_at) VALUES (?, ?)").bind(branchId, now),
     db.prepare("UPDATE v2_club_settings SET last_sync_at = ? WHERE branch_id = ?").bind(now, branchId),
     db.prepare(PRODUCTS_SQL).bind(branchId),

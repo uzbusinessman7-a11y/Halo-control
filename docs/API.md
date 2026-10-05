@@ -45,6 +45,9 @@ Javob:
 }
 ```
 
+So'rovda ixtiyoriy `"shopUrl": "https://do'kon-sayti"` bo'lishi mumkin — do'kon o'z ochiq manzilini bildiradi (faqat
+`https://sayt-nomi` qabul qilinadi; manzil qidirish uchun ishlatiladi, `docs/davomat-joyi.md`).
+
 - `linked` — mahsulot HALO Control'dagi taomga (retseptga) bog'langanmi. Bog'lash **faqat rahbar tomonidan**, «Telegram do'kon»
   sahifasida qilinadi; do'kon yuborgan ma'lumot bog'lanishni o'zgartira olmaydi.
 - `price` — «Narx HALO Control'dan» yoqilgan va mahsulot bog'langan bo'lsa, taomning sotuv narxi; aks holda `null` (do'kon o'z narxini qoldiradi).
