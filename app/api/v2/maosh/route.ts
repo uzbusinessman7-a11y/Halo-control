@@ -8,6 +8,7 @@ import type { D1Like } from "../../../lib/full-migration";
 import { STAFF_DAYS_SCRIPT, STAFF_DAYS_STYLE } from "../../../core/staff-days-ui";
 import { listAttendanceAttempts, PlaceError, readAttendancePlace, saveAttendancePlace } from "../../../core/attendance-place";
 import { ATTENDANCE_PLACE_SCRIPT } from "../../../core/attendance-place-ui";
+import { GeocodeError, geocodeStatus, removeKakaoKey, saveKakaoKey, searchPlace } from "../../../core/geocode";
 import { shell } from "../../../core/ui-shell";
 import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
 
@@ -64,8 +65,12 @@ export async function POST(request: Request) {
     if (action === "place" || action === "savePlace") {
       // Keldim / ketdim joyi: filial bo'yicha nuqta, masofa va oxirgi urinishlar (xodim koordinatasi saqlanmaydi).
       const place = action === "savePlace" ? await saveAttendancePlace(database(), branchId, body) : await readAttendancePlace(database(), branchId);
-      return json({ ok: true, place, log: await listAttendanceAttempts(database(), branchId, 30) });
+      return json({ ok: true, place, log: await listAttendanceAttempts(database(), branchId, 30), geo: await geocodeStatus(database()) });
     }
+    // Manzil bo'yicha qidirish (Kakao). Kalit javobda qaytarilmaydi; qidiruv hech narsa saqlamaydi.
+    if (action === "geocode") return json({ ok: true, results: await searchPlace(database(), body.query) });
+    if (action === "saveGeoKey") return json({ ok: true, geo: await saveKakaoKey(database(), body.key) });
+    if (action === "removeGeoKey") return json({ ok: true, geo: await removeKakaoKey(database()) });
     if (action === "records") {
       const st = (await readHaloState(branchId)).state as Record<string, unknown>;
       return json({ ok: true, today, records: staffRecords(st, String(body.staffId || ""), month) });
@@ -102,6 +107,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof StaffError) return json({ error: error.message }, error.status);
     if (error instanceof PlaceError) return json({ error: error.message }, error.status);
+    if (error instanceof GeocodeError) return json({ error: error.message, code: error.code || undefined }, error.status);
     if (error instanceof ClosedDayError) return json({ error: error.message }, 409);
     if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     if (error instanceof LedgerError || (error instanceof Error && /filial/i.test(error.message))) return json({ error: error.message }, 400);

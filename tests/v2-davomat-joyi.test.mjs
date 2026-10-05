@@ -142,3 +142,81 @@ test('doirani kattalashtirish va o‘chirish; boshqa filialga ta’sir qilmaydi'
   const other = await place.readAttendancePlace(globalThis.__HALO_CONTROL_DB__, 'boshqa-filial');
   assert.deepEqual([other.enabled, other.hasPoint], [false, false]);
 });
+
+test('manzil bo‘yicha qidirish (Kakao): kalit tekshirib saqlanadi va qaytarilmaydi; natijadan joy tanlanadi', async () => {
+  const geocode = await import('../app/core/geocode.ts');
+  const KEY = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+  const calls = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(String(typeof input === 'string' ? input : input.url));
+    assert.equal(url.host, 'dapi.kakao.com', `kutilmagan tashqi so‘rov: ${url}`);
+    const auth = String((init.headers || {}).Authorization || '');
+    calls.push({ kind: url.pathname.split('/').pop().replace('.json', ''), query: url.searchParams.get('query'), auth });
+    if (auth === 'KakaoAK disabledkeydisabledkeydisabled00') return Response.json({ errorType: 'NotAuthorizedError', message: 'App(halo) disabled OPEN_MAP_AND_LOCAL service.' }, { status: 403 });
+    if (auth !== `KakaoAK ${KEY}`) return Response.json({ errorType: 'AccessDeniedError', message: 'wrong appKey' }, { status: 401 });
+    const query = url.searchParams.get('query');
+    if (query === 'yoq joy') return Response.json({ documents: [] });
+    if (url.pathname.endsWith('address.json')) {
+      return Response.json({ documents: query.includes('구월로') ? [{ address_name: '인천 남동구 구월동 1234', x: '126.7052', y: '37.4563', road_address: { address_name: '인천 남동구 구월로 123', building_name: 'HALO빌딩' } }, { address_name: 'buzuq', x: 'x', y: 'y' }] : [] });
+    }
+    return Response.json({ documents: [
+      { place_name: 'HALO 구월점', road_address_name: '인천 남동구 구월로 123', address_name: '인천 남동구 구월동 1234', x: '126.7052', y: '37.4563' },
+      { place_name: 'HALO 부평점', road_address_name: '인천 부평구 부평대로 45', address_name: '', x: '126.7219', y: '37.4899' },
+    ] });
+  };
+  try {
+    // Kalitsiz: qidiruv ishlamaydi, holat — "kiritilmagan".
+    assert.deepEqual((await ownerCall({ action: 'place' })).geo, { hasKey: false, savedAt: '' });
+    const noKey = await ownerCall({ action: 'geocode', query: '인천 남동구 구월로 123' });
+    assert.deepEqual([noKey.status, noKey.code], [400, 'NO_KEY']);
+    assert.equal(calls.length, 0, 'kalitsiz Kakao’ga so‘rov ketmaydi');
+    // Noto'g'ri yoki xizmati yoqilmagan kalit saqlanmaydi.
+    assert.equal((await ownerCall({ action: 'saveGeoKey', key: 'qisqa' })).status, 400);
+    const bad = await ownerCall({ action: 'saveGeoKey', key: 'ffffffffffffffffffffffffffffffff' });
+    assert.deepEqual([bad.status, bad.code], [400, 'BAD_KEY']);
+    const disabled = await ownerCall({ action: 'saveGeoKey', key: 'disabledkeydisabledkeydisabled00' });
+    assert.deepEqual([disabled.status, disabled.code], [400, 'MAP_DISABLED']);
+    assert.match(disabled.error, /카카오맵/);
+    assert.equal((await ownerCall({ action: 'place' })).geo.hasKey, false);
+    // To'g'ri kalit ("KakaoAK " bilan qo'yilsa ham) — tekshirilib saqlanadi; javobda kalit yo'q.
+    const saved = await ownerCall({ action: 'saveGeoKey', key: `  KakaoAK ${KEY} ` });
+    assert.deepEqual([saved.status, saved.geo.hasKey, Boolean(saved.geo.savedAt)], [200, true, true]);
+    assert.equal(JSON.stringify(saved).includes(KEY), false);
+    const settings = await ownerCall({ action: 'place' });
+    assert.equal(JSON.stringify(settings).includes(KEY), false, 'sozlash oynasiga kalit qaytarilmaydi');
+    assert.equal(JSON.stringify(state()).includes(KEY), false, 'kalit filial holatiga yozilmaydi');
+    // Qidiruv: manzil va joy nomi birga; bir xil nuqta bir marta; buzuq natija tashlanadi.
+    calls.length = 0;
+    const found = await ownerCall({ action: 'geocode', query: ' 인천 남동구  구월로 123 ' });
+    assert.equal(found.status, 200, JSON.stringify(found));
+    assert.deepEqual(calls.map((c) => [c.kind, c.query]).sort(), [['address', '인천 남동구 구월로 123'], ['keyword', '인천 남동구 구월로 123']]);
+    assert.deepEqual(found.results, [
+      { label: '인천 남동구 구월로 123 (HALO빌딩)', address: '인천 남동구 구월동 1234', lat: 37.4563, lng: 126.7052 },
+      { label: 'HALO 부평점', address: '인천 부평구 부평대로 45', lat: 37.4899, lng: 126.7219 },
+    ]);
+    assert.equal(JSON.stringify(found).includes(KEY), false);
+    assert.deepEqual((await ownerCall({ action: 'geocode', query: 'yoq joy' })).results, []);
+    assert.equal((await ownerCall({ action: 'geocode', query: 'a' })).status, 400);
+    // Qidiruv hech narsa saqlamaydi: joy rahbar tanlab «Saqlash»ni bosgandagina o'zgaradi.
+    const before = (await ownerCall({ action: 'place' })).place;
+    assert.deepEqual([before.lat, before.enabled], [KITCHEN.lat, false]);
+    const pick = found.results[1];
+    const set = await ownerCall({ action: 'savePlace', lat: pick.lat, lng: pick.lng, radius: 100, enabled: true });
+    assert.deepEqual([set.place.enabled, set.place.lat, set.place.lng, set.geo.hasKey], [true, 37.4899, 126.7219, true]);
+    assert.equal((await press('clock-in', north(10))).code, 'TOO_FAR', 'eski nuqta endi uzoqda (≈4 km)');
+    // Faqat rahbar: xodim qidira olmaydi va kalitni o'zgartira olmaydi.
+    for (const action of ['geocode', 'saveGeoKey', 'removeGeoKey']) {
+      const r = await maosh.POST(new Request(base + '/api/v2/maosh', { method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: JSON.stringify({ action, query: 'HALO', key: KEY }) }));
+      assert.equal(r.status, 401, action);
+    }
+    // Kalitni o'chirish: qidiruv to'xtaydi, saqlangan joy qoladi.
+    assert.equal((await ownerCall({ action: 'removeGeoKey' })).geo.hasKey, false);
+    assert.equal((await ownerCall({ action: 'geocode', query: 'HALO' })).code, 'NO_KEY');
+    assert.equal((await ownerCall({ action: 'place' })).place.lat, 37.4899);
+    assert.equal(sqlite.prepare("SELECT kakao_key FROM v2_geocode WHERE id = 'main'").get().kakao_key, '');
+    assert.ok(geocode.GeocodeError);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

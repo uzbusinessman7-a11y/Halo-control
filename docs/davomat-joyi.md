@@ -10,6 +10,25 @@ Sozlash: HALO Control → **Maosh** → **📍 Keldim / ketdim joyi** (har filia
 3. Server masofani hisoblaydi: doira ichida bo'lsa — yoziladi; uzoqda, joylashuvsiz yoki GPS juda noaniq bo'lsa — yozilmaydi
    va xodimga sababi aytiladi (necha metr uzoqdaligi bilan).
 
+## Joyni belgilashning uch yo'li
+
+1. **«📍 Hozir turgan joyim — oshxona»** — oshxonada turib bosiladi, telefon joyni o'zi aniqlaydi.
+2. **Manzil yoki joy nomi bo'yicha topish** — manzil koreyscha yoziladi (yoki do'kon nomi), «Topish» bosiladi, topilgan
+   joylardan o'zingizniki tanlanadi, xaritada tekshiriladi va saqlanadi. Qidiruv Kakao Local API orqali
+   (`app/core/geocode.ts`): avval aniq manzillar, keyin joy nomlari. Qidiruvning o'zi hech narsa saqlamaydi.
+3. **Koordinatani qo'lda yozish** — `37.456300, 126.705200` ko'rinishida.
+
+### Kakao kaliti
+
+Manzil qidirish uchun Kakao **REST API 키** kerak (developers.kakao.com → 내 애플리케이션 → ilova → 앱 키). Rahbar uni
+sozlash oynasida bir marta kiritadi:
+
+- kalit avval Kakao'da tekshiriladi — qabul qilinmagan kalit saqlanmaydi;
+- bazada `v2_geocode` jadvalida turadi (Telegram bot tokenlari kabi) va javoblarda **qaytarilmaydi** — sahifa faqat
+  «kiritilgan / kiritilmagan»ni biladi; repo'da kalit yo'q;
+- to'liq ko'chirish fayliga (eksport) boshqa jadvallar bilan birga tushadi — bu faylni hech kimga yubormang;
+- Kakao ilovasida «카카오맵» xizmati yoqilgan bo'lishi va «허용 IP» cheklovi bo'lmasligi kerak — aks holda sahifa sababini aytadi.
+
 ## Qoidalar
 
 - Cheklov **«Keldim»ga ham, «Ketdim»ga ham** tegishli. Xodim ketishni unutib uzoqlashsa, smena ochiq qoladi —
@@ -27,6 +46,6 @@ Sozlash: HALO Control → **Maosh** → **📍 Keldim / ketdim joyi** (har filia
   jurnalda ko'rinadi.
 - Sozlama (`v2_attendance_place`) va jurnal alohida jadvallarda — eski saytdan ma'lumot ko'chirilganda tegilmaydi.
 
-Kod: `app/core/attendance-place.ts` (qoidalar), `app/core/attendance-place-ui.ts` (rahbar oynasi),
+Kod: `app/core/attendance-place.ts` (qoidalar), `app/core/geocode.ts` (manzil qidirish), `app/core/attendance-place-ui.ts` (rahbar oynasi),
 `app/api/attendance/route.ts` (tekshiruv), `app/api/v2/xodim/route.ts` va `app/worker/page.tsx` (xodim telefoni joylashuvni
-yuboradi), `app/api/v2/maosh/route.ts` (`place`, `savePlace`). Sinovlar: `tests/v2-davomat-joyi.test.mjs`.
+yuboradi), `app/api/v2/maosh/route.ts` (`place`, `savePlace`, `geocode`, `saveGeoKey`, `removeGeoKey`). Sinovlar: `tests/v2-davomat-joyi.test.mjs`.
