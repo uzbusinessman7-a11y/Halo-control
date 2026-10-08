@@ -108,7 +108,7 @@ function load(){
       +kpi('Oy boshidan',won(s.monthToDate)+chg(s.monthToDate,s.lastMonthSamePeriod),'o‘tgan oy shu davr: '+won(s.lastMonthSamePeriod))
       +'</div></section>'
       +'<section class="card"><h2>Diqqat talab qiladi</h2>'+(r.alerts.length?r.alerts.map(function(a){return '<a class="alert '+a.level+'" href="/api/v2/'+a.page+'"><span>'+esc(a.text)+'</span><span class="go">Ochish ›</span></a>'}).join(''):'<div class="msg ok">✓ Hammasi joyida — muammo topilmadi</div>')+'</section>'
-      +'<section class="card"><h2>Savdo · so‘nggi 14 kun</h2>'+chart(s.days)+'</section>'
+      +'<section class="card"><h2>Savdo · so‘nggi 14 kun</h2>'+chart(s.days)+'<a href="/api/v2/savdo" style="text-decoration:none"><button class="ghost block" type="button" style="margin-top:12px">📅 Savdo kunlari — kunma-kun hammasi ›</button></a></section>'
       +'<section class="card"><h2>Prime cost · oy boshidan</h2><div class="row" style="justify-content:space-between;align-items:baseline"><span class="big" style="color:'+(pp==null?'inherit':color)+'">'+(pp==null?'—':pp+'%')+'</span><span class="hint" style="margin:0">Maqsad: 62% dan past</span></div>'
       +'<div class="gauge"><i style="width:'+Math.min(100,pp||0)+'%;background:'+color+'"></i></div>'
       +'<p class="hint">Oziq-ovqat tannarxi + ish haqi, savdoga nisbatan. Restoranning eng muhim ko‘rsatkichi.</p>'

@@ -34,7 +34,9 @@ test('ulanishlar sahifasi, guruhli menyu va “⋯ Yana” oynasi', async () => 
   assert.match(sub, />Filiallar</);
   assert.doesNotMatch(sub, />Maosh<|>Chiqish</, 'boshqa turkum bo‘limlari va «Chiqish» aralashmaydi');
   const home = shell({ title: 'x', active: 'bosh', body: '', script: '' });
-  assert.doesNotMatch(home, /<nav class="subnav"/, 'bitta sahifali guruhda tepada tugmachalar yo‘q');
+  const homeSub = home.match(/<nav class="subnav"[\s\S]*?<\/nav>/)[0];
+  assert.match(homeSub, /class="sub-a on"[^>]*>Bosh sahifa</, 'Bosh guruhi: Bosh sahifa belgilangan');
+  assert.match(homeSub, /href="\/api\/v2\/savdo"[^>]*>Savdo kunlari</, 'Bosh guruhi: Savdo kunlari');
   assert.doesNotMatch(home, /nav-more js-more on/, 'asosiy sahifada “Yana” yoqilmagan');
   assert.doesNotThrow(() => new vm.Script(home.match(/<script>([\s\S]*?)<\/script>/)[1]));
   const worker = shell({ title: 'x', active: null, body: '', script: '' });

@@ -14,7 +14,7 @@
  * Har sahifa faqat bitta joyda turadi.
  */
 export type NavKey =
-  | "bosh"
+  | "bosh" | "savdo"
   | "kiritish" | "kassa" | "nazorat"
   | "qarz" | "mezana"
   | "ombor" | "menyu"
@@ -32,6 +32,7 @@ interface NavGroup { key: string; label: string; title: string; icon: string; pa
 export const NAV_GROUPS: NavGroup[] = [
   { key: "bosh", label: "Bosh", title: "Bosh sahifa", icon: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>', pages: [
     { key: "bosh", href: "/api/v2/bosh", label: "Bosh sahifa" },
+    { key: "savdo", href: "/api/v2/savdo", label: "Savdo kunlari" },
   ] },
   { key: "kundalik", label: "Kundalik", title: "Kundalik ish", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>', pages: [
     { key: "kiritish", href: "/api/v2/kiritish", label: "Kiritish" },
