@@ -7,7 +7,7 @@ doim ko‘z oldida, **kam ishlatiladiganlar** “⋯ Yana” ichida turkum-turku
 
 | Guruh | Bo‘limlar |
 | --- | --- |
-| Bosh | Bosh sahifa |
+| Bosh | Bosh sahifa · Savdo kunlari |
 | Kundalik ish | Kiritish · Kassa · Kunlik nazorat |
 | Xarid va qarz | Yetkazib beruvchilar · MEZANA |
 | Ombor va menyu | Ombor · Menyu |
@@ -47,6 +47,7 @@ Har bir bo‘limda ma’lumot bir xil ketma-ketlikda turadi:
 | Sahifa | Raqam | Asosiy amal | Pastda (yig‘ilgan / kam ishlatiladigan) |
 | --- | --- | --- | --- |
 | Bosh sahifa | Savdo: bugun, kecha, oy boshidan | — | Kunlik Telegram hisobot |
+| Savdo kunlari | Davr jami (POS, HALO hisob, delivery, bonus) | POS kiritilmagan kunlar | «Qanday hisoblanadi» |
 | Kiritish → Xarajat | — | Xarajat kiritish | Har oy avtomatik xarajatlar · Chicken moyi (forma ostida, yig‘ilgan) |
 | Kassa | Pul qayerda | Kassani sanash · O‘tkazma · Kirim | Oldingi kunlar (7 kundan eskisi) |
 | Kunlik nazorat | Bugungi tekshiruv | — | Oshxona qoidalari (sozlash) |

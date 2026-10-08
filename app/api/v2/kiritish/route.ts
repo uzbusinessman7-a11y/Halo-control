@@ -179,6 +179,8 @@ function post(url,body){return fetch(url,{method:'POST',headers:{'Content-Type':
 var sel=document.getElementById('branch'),dt=document.getElementById('date');
 sel.innerHTML=BRANCHES.map(function(b){return '<option value="'+esc(b.id)+'">'+esc(b.name)+'</option>'}).join('');haloBranch(sel);
 var TABS={sale:'🧾 Savdo',pos:'📊 POS hisobot',expense:'💸 Xarajat',meal:'🍽 Yeyilgan / isrof'};
+/* «Savdo kunlari»dan kelganda: ?sana=YYYY-MM-DD — shu kun, ?t=pos — shu bo'lim ochiladi. */
+(function(){var q=new URLSearchParams(location.search),s=q.get('sana')||'',t=q.get('t')||'';if(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(s))dt.value=s;if(TABS[t])TAB=t})();
 /* Mahsulot kirimi — alohida yo'l emas: «Xarid» bo'limidagi yagona «Yangi kirim» oynasiga olib boradi. */
 function tabs(){document.getElementById('tabs').innerHTML=Object.keys(TABS).map(function(k){return '<button class="'+(k===TAB?'':'ghost')+'" data-t="'+k+'">'+TABS[k]+'</button>'}).join('')
     +'<a href="/api/v2/qarz?kirim=1" style="text-decoration:none"><button class="ghost" type="button">📦 Mahsulot kirimi ›</button></a>';
