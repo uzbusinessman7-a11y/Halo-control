@@ -8,6 +8,8 @@ import type { D1Like } from "../../../lib/full-migration";
 import { STAFF_DAYS_SCRIPT, STAFF_DAYS_STYLE } from "../../../core/staff-days-ui";
 import { listAttendanceAttempts, PlaceError, readAttendancePlace, saveAttendancePlace } from "../../../core/attendance-place";
 import { ATTENDANCE_PLACE_SCRIPT } from "../../../core/attendance-place-ui";
+import { saveWorkHours, workHoursList, WorkHoursError } from "../../../core/work-hours";
+import { WORK_HOURS_SCRIPT, WORK_HOURS_STYLE } from "../../../core/work-hours-ui";
 import { GeocodeError, geocodeStatus, removeKakaoKey, saveKakaoKey, searchPlace } from "../../../core/geocode";
 import { shell } from "../../../core/ui-shell";
 import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
@@ -32,9 +34,9 @@ export async function GET(request: Request) {
     return new Response(null, { status: 303, headers: { Location: `/signin-with-chatgpt?return_to=${encodeURIComponent(PAGE_PATH)}` } });
   }
   const branches = (await listHaloBranches()).map((branch) => ({ id: branch.id, name: branch.name }));
-  // Xodimlar → «Keldim / ketdim joyi» shu sahifaning alohida ko'rinishi (?b=joy).
-  const joy = new URL(request.url).searchParams.get("b") === "joy";
-  return new Response(page(branches, joy), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  // Xodimlar sozlamasi: «Keldim / ketdim joyi» (?b=joy) va «Qat'iy ish vaqti» (?b=vaqt) — shu sahifaning alohida ko'rinishlari.
+  const b = new URL(request.url).searchParams.get("b");
+  return new Response(page(branches, b === "joy" ? "joy" : b === "vaqt" ? "vaqt" : ""), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -73,6 +75,12 @@ export async function POST(request: Request) {
     if (action === "geocode") return json({ ok: true, results: await searchPlace(database(), body.query) });
     if (action === "saveGeoKey") return json({ ok: true, geo: await saveKakaoKey(database(), body.key) });
     if (action === "removeGeoKey") return json({ ok: true, geo: await removeKakaoKey(database()) });
+    // Qat'iy ish vaqti: xodim erta kelsa ham hisob belgilangan vaqtdan. Smenalarga tegmaydi — keyingi «ISHNI BOSHLADIM»dan ishlaydi.
+    if (action === "hours") return json({ ok: true, hours: workHoursList((await readHaloState(branchId)).state as Record<string, unknown>) });
+    if (action === "saveHours") {
+      const saved = await mutateHaloState((cur) => saveWorkHours(cur as Record<string, unknown>, body), 5, branchId, "Rahbar", "Qat’iy ish vaqti saqlandi", "Maosh (yangi)");
+      return json({ ok: true, changed: (saved.result as { changed: number }).changed, hours: workHoursList(saved.state as Record<string, unknown>) });
+    }
     if (action === "records") {
       const st = (await readHaloState(branchId)).state as Record<string, unknown>;
       return json({ ok: true, today, records: staffRecords(st, String(body.staffId || ""), month) });
@@ -109,6 +117,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof StaffError) return json({ error: error.message }, error.status);
     if (error instanceof PlaceError) return json({ error: error.message }, error.status);
+    if (error instanceof WorkHoursError) return json({ error: error.message }, error.status);
     if (error instanceof GeocodeError) return json({ error: error.message, code: error.code || undefined }, error.status);
     if (error instanceof ClosedDayError) return json({ error: error.message }, 409);
     if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
@@ -117,18 +126,22 @@ export async function POST(request: Request) {
   }
 }
 
-function page(branches: Array<{ id: string; name: string }>, joy = false): string {
+function page(branches: Array<{ id: string; name: string }>, view: "" | "joy" | "vaqt" = ""): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
+  // `joy` — sozlash ko'rinishi (joy yoki vaqt): maosh kartalari yashiriladi, faqat sozlash oynasi qoladi.
+  const joy = view !== "";
+  const vaqt = view === "vaqt";
+  const name = vaqt ? "Qat’iy ish vaqti" : joy ? "Keldim / ketdim joyi" : "Maosh";
   return shell({
-    title: joy ? "Keldim / ketdim joyi" : "Maosh", active: joy ? "joy" : "maosh", heading: joy ? "Keldim / ketdim joyi" : "Maosh",
-    subtitle: joy ? "Xodim «ISHNI BOSHLADIM / TUGATDIM»ni faqat oshxona yaqinida bosa oladi" : "Har bir xodim uchun oylik hisob varaqasi",
+    title: name, active: vaqt ? "vaqt" : joy ? "joy" : "maosh", heading: name,
+    subtitle: vaqt ? "Xodim erta kelsa ham hisob belgilangan vaqtdan boshlanadi" : joy ? "Xodim «ISHNI BOSHLADIM / TUGATDIM»ni faqat oshxona yaqinida bosa oladi" : "Har bir xodim uchun oylik hisob varaqasi",
     headerRight: `<div class="row"><input type="month" id="month"${joy ? " hidden" : ""}><select id="branch"></select></div>`,
     // Tartib: 1) to'lash qolgan summa, 2) nazorat, 3) xodimlar ro'yxati (bosilsa — varaqa), 4) sozlash — pastda.
     body: `<section class="card noprint" id="sumCard"${joy ? " hidden" : ""}><div id="sum"><p class="hint" style="margin:0">Yuklanmoqda…</p></div></section>
 <section class="card noprint" id="checkCard"${joy ? " hidden" : ""}><h2>Nazorat</h2><div id="checks"><p class="hint">Yuklanmoqda…</p></div></section>
 <section class="card noprint" id="listCard"${joy ? " hidden" : ""}><h2>Xodimlar</h2><div id="list"></div></section>
 <section class="card" id="slipCard" hidden></section>
-<section class="noprint"><div class="row"${joy ? " hidden" : ""}><button class="ghost" id="manage">👥 Xodimlar ro‘yxati va stavkalar</button></div><div id="staffBox"></div></section>${STAFF_DAYS_STYLE}`,
+<section class="noprint"><div class="row"${joy ? " hidden" : ""}><button class="ghost" id="manage">👥 Xodimlar ro‘yxati va stavkalar</button><a href="/api/v2/maosh?b=vaqt" style="text-decoration:none"><button class="ghost" type="button">⏰ Qat’iy ish vaqti ›</button></a></div><div id="staffBox"></div></section>${STAFF_DAYS_STYLE}${WORK_HOURS_STYLE}`,
     script: `
 var BRANCHES=${boot},MONTH='',OLD={},STAFF=null,ACC=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -220,6 +233,9 @@ function actionForm(kind,staffId,employeeId,name){
 }
 function hm(iso){if(!iso)return '—';try{return new Date(iso).toLocaleTimeString('en-GB',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit'})}catch(e){return '—'}}
 var DAYST={off:'Dam olish',sick:'Kasal',absent:'Kelmadi'},PAYK={advance:'Avans',salary:'Oylik'};
+/* Qat'iy ish vaqti: asl vaqt ko'rinib turadi, yoniga haq qaysi vaqtdan (qaysi vaqtgacha) yurgani yoziladi. */
+function payNote(x){var p=x.pay;if(!p)return '';var a=Date.parse(x.clockIn)<Date.parse(p.from),b=!!(p.until&&x.clockOut&&Date.parse(x.clockOut)>Date.parse(p.until));
+  if(!a&&!b)return '';return '<br><span style="color:var(--warn);font-weight:700">⏰ hisob '+(a?hm(p.from)+' dan':'')+(a&&b?' ':'')+(b?hm(p.until)+' gacha':'')+'</span>'}
 function recordsBox(staffId,employeeId,name){
   var box=document.getElementById('actBox');box.innerHTML='<p class="hint">Yuklanmoqda…</p>';
   api({action:'records',branchId:sel.value,staffId:staffId,month:MONTH}).then(function(r){
@@ -227,7 +243,7 @@ function recordsBox(staffId,employeeId,name){
     var btn=function(a,id,t){return '<button class="ghost" data-fx="'+a+'" data-id="'+esc(id)+'" style="min-height:34px;padding:2px 9px;font-size:13.5px">'+t+'</button>'};
     var off=function(x){return x?' <span class="tag bad">bekor</span>':''};
     box.innerHTML='<div class="card" style="background:var(--card-2);margin-top:12px"><h2>'+esc(name)+' — '+esc(MONTH)+' yozuvlari</h2><p class="hint">Hech narsa o‘chirilmaydi: sababi bilan bekor qilinadi yoki tuzatiladi, varaqa qayta hisoblanadi.</p>'
-      +'<h3 style="font-size:15px;margin:12px 0 4px">Smenalar</h3>'+(R.shifts.length?R.shifts.map(function(x){var v=x.status==='void';return '<div class="list-row"><div style="min-width:0"><b style="font-size:15px">'+esc(x.date.slice(5))+' <span style="white-space:nowrap">'+hm(x.clockIn)+'–'+(x.clockOut?hm(x.clockOut):'<span class="tag warn">ishda</span>')+'</span></b>'+off(v)+'<br><small style="color:var(--muted)">'+(x.breakMinutes?'tanaffus '+x.breakMinutes+' daq · ':'')+esc(x.source==='owner'?'rahbar kiritgan':'xodim belgilagan')+(v&&x.voidReason?' · '+esc(x.voidReason):'')+'</small></div><div class="row" style="gap:6px;flex-wrap:nowrap">'+(v?'':btn('editShift',x.id,'✏️')+btn('voidShift',x.id,'Bekor'))+'</div></div>'}).join(''):'<p class="hint">Yo‘q</p>')
+      +'<h3 style="font-size:15px;margin:12px 0 4px">Smenalar</h3>'+(R.shifts.length?R.shifts.map(function(x){var v=x.status==='void';return '<div class="list-row"><div style="min-width:0"><b style="font-size:15px">'+esc(x.date.slice(5))+' <span style="white-space:nowrap">'+hm(x.clockIn)+'–'+(x.clockOut?hm(x.clockOut):'<span class="tag warn">ishda</span>')+'</span></b>'+off(v)+'<br><small style="color:var(--muted)">'+(x.breakMinutes?'tanaffus '+x.breakMinutes+' daq · ':'')+esc(x.source==='owner'?'rahbar kiritgan':'xodim belgilagan')+(v&&x.voidReason?' · '+esc(x.voidReason):'')+(v?'':payNote(x))+'</small></div><div class="row" style="gap:6px;flex-wrap:nowrap">'+(v?'':btn('editShift',x.id,'✏️')+btn('voidShift',x.id,'Bekor'))+'</div></div>'}).join(''):'<p class="hint">Yo‘q</p>')
       +'<h3 style="font-size:15px;margin:12px 0 4px">Dam / kasal / kelmadi</h3>'+(R.days.length?R.days.map(function(x){return '<div class="list-row"><div><b>'+esc(x.date.slice(5))+' · '+esc(DAYST[x.status]||x.status)+'</b>'+off(x.voided)+'<br><small style="color:var(--muted)">'+(x.payMode==='planned'?'haq to‘lanadi':'haq to‘lanmaydi')+(x.note?' · '+esc(x.note):'')+'</small></div>'+(x.voided?'<span></span>':btn('voidDay',x.id,'Bekor'))+'</div>'}).join(''):'<p class="hint">Yo‘q</p>')
       +'<h3 style="font-size:15px;margin:12px 0 4px">Bonus va ushlanma</h3>'+(R.adjustments.length?R.adjustments.map(function(x){return '<div class="list-row"><div><b>'+esc(x.date.slice(5))+' · '+(x.type==='bonus'?'Bonus':x.type==='advance'?'Avans (eski)':'Ushlanma')+' '+won(x.amount)+'</b>'+off(x.voided)+'<br><small style="color:var(--muted)">'+esc(x.note)+'</small></div>'+(x.voided?'<span></span>':btn('voidAdj',x.id,'Bekor'))+'</div>'}).join(''):'<p class="hint">Yo‘q</p>')
       +'<h3 style="font-size:15px;margin:12px 0 4px">To‘lovlar</h3>'+(R.payments.length?R.payments.map(function(x){return '<div class="list-row"><div><b>'+esc(x.date.slice(5))+' · '+esc(PAYK[x.kind]||x.kind)+' '+won(x.amount)+'</b>'+off(x.voided)+'<br><small style="color:var(--muted)">'+esc(x.month)+' uchun'+(x.account?' · '+esc(x.account):'')+(x.note?' · '+esc(x.note):'')+'</small></div>'+(x.voided?'<span></span>':btn('voidPay',x.id,'Bekor'))+'</div>'}).join(''):'<p class="hint">Yo‘q</p>')
@@ -235,10 +251,10 @@ function recordsBox(staffId,employeeId,name){
     box.querySelectorAll('[data-fx]').forEach(function(b){b.addEventListener('click',function(){
       var a=b.dataset.fx,id=b.dataset.id,done=function(x){if(!x.ok){alert(x.error||'Bo‘lmadi.');return}STAFF=x.staff;load();setTimeout(function(){openSlip(employeeId);setTimeout(function(){recordsBox(staffId,employeeId,name)},600)},700)};
       if(a==='editShift'){var s2=R.shifts.find(function(x){return x.id===id});var fb=document.getElementById('fxBox');
-        fb.innerHTML='<div class="card" style="margin-top:12px"><h2>Smenani tuzatish · '+esc(s2.date)+'</h2><div class="row"><label class="field" style="flex:1"><span>Keldi</span><input type="time" id="eFrom" value="'+hm(s2.clockIn)+'"></label><label class="field" style="flex:1"><span>Ketdi</span><input type="time" id="eTo" value="'+(s2.clockOut?hm(s2.clockOut):'')+'"></label><label class="field" style="flex:1"><span>Tanaffus (daq)</span><input id="eBr" inputmode="numeric" value="'+s2.breakMinutes+'"></label></div><label class="field"><span>Sabab</span><input id="eWhy" maxlength="300" placeholder="Masalan: ketishni belgilashni unutgan"></label><button class="block" id="eSave">Saqlash</button></div>';
+        fb.innerHTML='<div class="card" style="margin-top:12px"><h2>Smenani tuzatish · '+esc(s2.date)+'</h2><div class="row"><label class="field" style="flex:1"><span>Keldi</span><input type="time" id="eFrom" value="'+hm(s2.clockIn)+'"></label><label class="field" style="flex:1"><span>Ketdi</span><input type="time" id="eTo" value="'+(s2.clockOut?hm(s2.clockOut):'')+'"></label><label class="field" style="flex:1"><span>Tanaffus (daq)</span><input id="eBr" inputmode="numeric" value="'+s2.breakMinutes+'"></label></div><label class="field"><span>Sabab</span><input id="eWhy" maxlength="300" placeholder="Masalan: ketishni belgilashni unutgan"></label>'+(s2.pay?'<p class="hint" style="margin:0 0 8px">⏰ Qat’iy ish vaqti: hisob '+hm(s2.pay.from)+' dan'+(s2.pay.until?' '+hm(s2.pay.until)+' gacha':'')+'. Undan tashqari vaqt hisoblanmaydi.</p><label class="row" style="gap:8px;margin-bottom:12px;flex-wrap:nowrap;align-items:flex-start"><input type="checkbox" id="eFree" style="width:20px;height:20px;min-height:auto;flex:0 0 auto;margin-top:2px"> <span>Bu smenada qat’iy vaqt qo‘llanmasin — yozilgan vaqt to‘liq hisoblanadi</span></label>':'')+'<button class="block" id="eSave">Saqlash</button></div>';
         fb.scrollIntoView({behavior:'smooth',block:'center'});
         document.getElementById('eSave').addEventListener('click',function(){var why=document.getElementById('eWhy').value.trim();if(why.length<3){alert('Sababini yozing.');return}this.disabled=true;
-          api({action:'editShift',branchId:sel.value,id:id,from:document.getElementById('eFrom').value,to:document.getElementById('eTo').value,breakMinutes:digits(document.getElementById('eBr').value),reason:why}).then(done)});return}
+          api({action:'editShift',branchId:sel.value,id:id,from:document.getElementById('eFrom').value,to:document.getElementById('eTo').value,breakMinutes:digits(document.getElementById('eBr').value),reason:why,free:!!(document.getElementById('eFree')||{}).checked}).then(done)});return}
       var why=prompt(a==='voidPay'?'To‘lov bekor qilinadi, pul hisobga qaytadi (bugungi sana bilan). Sababi:':'Bekor qilish sababi:');if(!why||why.trim().length<3)return;b.disabled=true;
       api({action:a,branchId:sel.value,id:id,reason:why.trim()}).then(function(x){b.disabled=false;done(x)})})});
   });
@@ -247,7 +263,7 @@ document.getElementById('manage').addEventListener('click',function(){STAFF=null
 function drawStaff(){
   var box=document.getElementById('staffBox');if(!STAFF){box.innerHTML='<div class="msg bad">Ochilmadi.</div>';return}
   box.innerHTML='<div style="margin-top:12px"><button id="sNew">+ Yangi xodim</button><div id="sForm"></div>'
-    +STAFF.map(function(m){return '<div class="item" data-s="'+esc(m.id)+'" style="cursor:pointer"><b>'+esc(m.name)+(m.active?'':'<span class="tag warn">ishdan ketgan</span>')+(m.hasAccount?'':'<span class="tag warn">akkaunt yo‘q</span>')+'</b><span class="v">'+(m.payType==='hourly'?won(m.hourlyRate)+' / soat':won(m.monthlySalary)+' / oy')+'</span><small>'+(m.payType==='monthly'?m.workDays+' kun × '+m.dailyHours+' soat · soatiga ≈ '+won(m.effectiveHourlyRate)+' · ':'')+m.overtimeAfterHours+' soatdan keyin ×'+m.overtimeMultiplier+' · Tahrirlash ›</small></div>'}).join('')+'</div>';
+    +STAFF.map(function(m){return '<div class="item" data-s="'+esc(m.id)+'" style="cursor:pointer"><b>'+esc(m.name)+(m.active?'':'<span class="tag warn">ishdan ketgan</span>')+(m.hasAccount?'':'<span class="tag warn">akkaunt yo‘q</span>')+'</b><span class="v">'+(m.payType==='hourly'?won(m.hourlyRate)+' / soat':won(m.monthlySalary)+' / oy')+'</span><small>'+(m.payType==='monthly'?m.workDays+' kun × '+m.dailyHours+' soat · soatiga ≈ '+won(m.effectiveHourlyRate)+' · ':'')+m.overtimeAfterHours+' soatdan keyin ×'+m.overtimeMultiplier+(m.workHours&&m.workHours.start?' · ⏰ '+esc(m.workHours.start)+(m.workHours.end?'–'+esc(m.workHours.end):' dan'):'')+' · Tahrirlash ›</small></div>'}).join('')+'</div>';
   document.getElementById('sNew').addEventListener('click',function(){staffForm(null)});
   box.querySelectorAll('[data-s]').forEach(function(el){el.addEventListener('click',function(){staffForm(STAFF.find(function(m){return m.id===el.dataset.s}))})});
 }
@@ -272,8 +288,10 @@ function staffForm(m){
   });
 }
 sel.addEventListener('change',function(){STAFF=null;ACC=null;load()});mon.addEventListener('change',load);load();
-${STAFF_DAYS_SCRIPT}${ATTENDANCE_PLACE_SCRIPT}
-var JOY=${joy ? "true" : "false"};if(JOY){placeBox('');sel.addEventListener('change',function(){placeBox('')})}
+${STAFF_DAYS_SCRIPT}${ATTENDANCE_PLACE_SCRIPT}${WORK_HOURS_SCRIPT}
+var JOY=${joy ? "true" : "false"},VAQT=${vaqt ? "true" : "false"};
+if(VAQT){hoursBox('');sel.addEventListener('change',function(){hoursBox('')})}
+else if(JOY){placeBox('');sel.addEventListener('change',function(){placeBox('')})}
 `,
   });
 }
