@@ -23,6 +23,8 @@ const bosh = await import('../app/api/v2/bosh/route.ts');
 const kiritish = await import('../app/api/v2/kiritish/route.ts');
 const core = await import('../app/core/sales-days.ts');
 const { calculateDailyReport } = await import('../app/lib/daily-report.ts');
+const { isAccountingMonthClosed } = await import('../app/lib/month-end.ts');
+const monthCloseId = (month) => `monthly-close:${month}`;
 const base = 'https://halo.example.workers.dev';
 const owner = { 'oai-authenticated-user-email': 'owner@example.com', 'content-type': 'application/json' };
 
@@ -45,6 +47,20 @@ const sales = [
   { id: 'old', date: '2026-10-01', totalRevenue: 30_000, accountId: 'card' },
 ];
 const state = { accounts, sales };
+/** Kun yozuvlari uchun: buyurtma (2 qator, ombor sarfi bilan) va boshqa kunga tushgan Excel qismi qo'shilgan holat. */
+const dayState = () => ({
+  accounts,
+  recipes: [{ id: 'r1', name: 'Donar' }, { id: 'r2', name: 'Cola' }, { id: 'r3', name: 'Lavash' }],
+  inventory: [{ id: 'g', name: 'Go‘sht', unit: 'g', stock: 700 }],
+  stockMovements: [{ id: 'm1', inventoryId: 'g', type: 'sale', quantity: -300, date: '2026-10-01', referenceId: 'h1' }],
+  posOrders: [{ id: 'pos-order:op1', date: '2026-10-01', paymentType: 'cash', salesChannel: 'halo', workerName: 'Aziz', createdAt: '2026-10-01T03:15:00.000Z', items: [{ saleId: 'h1' }, { saleId: 'h2' }] }],
+  sales: [
+    ...sales.map((x) => (x.id === 'x1' ? { ...x, recipeId: 'r3', quantity: 50 } : x)),
+    { id: 'x1b', date: '2026-10-02', totalRevenue: 10_000, accountId: 'card', accountTypeAtSale: 'card', salesChannel: 'pos', posImport: { batch: 'b1', fileName: 'pos.xlsx' } },
+    { id: 'h1', date: '2026-10-01', recipeId: 'r1', quantity: 2, totalRevenue: 18_000, accountId: 'cash', accountTypeAtSale: 'cash', salesChannel: 'halo', externalId: 'pos-order:op1:0', stockUsage: [{ inventoryId: 'g', quantity: 300 }] },
+    { id: 'h2', date: '2026-10-01', recipeId: 'r2', quantity: 1, totalRevenue: 9_000, accountId: 'cash', accountTypeAtSale: 'cash', salesChannel: 'halo', externalId: 'pos-order:op1:1' },
+  ],
+});
 
 test('har kun alohida: kanallar, Excel belgisi, bonus; savdosi yo‘q kunlar ham ro‘yxatda', () => {
   const r = core.salesDays(state, '2026-10-01', '2026-10-04', '2026-10-04');
@@ -95,6 +111,45 @@ test('sahifa: faqat rahbar; skript buzilmagan; menyuda va Bosh sahifada yo‘l b
   assert.equal((await savdo.POST(new Request(base + '/api/v2/savdo', { method: 'POST', body: '{}' }))).status, 401);
 });
 
+test('kun yozuvlari: bir buyurtma — bitta yozuv; yig‘indisi kun jamisiga teng', () => {
+  const st = dayState();
+  const day = core.salesDayDetail(st, '2026-10-01');
+  assert.equal(day.total, core.salesDays(st, '2026-10-01', '2026-10-01', '2026-10-04').days[0].total, 'hech bir savdo tushib qolmadi');
+  const by = Object.fromEntries(day.entries.map((e) => [e.key, e]));
+  assert.deepEqual([by['pos-order:op1'].label, by['pos-order:op1'].amount, by['pos-order:op1'].worker, by['pos-order:op1'].summary], ['Naqd', 27_000, 'Aziz', 'Donar × 2, Cola × 1']);
+  assert.deepEqual([by['import:b1'].label, by['import:b1'].summary, by['import:b1'].amount], ['POS hisobot (Excel)', '1 xil taom · pos.xlsx', 500_000]);
+  assert.equal(by['x2'].label, 'POS naqd');
+  assert.equal(by['d1'].label, 'Coupang');
+  assert.equal(by['old'].label, 'POS karta');
+  assert.equal(by['pos-terminal-sale:2'].label, 'Hisob-raqam');
+  assert.equal('saleIds' in by['x2'], false, 'ichki ro‘yxat tashqariga chiqmaydi');
+  assert.equal(day.entries[0].key, 'pos-order:op1', 'vaqti bor yozuv tepada');
+  assert.throws(() => core.salesDayDetail(st, '2026-13-01'), core.SalesDaysError);
+});
+
+test('bekor qilish: buyurtma, POS Excel (faqat shu kun), eski savdo — ombor qaytadi', () => {
+  const st = dayState();
+  const order = core.cancelSalesEntry(st, '2026-10-01', 'pos-order:op1');
+  assert.deepEqual(order.result.entry.label, 'Naqd');
+  assert.equal(order.state.sales.some((x) => x.id === 'h1' || x.id === 'h2'), false, 'buyurtma savdolari olib tashlandi');
+  assert.equal(order.state.posOrders.length, 0);
+  assert.equal(order.state.inventory.find((i) => i.id === 'g').stock, 1_000, 'go‘sht omborga qaytdi (700 + 300)');
+  assert.equal(order.state.stockMovements.some((m) => m.referenceId === 'h1'), false);
+  assert.equal(core.salesDayDetail(order.state, '2026-10-01').total, 1_050_000, 'qolgan yozuvlar joyida');
+
+  const imp = core.cancelSalesEntry(st, '2026-10-01', 'import:b1');
+  assert.equal(imp.state.sales.some((x) => x.id === 'x1'), false);
+  assert.equal(imp.state.sales.some((x) => x.id === 'x1b'), true, 'o‘sha fayl boshqa kunni ham qamragan bo‘lsa — u kun tegilmaydi');
+
+  const legacy = core.cancelSalesEntry(st, '2026-10-01', 'old');
+  assert.equal(legacy.state.sales.some((x) => x.id === 'old'), false);
+  assert.equal(legacy.state.sales.length, st.sales.length - 1);
+
+  assert.throws(() => core.cancelSalesEntry(st, '2026-10-01', 'yoq'), (e) => e instanceof core.SalesDaysError && e.status === 404);
+  assert.throws(() => core.cancelSalesEntry({ ...st, monthlyCloses: [{ id: monthCloseId('2026-10'), month: '2026-10', closedAt: '2026-11-01T00:00:00.000Z', inventoryItems: [], payrollItems: [] }] }, '2026-10-01', 'old'), (e) => e instanceof core.SalesDaysError && e.status === 409 && /oyi yopilgan/.test(e.message));
+  assert.equal(isAccountingMonthClosed([{ id: monthCloseId('2026-10'), month: '2026-10', closedAt: '2026-11-01T00:00:00.000Z', inventoryItems: [], payrollItems: [] }], '2026-10-01'), true, 'sinovdagi yopilgan oy haqiqiy');
+});
+
 test('server: filial ma’lumoti bilan hisoblaydi', async () => {
   const p = JSON.parse(sqlite.prepare("SELECT payload FROM app_state WHERE id = 'main'").get().payload);
   p.accounts = accounts; p.sales = sales;
@@ -105,4 +160,29 @@ test('server: filial ma’lumoti bilan hisoblaydi', async () => {
   assert.deepEqual([r.totals.total, r.missingPos], [1_250_000, ['2026-10-03', '2026-10-02']]);
   assert.equal((await call({ branchId: 'main', from: '2026-10-05', to: '2026-10-01' })).status, 400);
   assert.equal((await call({ branchId: 'yoq', from: '2026-10-01', to: '2026-10-03' })).status, 400);
+  const day = await call({ branchId: 'main', action: 'day', date: '2026-10-01' });
+  assert.deepEqual([day.status, day.total], [200, 1_050_000]);
+});
+
+test('server: bekor qilish — sababi majburiy, tarixda qoladi; kassada yopilgan kun tegilmaydi', async () => {
+  const p = JSON.parse(sqlite.prepare("SELECT payload FROM app_state WHERE id = 'main'").get().payload);
+  Object.assign(p, dayState());
+  sqlite.prepare("UPDATE app_state SET payload = ? WHERE id = 'main'").run(JSON.stringify(p));
+  const call = async (body) => { const r = await savdo.POST(new Request(base + '/api/v2/savdo', { method: 'POST', headers: owner, body: JSON.stringify({ branchId: 'main', ...body }) })); return { status: r.status, ...(await r.json()) }; };
+  assert.equal((await call({ action: 'cancel', date: '2026-10-01', key: 'pos-order:op1', reason: '' })).status, 400, 'sababsiz — yo‘q');
+  assert.equal((await savdo.POST(new Request(base + '/api/v2/savdo', { method: 'POST', body: JSON.stringify({ action: 'cancel', date: '2026-10-01', key: 'old', reason: 'xato' }) }))).status, 401);
+  const ok = await call({ action: 'cancel', date: '2026-10-01', key: 'pos-order:op1', reason: 'ikki marta kiritilgan' });
+  assert.deepEqual([ok.status, ok.cancelled, ok.total], [200, true, 1_050_000]);
+  assert.equal(ok.entries.some((e) => e.key === 'pos-order:op1'), false);
+  const after = JSON.parse(sqlite.prepare("SELECT payload FROM app_state WHERE id = 'main'").get().payload);
+  assert.equal(after.inventory.find((i) => i.id === 'g').stock, 1_000, 'ombor qaytdi');
+  const log = sqlite.prepare("SELECT action FROM halo_state_backups WHERE action LIKE 'Savdo bekor qilindi%' ORDER BY created_at DESC").get();
+  assert.match(log.action, /2026-10-01 · Naqd 27,000 ₩ · Sabab: ikki marta kiritilgan/);
+  assert.equal((await call({ action: 'cancel', date: '2026-10-01', key: 'pos-order:op1', reason: 'yana' })).status, 404, 'ikkinchi marta — topilmaydi');
+  sqlite.exec("CREATE TABLE IF NOT EXISTS v2_day_closes (tenant_id TEXT, branch_id TEXT, date TEXT)");
+  sqlite.prepare("INSERT INTO v2_day_closes (tenant_id, branch_id, date) VALUES ('halo', 'main', '2026-10-02')").run();
+  const closed = await call({ action: 'cancel', date: '2026-10-01', key: 'old', reason: 'xato' });
+  assert.equal(closed.status, 409);
+  assert.match(closed.error, /kassada yopilgan/);
+  sqlite.exec("DELETE FROM v2_day_closes");
 });

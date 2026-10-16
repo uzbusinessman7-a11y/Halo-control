@@ -109,22 +109,22 @@ export async function GET() {
 var T={
  uz:{check:'Nazorat ro‘yxati',install:'Telefonga ilova qilib o‘rnatish',hello:'Salom',login:'Kirish',branch:'Filial',user:'Login',pin:'PIN',start:'ISHNI BOSHLADIM',finish:'ISHNI TUGATDIM',working:'Ishdasiz',month:'Mening hisobim — bu oy',days:'kun',hours:'soat',earned:'Hisoblangan',logout:'Chiqish',notLinked:'Rahbar akkauntingizni xodim profiliga bog‘lamagan. Davomat uchun rahbarga ayting.',sureOut:'Ishni tugatasizmi?',off:'Bugun sizga dam belgilangan',err:'Xatolik. Qayta urinib ko‘ring.',net:'Internet aloqasini tekshiring.',back:'← Orqaga',
   actions:'Nima kiritmoqchisiz?',tasks:'Rahbardan vazifalar',noTasks:'Yangi vazifa yo‘q',taskStart:'Boshladim',taskDone:'✓ Bajarildi',due:'Muddat',
-  aHisob:'HALO HISOB',aHisobD:'Naqd, hisob-raqam, delivery, oshxona',aPos:'POS hisobot',aPosD:'Kunlik POS Excel faylini yuklash',aIn:'Mahsulot kirimi',aInD:'Miqdor va narx · qarz yozilmaydi',aExp:'Xarajat',aExpD:'Bugungi xarajatni yozish',aMez:'MEZANA',aMezD:'Olib turildi, qaytarildi, qarzga olindi',aWaste:'Minus tavar',aWasteD:'Buzilgan yoki yo‘qolgan mahsulot',aCount:'Kassani sanash',aCountD:'Kun oxiri, summa ko‘rinmaydi',locked:'Rahbar ruxsat bermagan',allDays:'Hamma kunlar',
+  aHisob:'HALO HISOB',aHisobD:'Naqd, hisob-raqam, delivery, oshxona',aPos:'POS hisobot',aPosD:'Kunlik POS Excel faylini yuklash',aIn:'Mahsulot kirimi',aInD:'Miqdor va narx · qarz yozilmaydi',aExp:'Xarajat',aExpD:'Bugungi xarajatni yozish',aMez:'MEZANA',aMezD:'Olib turildi, qaytarildi, qarzga olindi',aWaste:'Minus tavar',aWasteD:'Buzilgan yoki yo‘qolgan mahsulot',aCount:'Kassani sanash',aCountD:'Kun oxiri, summa ko‘rinmaydi',aLow:'Kam qolgan',aLowD:'Tugayotgan mahsulotni rahbarga yuborish',locked:'Rahbar ruxsat bermagan',allDays:'Hamma kunlar',
   locHint:'Bu tugma faqat oshxonada ishlaydi',locWait:'Joylashuv aniqlanmoqda…',locDenied:'Joylashuvga ruxsat bering: telefon sozlamalarida brauzer (ilova) uchun «Joylashuv»ni yoqing va qayta bosing.',locFail:'Joylashuv aniqlanmadi. GPS yoqilganini tekshiring va qayta bosing.',locNone:'Bu telefon joylashuvni bera olmaydi. Rahbarga ayting.',locWeak:'Joylashuv aniq emas (±{a} m). GPS’ni yoqing, bir oz kuting va qayta bosing.',locFar:'Siz oshxonadan {d} uzoqdasiz. Bu tugma faqat oshxonadan {r} metr ichida ishlaydi.',
   hrsFrom:'Ish vaqti {s} dan. Erta bossangiz ham hisob {s} dan boshlanadi.',hrsBoth:'Ish vaqti {s}–{e}. Hisob faqat shu vaqt ichida yuradi.',payWait:'Hisob {s} dan boshlanadi',payFrom:'Hisob {s} dan yurmoqda',payOver:'Ish vaqti {e} da tugagan — keyingi vaqt hisoblanmaydi'},
  ru:{install:'Установить как приложение',hello:'Привет',login:'Войти',branch:'Филиал',user:'Логин',pin:'PIN',start:'НАЧАЛ РАБОТУ',finish:'ЗАКОНЧИЛ РАБОТУ',working:'Вы на работе',month:'Мой учёт — этот месяц',days:'дн.',hours:'ч',earned:'Начислено',logout:'Выйти',notLinked:'Руководитель не привязал ваш аккаунт к профилю сотрудника.',sureOut:'Закончить работу?',off:'Сегодня у вас выходной',err:'Ошибка. Попробуйте ещё раз.',net:'Проверьте интернет.',back:'← Назад',
   actions:'Что вводим?',tasks:'Задачи от руководителя',noTasks:'Новых задач нет',taskStart:'Начал',taskDone:'✓ Готово',due:'Срок',
-  aHisob:'HALO HISOB',aHisobD:'Наличные, счёт, доставка, кухня',aPos:'POS отчёт',aPosD:'Загрузить дневной Excel с POS',aIn:'Приход товара',aInD:'Количество и цена',aExp:'Расход',aExpD:'Внести расход',aMez:'MEZANA',aMezD:'Взяли, вернули, купили в долг',aWaste:'Списание',aWasteD:'Испорченный или потерянный товар',aCount:'Пересчёт кассы',aCountD:'В конце дня',locked:'Нет разрешения',allDays:'Все дни',
+  aHisob:'HALO HISOB',aHisobD:'Наличные, счёт, доставка, кухня',aPos:'POS отчёт',aPosD:'Загрузить дневной Excel с POS',aIn:'Приход товара',aInD:'Количество и цена',aExp:'Расход',aExpD:'Внести расход',aMez:'MEZANA',aMezD:'Взяли, вернули, купили в долг',aWaste:'Списание',aWasteD:'Испорченный или потерянный товар',aCount:'Пересчёт кассы',aCountD:'В конце дня',aLow:'Заканчивается',aLowD:'Сообщить руководителю, что заканчивается',locked:'Нет разрешения',allDays:'Все дни',
   locHint:'Кнопка работает только на кухне',locWait:'Определяем местоположение…',locDenied:'Разрешите доступ к геолокации: в настройках телефона включите «Местоположение» для браузера (приложения) и нажмите снова.',locFail:'Местоположение не определено. Проверьте, включён ли GPS, и нажмите снова.',locNone:'Этот телефон не может определить местоположение. Сообщите руководителю.',locWeak:'Местоположение неточное (±{a} м). Включите GPS, подождите немного и нажмите снова.',locFar:'Вы в {d} от кухни. Кнопка работает только в пределах {r} м от кухни.',
   hrsFrom:'Рабочее время с {s}. Даже если нажмёте раньше, учёт начнётся с {s}.',hrsBoth:'Рабочее время {s}–{e}. Учитывается только это время.',payWait:'Учёт начнётся в {s}',payFrom:'Учёт идёт с {s}',payOver:'Рабочее время закончилось в {e} — дальше не учитывается'},
  en:{install:'Install as an app',hello:'Hi',login:'Log in',branch:'Branch',user:'Login',pin:'PIN',start:'STARTED WORK',finish:'FINISHED WORK',working:'You are at work',month:'My account — this month',days:'days',hours:'h',earned:'Earned',logout:'Log out',notLinked:'The manager has not linked your account to a staff profile.',sureOut:'Finish work?',off:'Today is your day off',err:'Error. Please try again.',net:'Check your internet.',back:'← Back',
   actions:'What do you want to enter?',tasks:'Tasks from the manager',noTasks:'No new tasks',taskStart:'Started',taskDone:'✓ Done',due:'Due',
-  aHisob:'HALO HISOB',aHisobD:'Cash, transfer, delivery, kitchen',aPos:'POS report',aPosD:'Upload the daily POS Excel',aIn:'Goods receipt',aInD:'Quantity and price',aExp:'Expense',aExpD:'Enter an expense',aMez:'MEZANA',aMezD:'Borrowed, returned, bought on credit',aWaste:'Stock deduction',aWasteD:'Damaged or missing product',aCount:'Count the cash',aCountD:'End of day',locked:'Not permitted',allDays:'All days',
+  aHisob:'HALO HISOB',aHisobD:'Cash, transfer, delivery, kitchen',aPos:'POS report',aPosD:'Upload the daily POS Excel',aIn:'Goods receipt',aInD:'Quantity and price',aExp:'Expense',aExpD:'Enter an expense',aMez:'MEZANA',aMezD:'Borrowed, returned, bought on credit',aWaste:'Stock deduction',aWasteD:'Damaged or missing product',aCount:'Count the cash',aCountD:'End of day',aLow:'Running low',aLowD:'Tell the manager what is running out',locked:'Not permitted',allDays:'All days',
   locHint:'This button works only at the kitchen',locWait:'Getting your location…',locDenied:'Allow location access: turn on Location for the browser (app) in your phone settings and press again.',locFail:'Could not get your location. Check that GPS is on and press again.',locNone:'This phone cannot provide a location. Tell the manager.',locWeak:'Location is not accurate (±{a} m). Turn on GPS, wait a moment and press again.',locFar:'You are {d} from the kitchen. This button works only within {r} m of the kitchen.',
   hrsFrom:'Work starts at {s}. Even if you press earlier, time counts from {s}.',hrsBoth:'Work hours {s}–{e}. Only this time is counted.',payWait:'Time counts from {s}',payFrom:'Counting from {s}',payOver:'Work hours ended at {e} — later time is not counted'},
  ko:{install:'앱으로 설치',hello:'안녕하세요',login:'로그인',branch:'지점',user:'아이디',pin:'PIN',start:'업무 시작',finish:'업무 종료',working:'근무 중',month:'내 근무 — 이번 달',days:'일',hours:'시간',earned:'누적 급여',logout:'로그아웃',notLinked:'관리자가 계정을 직원 프로필에 연결하지 않았습니다.',sureOut:'업무를 종료할까요?',off:'오늘은 휴무입니다',err:'오류가 발생했습니다.',net:'인터넷을 확인하세요.',back:'← 뒤로',
   actions:'무엇을 입력할까요?',tasks:'관리자 업무',noTasks:'새 업무 없음',taskStart:'시작',taskDone:'✓ 완료',due:'마감',
-  aHisob:'HALO HISOB',aHisobD:'현금, 계좌, 배달, 주방',aPos:'POS 보고서',aPosD:'일일 POS 엑셀 업로드',aIn:'상품 입고',aInD:'수량과 금액',aExp:'지출',aExpD:'지출 입력',aMez:'MEZANA',aMezD:'빌림, 반납, 외상 구매',aWaste:'재고 차감',aWasteD:'파손 또는 분실',aCount:'현금 세기',aCountD:'마감 시',locked:'권한 없음',allDays:'전체',
+  aHisob:'HALO HISOB',aHisobD:'현금, 계좌, 배달, 주방',aPos:'POS 보고서',aPosD:'일일 POS 엑셀 업로드',aIn:'상품 입고',aInD:'수량과 금액',aExp:'지출',aExpD:'지출 입력',aMez:'MEZANA',aMezD:'빌림, 반납, 외상 구매',aWaste:'재고 차감',aWasteD:'파손 또는 분실',aCount:'현금 세기',aCountD:'마감 시',aLow:'부족한 재료',aLowD:'관리자에게 부족한 재료 알리기',locked:'권한 없음',allDays:'전체',
   locHint:'이 버튼은 주방에서만 작동합니다',locWait:'위치 확인 중…',locDenied:'위치 권한을 허용해 주세요: 휴대폰 설정에서 브라우저(앱)의 위치를 켜고 다시 누르세요.',locFail:'위치를 확인하지 못했습니다. GPS가 켜져 있는지 확인하고 다시 누르세요.',locNone:'이 휴대폰은 위치를 제공할 수 없습니다. 관리자에게 알려 주세요.',locWeak:'위치가 정확하지 않습니다 (±{a} m). GPS를 켜고 잠시 후 다시 누르세요.',locFar:'주방에서 {d} 떨어져 있습니다. 이 버튼은 주방에서 {r} m 이내에서만 작동합니다.',
   hrsFrom:'근무 시작 {s}. 일찍 눌러도 {s}부터 계산됩니다.',hrsBoth:'근무 시간 {s}–{e}. 이 시간만 계산됩니다.',payWait:'{s}부터 계산됩니다',payFrom:'{s}부터 계산 중',payOver:'근무 시간이 {e}에 끝났습니다 — 이후 시간은 계산되지 않습니다'}};
 var L='uz';try{L=localStorage.getItem('halo-lang')||'uz'}catch(e){}if(!T[L])L='uz';
@@ -195,6 +195,7 @@ function home(){
       +tile('hisob','🧾',t('aHisob'),t('aHisobD'),'/pos')
       +tile('pos','📊',t('aPos'),t('aPosD'))
       +tile('in','📦',t('aIn'),t('aInD'),null,!SESSION.canSupplierDelivery)
+      +tile('low','🛒',t('aLow'),t('aLowD'))
       +tile('exp','💸',t('aExp'),t('aExpD'),null,!SESSION.canWarehouseReceipt)
       +tile('mez','🤝',t('aMez'),t('aMezD'),null,!SESSION.canWarehouseReceipt)
       +tile('waste','🗑',t('aWaste'),t('aWasteD'),'/api/v2/pos#chiqit')
@@ -208,7 +209,7 @@ function home(){
     document.getElementById('out').addEventListener('click',function(){req('/api/worker-auth','POST',{action:'logout'}).then(start)});
     var more=document.getElementById('more');if(more)more.addEventListener('click',function(){document.getElementById('dl').innerHTML=days.map(dayRow).join('');more.remove()});
     app.querySelectorAll('[data-ts]').forEach(function(b){b.addEventListener('click',function(){b.disabled=true;req('/api/worker-tasks','PATCH',{taskId:b.dataset.ts,status:b.dataset.to}).then(function(x){if(x.status>=400){toast(x.body.error||t('err'),true);b.disabled=false;return}toast('✓');home()})})});
-    app.querySelectorAll('[data-act]').forEach(function(b){b.addEventListener('click',function(){if(b.dataset.act==='pos')posScreen();else if(b.dataset.act==='in')intakeScreen();else if(b.dataset.act==='exp')expenseScreen();else if(b.dataset.act==='mez')mezanaScreen()})});
+    app.querySelectorAll('[data-act]').forEach(function(b){b.addEventListener('click',function(){if(b.dataset.act==='pos')posScreen();else if(b.dataset.act==='in')intakeScreen();else if(b.dataset.act==='exp')expenseScreen();else if(b.dataset.act==='mez')mezanaScreen();else if(b.dataset.act==='low')lowScreen()})});
     if(chk)loadChecklist();
     if(a.linked){var open2=a.openShift;
       if(open2){var pay=a.pay||null,tick=function(){var now=Date.now(),from=Date.parse(open2.clockIn),to=now,note='';
@@ -321,6 +322,41 @@ function expenseScreen(){
       btn.disabled=true;var send=function(){return req('/api/worker-expenses','POST',{operationId:op,category:document.getElementById('ec').value,itemName:document.getElementById('en').value.trim(),amount:amount,accountId:document.getElementById('eacc').value,note:document.getElementById('eno').value,date:DATA.today,updatedAt:DATA.updatedAt})};
       send().then(function(r){if(r.status===409){return loadData().then(send)}return r}).then(function(r){btn.disabled=false;if(r.body.error){toast(r.body.error,true);return}toast('✓ Xarajat saqlandi');home()})});
   });
+}
+/* ---------- Kam qolgan: tugayotgan mahsulotni rahbarga yuborish (HALO Telegram boti orqali) ---------- */
+function lowScreen(){
+  var K={sel:[],q:'',cat:'',op:uuid(),today:[]};
+  screen('🛒 '+t('aLow'),'<div id="kb" style="display:grid;gap:16px"><section class="card">'+haloLoading(3)+'</section></div>');
+  Promise.all([loadData(),req('/api/v2/kam','POST',{action:'list'})]).then(function(r){if(!r[0])return;K.today=(r[1].body||{}).reports||[];draw()});
+  function draw(){var d=DATA,box=document.getElementById('kb');if(!box)return;
+    var list=d.inventory.filter(function(i){return !K.sel.some(function(s){return s.inventoryId===i.id})&&(!K.q||i.name.toLowerCase().indexOf(K.q.toLowerCase())>=0)});
+    var cats=(d.categories||[]).filter(function(c){return list.some(function(i){return i.categoryId===c.id})});
+    if(K.cat&&!cats.some(function(c){return c.id===K.cat}))K.cat='';
+    if(K.cat)list=list.filter(function(i){return i.categoryId===K.cat});
+    box.innerHTML=(K.sel.length?'<section class="card" id="ksel"><h2>Yuboriladi · '+K.sel.length+' ta</h2>'+K.sel.map(function(s,idx){
+        return '<div style="border-bottom:1px solid var(--line);padding:10px 0"><div class="row" style="justify-content:space-between;flex-wrap:nowrap"><b>'+esc(s.name)+(s.inventoryId?'':' <small style="color:var(--muted);font-weight:600">(ro‘yxatda yo‘q)</small>')+'</b><button class="ghost" data-krm="'+idx+'" aria-label="'+esc(s.name)+' — olib tashlash" style="min-height:36px;padding:2px 12px">✕</button></div>'
+          +'<input data-kn="'+idx+'" maxlength="60" placeholder="Izoh: 2 quti, deyarli tugadi…" value="'+esc(s.note)+'" style="margin-top:6px;width:100%;box-sizing:border-box"></div>'}).join('')
+      +'<button class="block" id="ksend" style="margin-top:12px">📨 Rahbarga yuborish</button><p class="hint" style="margin:8px 0 0">Telegramga boradi. Ombor va pulga hech narsa yozilmaydi.</p></section>':'')
+      +'<section class="card"><h2>'+(K.sel.length?'Yana qo‘shish':'Nima kam qoldi?')+'</h2><input id="kq" placeholder="🔍 Mahsulot qidirish" value="'+esc(K.q)+'" style="width:100%;box-sizing:border-box">'
+      +(cats.length>1?'<div class="chips" style="margin-top:8px"><button class="'+(K.cat?'ghost':'')+'" data-kc="">Hammasi</button>'+cats.map(function(c){return '<button class="'+(K.cat===c.id?'':'ghost')+'" data-kc="'+esc(c.id)+'">'+esc(c.name)+'</button>'}).join('')+'</div>':'')
+      +'<div class="pick" style="margin-top:8px">'+(list.map(function(i){return '<button data-kadd="'+esc(i.id)+'"><span>'+esc(i.name)+'</span><small style="color:var(--muted)">＋</small></button>'}).join('')||'<p class="hint" style="padding:10px">Topilmadi</p>')+'</div>'
+      +'<div class="row" style="margin-top:12px;gap:8px;flex-wrap:nowrap"><input id="kx" maxlength="60" placeholder="Ro‘yxatda yo‘q narsa: salfetka…" style="flex:1;min-width:0"><button class="ghost" id="kxadd" aria-label="Qo‘shish">＋</button></div></section>'
+      +(K.today.length?'<section class="card"><h2>Bugun yuborilgan</h2>'+K.today.map(function(x){return '<div class="line"><span><b>'+esc(hm(x.createdAt))+' · '+esc(x.workerName)+'</b><br><small style="color:var(--muted)">'+esc(x.items.join(', '))+'</small></span></div>'}).join('')+'<p class="hint" style="margin:8px 0 0">Bu ro‘yxatdagini qayta yuborish shart emas.</p></section>':'');
+    var q=document.getElementById('kq');q.addEventListener('input',function(){K.q=q.value;var p=q.selectionStart;draw();var n=document.getElementById('kq');n.focus();try{n.setSelectionRange(p,p)}catch(e){}});
+    box.querySelectorAll('[data-kc]').forEach(function(b){b.addEventListener('click',function(){K.cat=b.dataset.kc;draw()})});
+    box.querySelectorAll('[data-kadd]').forEach(function(b){b.addEventListener('click',function(){var it=d.inventory.find(function(i){return i.id===b.dataset.kadd});K.sel.push({inventoryId:it.id,name:it.name,note:''});K.q='';draw()})});
+    box.querySelectorAll('[data-krm]').forEach(function(b){b.addEventListener('click',function(){K.sel.splice(Number(b.dataset.krm),1);draw()})});
+    box.querySelectorAll('[data-kn]').forEach(function(x){x.addEventListener('input',function(){K.sel[Number(x.dataset.kn)].note=x.value})});
+    var addX=function(){var x=document.getElementById('kx'),v=x.value.trim();if(v.length<2){toast('Nomini yozing.',true);return}
+      if(!K.sel.some(function(s){return s.name.toLowerCase()===v.toLowerCase()}))K.sel.push({inventoryId:'',name:v,note:''});draw()};
+    document.getElementById('kxadd').addEventListener('click',addX);
+    document.getElementById('kx').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();addX()}});
+    var sb=document.getElementById('ksend');if(sb)sb.addEventListener('click',function(){sb.disabled=true;
+      req('/api/v2/kam','POST',{action:'send',operationId:K.op,items:K.sel.map(function(s){return {inventoryId:s.inventoryId,name:s.name,note:s.note}})}).then(function(r){sb.disabled=false;
+        if(r.status===401){start();return}
+        if(r.status>=400||!r.body.ok){toast(r.body.error||t('err'),true);return}
+        var tg=r.body.report.telegram;toast(tg.sent?'✓ Yuborildi — rahbarga Telegramda bordi':'✓ Saqlandi. Telegramga ketmadi — rahbar HALO Control’da ko‘radi',!tg.sent);home()})});
+  }
 }
 /* ---------- MEZANA: olib turildi / qaytarildi / qarzga olindi ---------- */
 /* Telefon rasmi katta bo'ladi: yuborishdan oldin 1600 pikselgacha kichraytiriladi (bo'lmasa asl fayl ketadi). */
