@@ -13,6 +13,15 @@ Eski tizimdagi «Barcha savdo va xodim bonusi» oynasining o'rnida.
 4. **Kunma-kun** — davrdagi HAR BIR kun, savdosi yo'q kun ham: POS holati («POS ✓», «POS ✓ Excel», «POS yo'q»,
    bugun — «bugun»), kanallar bo'yicha summa, jami va bonus. Qatorni bosganda «Kiritish → Savdo» shu sana bilan ochiladi.
 
+5. **Kun yozuvlari shu oynada** — qatorni bossangiz, o'sha kunning hamma savdo yozuvlari ochiladi: turi (POS karta,
+   POS naqd, POS hisobot (Excel), Naqd, Hisob-raqam, Coupang…), vaqti, kim kiritgan, nima, summa. Bir buyurtma (yoki bitta
+   Excel yuklash) — bitta yozuv. Yozuvlar yig'indisi kun jamisiga wonma-won teng.
+6. **Bekor qilish** — har yozuv yonida. Sababi so'raladi (kamida 3 harf). Savdo olib tashlanadi, ombor qaytariladi, oldingi
+   holat «O'zgarishlar tarixi»da «Savdo bekor qilindi · sana · turi summa · Sabab: …» bo'lib qoladi.
+   Tizimning mavjud tekshirilgan yo'llari ishlatiladi: buyurtma → `cancelPosOrder`, Telegram do'kon → `cancelClubSale`
+   (kuryer puli ham), POS Excel → faqat o'sha kundagi qismi (`removeSalesById`), buyurtmasiz eski savdo → `removeSalesById`.
+   Kassada yopilgan kun va yopilgan oy — bekor qilinmaydi.
+
 ## Qoidalar
 
 - Kanallar «POS» oynasidagi kunlik hisobot bilan bir xil ajratiladi (`channelOf` + `saleDeductions`): POS apparati —
@@ -22,7 +31,7 @@ Eski tizimdagi «Barcha savdo va xodim bonusi» oynasining o'rnida.
   Maoshga o'zi yozilmaydi.
 - Bugun «POS yo'q» hisoblanmaydi — kun tugamagan. Kelajak sanalar ko'rsatilmaydi.
 - Bekor qilingan (`cancelledAt`, `voided`, `status: cancelled`) savdo hisobga kirmaydi.
-- Sahifa hech narsa yozmaydi.
+- Sahifa faqat «Bekor qilish»da yozadi (sababi bilan, tarixda qoladi).
 
-Kod: `app/core/sales-days.ts` (hisob), `app/api/v2/savdo/route.ts` (sahifa), `app/api/v2/kiritish/route.ts`
+Kod: `app/core/sales-days.ts` (hisob, `salesDayDetail`, `cancelSalesEntry`), `app/api/v2/savdo/route.ts` (sahifa), `app/api/v2/kiritish/route.ts`
 (`?sana=YYYY-MM-DD&t=pos` — kun va bo'lim bilan ochish). Sinovlar: `tests/v2-savdo-kunlari.test.mjs`.

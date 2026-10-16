@@ -145,7 +145,22 @@ function showTab(t){OTAB=t;document.querySelectorAll('[data-o]').forEach(functio
   document.getElementById('oList').style.display=t==='list'?'grid':'none';document.getElementById('oCount').style.display=t==='count'?'grid':'none';document.getElementById('oAvt').style.display=t==='avt'?'grid':'none';
   if(t==='list')drawList();if(t==='count'){OPID=uuid();CNT={};drawCount()}}
 document.querySelectorAll('[data-o]').forEach(function(b){b.addEventListener('click',function(){showTab(b.dataset.o)})});
-function loadProducts(){post({action:'products',branchId:sel.value}).then(function(x){if(!x.body.ok){document.getElementById('oList').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}PRODUCTS=x.body.products;ARCH=x.body.archived||[];SUPS=x.body.suppliers||[];CATS=x.body.categories||[];ZERO=x.body.zero||null;if(CAT&&!CATS.some(function(c){return c.id===CAT}))CAT='';if(OTAB==='list')drawList();if(OTAB==='count')drawCount()})}
+function loadProducts(){post({action:'products',branchId:sel.value}).then(function(x){if(!x.body.ok){document.getElementById('oList').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}PRODUCTS=x.body.products;ARCH=x.body.archived||[];SUPS=x.body.suppliers||[];CATS=x.body.categories||[];ZERO=x.body.zero||null;if(CAT&&!CATS.some(function(c){return c.id===CAT}))CAT='';if(OTAB==='list')drawList();if(OTAB==='count')drawCount();loadKam()})}
+/* Xodimlar yozgan «Kam qolgan» xabarlari (xodim ilovasi → 🛒 Kam qolgan; Telegramga ham boradi). Hisobga hech narsa yozmaydi. */
+var KAM=[];
+function kamPost(b){return fetch('/api/v2/kam',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({scope:'owner',branchId:sel.value},b))}).then(function(r){return r.json()}).catch(function(){return {ok:false,error:'Internet aloqasini tekshiring.'}})}
+function loadKam(){var br=sel.value;kamPost({action:'list'}).then(function(x){if(br!==sel.value)return;KAM=x.ok?x.reports:[];if(OTAB==='list')drawList()})}
+function kamHtml(){if(!KAM.length)return '';var open=KAM.filter(function(r){return !r.doneAt}),done=KAM.filter(function(r){return r.doneAt});
+  var when=function(iso){try{return new Date(iso).toLocaleString('en-GB',{timeZone:'Asia/Seoul',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',','').replace('/','.')}catch(e){return ''}};
+  var row=function(r){return '<div class="list-row"><div style="min-width:0"><b>'+esc(r.workerName||'Xodim')+' · '+esc(when(r.createdAt))+'</b>'+(r.telegram.sent?'<span class="tag ok">Telegram ✓</span>':'<span class="tag bad">Telegramga ketmadi</span>')
+    +'<br><small style="color:var(--muted)">'+r.items.map(function(i){return esc(i.name)+(i.note?' — '+esc(i.note):'')}).join(' · ')+'</small>'+(r.telegram.sent?'':'<br><small style="color:var(--bad)">'+esc(r.telegram.reason)+'</small>')+'</div>'
+    +'<div class="row" style="gap:6px;flex-wrap:nowrap">'+(r.doneAt?'<button class="ghost" data-kopen="'+esc(r.id)+'" style="min-height:38px;padding:4px 10px">Qaytarish</button>'
+      :(r.telegram.sent?'':'<button class="ghost" data-kre="'+esc(r.id)+'" style="min-height:38px;padding:4px 10px">Qayta yuborish</button>')+'<button data-kdone="'+esc(r.id)+'" style="min-height:38px;padding:4px 12px">✓ Olindi</button>')+'</div></div>'};
+  return '<section class="card" id="kamCard"><h2>📨 Xodimlar yozgan kam qolganlar'+(open.length?' · '+open.length:'')+'</h2><p class="hint">Xodim ilovasidagi «🛒 Kam qolgan»dan, oxirgi 7 kun. Telegramga ham boradi. Olgach «✓ Olindi»ni bosing.</p>'
+    +(open.length?open.map(row).join(''):'<div class="msg ok">✓ Ochiq xabar yo‘q</div>')
+    +(done.length?'<details style="margin-top:10px"><summary class="hint">Olinganlar · '+done.length+'</summary>'+done.map(row).join('')+'</details>':'')+'</section>'}
+function bindKam(){document.querySelectorAll('[data-kdone],[data-kopen],[data-kre]').forEach(function(b){b.addEventListener('click',function(ev){ev.stopPropagation();b.disabled=true;var id=b.dataset.kdone||b.dataset.kopen||b.dataset.kre;
+  kamPost(b.dataset.kre?{action:'resend',id:id}:{action:'done',id:id,done:!b.dataset.kopen}).then(function(x){if(!x.ok){alert(x.error||'Bo‘lmadi.');b.disabled=false;return}KAM=x.reports;drawList()})})})}
 function catOf(id){return CATS.find(function(c){return c.id===id})||{name:'',fallback:false}}
 function prodRow(p,showCat){var quick=catOf(p.categoryId).fallback&&CAT===p.categoryId;
   return '<div class="item" data-edit="'+esc(p.id)+'" style="cursor:pointer"><b>'+esc(p.name)+(p.low?'<span class="tag bad">kam qoldi</span>':'')+(p.vegetable?'<span class="tag warn">xarajat sifatida</span>':'')+'</b><span class="v'+(p.low?' bad':'')+'">'+(p.vegetable?'—':qty(p.stock,p.unit))+'</span>'
@@ -158,6 +173,7 @@ function drawList(){
   var f=Q.toLowerCase(),list=PRODUCTS.filter(function(p){return (!f||p.name.toLowerCase().indexOf(f)>=0)&&(!CAT||p.categoryId===CAT)});
   box.innerHTML='<section class="card"><div class="grid"><div class="kpi"><small>Ombordagi mahsulot qiymati</small><b>'+won(value)+'</b></div><div class="kpi"><small>Mahsulot turlari</small><b>'+stock.length+' ta</b></div><div class="kpi"><small>Kam qolgan</small><b style="color:var(--'+(low.length?'bad':'ok')+')">'+low.length+' ta</b></div></div></section>'
     +(low.length?'<section class="card"><h2>🛒 Kam qolganlar — xarid ro‘yxati</h2>'+low.map(function(p){return '<div class="list-row"><div><b>'+esc(p.name)+'</b><br><small style="color:var(--muted)">bor: '+qty(p.stock,p.unit)+' · minimum: '+qty(p.minStock,p.unit)+'</small></div><span class="tag bad">kam</span></div>'}).join('')+'<button class="ghost block" id="buyCopy" style="margin-top:10px">📋 Ro‘yxatni nusxalash (yetkazib beruvchiga yuborish uchun)</button><div id="buyMsg"></div></section>':'')
+    +kamHtml()
     +'<section class="card"><div class="row" style="margin-bottom:10px"><input id="pq" placeholder="🔍 Qidirish" value="'+esc(Q)+'" style="flex:1"><button id="pNew">+ Yangi mahsulot</button></div><div id="pForm"></div>'
     +haloCatChips(CATS,CAT,PRODUCTS.length)
     +(CAT&&catOf(CAT).fallback&&list.length?'<p class="hint">Bu yerda kategoriyasi yo‘q mahsulotlar. Har birining yonidan kategoriyasini tanlang yoki ⚙️ Kategoriyalar → avtomatik taqsimlash.</p>':'')
@@ -173,6 +189,7 @@ function drawList(){
   if(ARCH.length)box.insertAdjacentHTML('beforeend','<section class="card"><details><summary>Ro‘yxatdan olib tashlanganlar ('+ARCH.length+')</summary>'+ARCH.map(function(a){return '<div class="list-row"><div><b>'+esc(a.name)+'</b><br><small style="color:var(--muted)">'+esc(a.reason)+(a.stock?' · qoldiq '+qty(a.stock,a.unit):'')+'</small></div><button class="ghost" data-restore="'+esc(a.id)+'" style="min-height:32px;padding:2px 10px">Tiklash</button></div>'}).join('')+'</details></section>');
   box.querySelectorAll('[data-restore]').forEach(function(b){b.addEventListener('click',function(){b.disabled=true;post({action:'restoreProduct',branchId:sel.value,id:b.dataset.restore}).then(function(x){if(!x.body.ok){alert(x.body.error);b.disabled=false;return}PRODUCTS=x.body.products;ARCH=x.body.archived||[];drawList()})})});
   box.querySelectorAll('[data-edit]').forEach(function(el){el.addEventListener('click',function(){productForm(PRODUCTS.find(function(p){return p.id===el.dataset.edit}))})});
+  bindKam();
 }
 /* Narx odam o'qiydigan birlikda kiritiladi: g → 1 kg, ml → 1 litr, qolganlari — 1 birlik. */
 function priceMul(u){return u==='g'||u==='ml'?1000:1}
