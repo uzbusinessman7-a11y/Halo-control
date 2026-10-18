@@ -9,6 +9,7 @@ import { STAFF_DAYS_SCRIPT, STAFF_DAYS_STYLE } from "../../../core/staff-days-ui
 import { listAttendanceAttempts, PlaceError, readAttendancePlace, saveAttendancePlace } from "../../../core/attendance-place";
 import { ATTENDANCE_PLACE_SCRIPT } from "../../../core/attendance-place-ui";
 import { saveWorkHours, workHoursList, WorkHoursError } from "../../../core/work-hours";
+import { RateError } from "../../../core/staff-rates";
 import { WORK_HOURS_SCRIPT, WORK_HOURS_STYLE } from "../../../core/work-hours-ui";
 import { GeocodeError, geocodeStatus, removeKakaoKey, saveKakaoKey, searchPlace } from "../../../core/geocode";
 import { shell } from "../../../core/ui-shell";
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
     const accountsOf = (st: Record<string, unknown>) => (Array.isArray(st.accounts) ? st.accounts as Array<Record<string, unknown>> : [])
       .filter((a) => (a.type === "cash" || a.type === "bank") && a.active !== false).map((a) => ({ id: String(a.id), name: String(a.name || a.id) }));
     const mutations: Record<string, [(st: Record<string, unknown>) => { state: Record<string, unknown>; result: unknown }, string]> = {
-      saveStaff: [(st) => saveStaffMember(st, body), "Xodim ma’lumoti saqlandi"],
+      saveStaff: [(st) => saveStaffMember(st, body, today), body.effectiveFrom ? `Xodim ma’lumoti saqlandi · yangi shart ${String(body.effectiveFrom).slice(0, 10)} dan` : "Xodim ma’lumoti saqlandi"],
       deleteStaff: [(st) => deleteStaffMember(st, body), "Xato kiritilgan xodim o‘chirildi (yozuvi yo‘q edi)"],
       shift: [(st) => addShift(st, body, today), "Smena qo‘lda kiritildi"],
       shifts: [(st) => addShifts(st, body, today), `Ishlagan kunlar qo‘lda kiritildi · ${Array.isArray(body.dates) ? body.dates.length : 0} kun`],
@@ -88,11 +89,15 @@ export async function POST(request: Request) {
     }
     if (action === "staff" || mutations[action]) {
       let st: Record<string, unknown>;
+      let result: unknown = null;
       if (mutations[action]) {
         const [fn, label] = mutations[action];
-        st = (await mutateHaloState((cur) => fn(repairPaymentPaidAt(cur as Record<string, unknown>)), 5, branchId, "Rahbar", label, "Maosh (yangi)")).state as Record<string, unknown>;
+        const out = await mutateHaloState((cur) => fn(repairPaymentPaidAt(cur as Record<string, unknown>)), 5, branchId, "Rahbar", label, "Maosh (yangi)");
+        st = out.state as Record<string, unknown>;
+        result = out.result;
       } else st = (await readHaloState(branchId)).state as Record<string, unknown>;
-      return json({ ok: true, today, staff: staffList(st), accounts: accountsOf(st) });
+      const rateChange = (result as { rateChange?: unknown } | null)?.rateChange;
+      return json({ ok: true, today, staff: staffList(st), accounts: accountsOf(st), ...(rateChange ? { rateChange } : {}) });
     }
     const { state } = await readHaloState(branchId);
     const bridge = await runPayrollBridge(database(), scope, state as Record<string, unknown>, today);
@@ -119,6 +124,7 @@ export async function POST(request: Request) {
     if (error instanceof StaffError) return json({ error: error.message }, error.status);
     if (error instanceof PlaceError) return json({ error: error.message }, error.status);
     if (error instanceof WorkHoursError) return json({ error: error.message }, error.status);
+    if (error instanceof RateError) return json({ error: error.message }, error.status);
     if (error instanceof GeocodeError) return json({ error: error.message, code: error.code || undefined }, error.status);
     if (error instanceof ClosedDayError) return json({ error: error.message }, 409);
     if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
@@ -269,18 +275,24 @@ function drawStaff(){
   box.querySelectorAll('[data-s]').forEach(function(el){el.addEventListener('click',function(){staffForm(STAFF.find(function(m){return m.id===el.dataset.s}))})});
 }
 function staffForm(m){
-  var box=document.getElementById('sForm'),op=uuid(),monthly=m&&m.payType==='monthly';
+  var box=document.getElementById('sForm'),op=uuid(),monthly=m&&m.payType==='monthly',today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'});
   box.innerHTML='<div class="card" style="background:var(--card-2);margin:12px 0"><h2>'+(m?'Tahrirlash — '+esc(m.name):'Yangi xodim')+'</h2>'
     +'<label class="field"><span>Ismi</span><input id="fN" maxlength="60" value="'+esc(m?m.name:'')+'"></label>'
     +'<div class="row" style="margin-bottom:12px"><button class="'+(monthly?'ghost':'')+'" data-pt="hourly">Soatbay</button><button class="'+(monthly?'':'ghost')+'" data-pt="monthly">Oylik</button></div>'
     +'<label class="field"><span id="fRL">'+(monthly?'Oylik maosh':'Soatlik stavka')+'</span><input class="money" id="fR" inputmode="numeric" value="'+esc(m?(monthly?m.monthlySalary:m.hourlyRate).toLocaleString('en-US'):'')+'"></label>'
     +'<div class="row"><label class="field" style="flex:1"><span>Oyda ish kuni</span><input id="fD" inputmode="numeric" value="'+esc(m?m.workDays:26)+'"></label><label class="field" style="flex:1"><span>Kunlik soat</span><input id="fH" inputmode="decimal" value="'+esc(m?m.dailyHours:8)+'"></label></div>'
     +'<div class="row"><label class="field" style="flex:1"><span>Necha soatdan keyin ortiqcha</span><input id="fO" inputmode="decimal" value="'+esc(m?m.overtimeAfterHours:8)+'"></label><label class="field" style="flex:1"><span>Ortiqcha soat koeffitsienti</span><input id="fM" inputmode="decimal" value="'+esc(m?m.overtimeMultiplier:1)+'"></label></div>'
+    +(m?'<div id="fFromBox" class="card" style="margin:0 0 12px;padding:12px;border-color:var(--accent)" hidden><label class="field" style="margin-bottom:6px"><span>Yangi shart qachondan boshlab hisoblansin?</span><input type="date" id="fFrom" value="'+esc(today)+'"></label><p class="hint" style="margin:0" id="fFromH">Shu kundan boshlab yangi stavkada. Undan oldingi kunlar eski stavkada qoladi.</p></div>':'')
+    +(m&&m.rateHistory&&m.rateHistory.length?'<details style="margin:0 0 12px"><summary class="hint">Stavka tarixi · '+m.rateHistory.length+'</summary>'+m.rateHistory.map(function(h){return '<div class="hint" style="margin:6px 0 0">'+esc(h.from.slice(8)+'.'+h.from.slice(5,7)+'.'+h.from.slice(0,4))+' dan: '+esc(h.before)+' → <b style="color:var(--text)">'+esc(h.after)+'</b></div>'}).join('')+'</details>':'')
     +(m?'<label class="row" style="gap:8px;margin-bottom:12px"><input type="checkbox" id="fA" style="width:18px;height:18px;min-height:auto"'+(m.active?' checked':'')+'> Ishlayapti (belgini olib tashlasangiz — ishdan ketgan)</label>':'')
     +'<div class="row"><button id="fS">Saqlash</button><button class="ghost" id="fC">Bekor</button>'+(m?'<button class="ghost" id="fDel" style="color:var(--bad)">🗑 O‘chirish</button>':'')+'</div><div id="fMsg"></div>'
     +(m?'<p class="hint" style="margin:8px 0 0">«O‘chirish» — faqat xato kiritilgan, hali ish kuni va to‘lovi yo‘q xodim uchun. Ishlagan xodimni «Ishlayapti» belgisini olib tashlab, ishdan ketgan qiling.</p>':'')+'</div>';
   var pt=monthly?'monthly':'hourly';moneyField('fR');
-  box.querySelectorAll('[data-pt]').forEach(function(b){b.addEventListener('click',function(){pt=b.dataset.pt;box.querySelectorAll('[data-pt]').forEach(function(x){x.className=x===b?'':'ghost'});document.getElementById('fRL').textContent=pt==='monthly'?'Oylik maosh':'Soatlik stavka'})});
+  /* Stavka, oylik yoki ish rejasi o'zgarsa — «qachondan» so'raladi (standart: bugun). */
+  var termsNow=function(){var n=function(i){return Number(String(document.getElementById(i).value).replace(',','.'))};return [pt,digits(document.getElementById('fR').value),n('fD'),n('fH'),n('fO'),n('fM')].join('|')};
+  var start=m?termsNow():'',showFrom=function(){var fb=document.getElementById('fFromBox');if(fb)fb.hidden=termsNow()===start};
+  ['fR','fD','fH','fO','fM'].forEach(function(i){document.getElementById(i).addEventListener('input',showFrom)});
+  box.querySelectorAll('[data-pt]').forEach(function(b){b.addEventListener('click',function(){pt=b.dataset.pt;box.querySelectorAll('[data-pt]').forEach(function(x){x.className=x===b?'':'ghost'});document.getElementById('fRL').textContent=pt==='monthly'?'Oylik maosh':'Soatlik stavka';showFrom()})});
   document.getElementById('fC').addEventListener('click',function(){box.innerHTML=''});
   var del=document.getElementById('fDel');if(del)del.addEventListener('click',function(){
     if(!confirm('«'+m.name+'» ro‘yxatdan o‘chirilsinmi? Faqat yozuvi yo‘q xodim o‘chadi.'))return;del.disabled=true;
@@ -288,8 +300,10 @@ function staffForm(m){
   document.getElementById('fS').addEventListener('click',function(){
     var r=digits(document.getElementById('fR').value),n=function(i){return Number(String(document.getElementById(i).value).replace(',','.'))};
     var body={action:'saveStaff',branchId:sel.value,id:m?m.id:'',operationId:op,name:document.getElementById('fN').value,payType:pt,hourlyRate:pt==='hourly'?r:0,monthlySalary:pt==='monthly'?r:0,workDays:n('fD'),dailyHours:n('fH'),overtimeAfterHours:n('fO'),overtimeMultiplier:n('fM'),active:m?document.getElementById('fA').checked:true};
+    var fb=document.getElementById('fFromBox');if(fb&&!fb.hidden)body.effectiveFrom=document.getElementById('fFrom').value;
     var btn=this;btn.disabled=true;
-    api(body).then(function(x){btn.disabled=false;if(!x.ok){document.getElementById('fMsg').innerHTML='<div class="msg bad">'+esc(x.error)+'</div>';return}STAFF=x.staff;drawStaff();load()});
+    api(body).then(function(x){btn.disabled=false;if(!x.ok){document.getElementById('fMsg').innerHTML='<div class="msg bad">'+esc(x.error)+'</div>';return}STAFF=x.staff;drawStaff();load();
+      var rc=x.rateChange;if(rc){var f=rc.from;document.getElementById('sForm').innerHTML='<div class="msg ok" style="margin:12px 0">✓ Saqlandi. Yangi shart '+esc(f.slice(8)+'.'+f.slice(5,7))+' dan hisoblanadi'+(rc.shifts||rc.days?' — '+(rc.shifts+rc.days)+' ta kun yangi stavkada qayta hisoblandi':'')+'. Oldingi kunlar eski stavkada.</div>'}});
   });
 }
 sel.addEventListener('change',function(){STAFF=null;ACC=null;load()});mon.addEventListener('change',load);load();
