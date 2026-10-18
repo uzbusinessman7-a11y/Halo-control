@@ -1,6 +1,6 @@
 import { isAdminRequest } from "../../../lib/integration-store";
 import { HaloStateConflictError, listHaloBranches, mutateHaloState, readHaloState } from "../../../lib/halo-store";
-import { addAdjustment, addShift, addShifts, editShift, repairPaymentPaidAt, payStaff, saveStaffMember, setDayStatus, StaffError, staffList, staffRecords, voidAdjustment, voidDayStatus, voidPayment, voidShift } from "../../../core/staff";
+import { addAdjustment, addShift, addShifts, deleteStaffMember, editShift, repairPaymentPaidAt, payStaff, saveStaffMember, setDayStatus, StaffError, staffList, staffRecords, voidAdjustment, voidDayStatus, voidPayment, voidShift } from "../../../core/staff";
 import { LedgerError } from "../../../core/ledger";
 import { runPayrollBridge } from "../../../core/payroll-bridge";
 import { isMonth, payslip, payslipText } from "../../../core/payroll-ledger";
@@ -52,6 +52,7 @@ export async function POST(request: Request) {
       .filter((a) => (a.type === "cash" || a.type === "bank") && a.active !== false).map((a) => ({ id: String(a.id), name: String(a.name || a.id) }));
     const mutations: Record<string, [(st: Record<string, unknown>) => { state: Record<string, unknown>; result: unknown }, string]> = {
       saveStaff: [(st) => saveStaffMember(st, body), "Xodim ma’lumoti saqlandi"],
+      deleteStaff: [(st) => deleteStaffMember(st, body), "Xato kiritilgan xodim o‘chirildi (yozuvi yo‘q edi)"],
       shift: [(st) => addShift(st, body, today), "Smena qo‘lda kiritildi"],
       shifts: [(st) => addShifts(st, body, today), `Ishlagan kunlar qo‘lda kiritildi · ${Array.isArray(body.dates) ? body.dates.length : 0} kun`],
       adjust: [(st) => addAdjustment(st, body, today), body.type === "bonus" ? "Bonus yozildi" : "Ushlanma yozildi"],
@@ -276,10 +277,14 @@ function staffForm(m){
     +'<div class="row"><label class="field" style="flex:1"><span>Oyda ish kuni</span><input id="fD" inputmode="numeric" value="'+esc(m?m.workDays:26)+'"></label><label class="field" style="flex:1"><span>Kunlik soat</span><input id="fH" inputmode="decimal" value="'+esc(m?m.dailyHours:8)+'"></label></div>'
     +'<div class="row"><label class="field" style="flex:1"><span>Necha soatdan keyin ortiqcha</span><input id="fO" inputmode="decimal" value="'+esc(m?m.overtimeAfterHours:8)+'"></label><label class="field" style="flex:1"><span>Ortiqcha soat koeffitsienti</span><input id="fM" inputmode="decimal" value="'+esc(m?m.overtimeMultiplier:1)+'"></label></div>'
     +(m?'<label class="row" style="gap:8px;margin-bottom:12px"><input type="checkbox" id="fA" style="width:18px;height:18px;min-height:auto"'+(m.active?' checked':'')+'> Ishlayapti (belgini olib tashlasangiz — ishdan ketgan)</label>':'')
-    +'<div class="row"><button id="fS">Saqlash</button><button class="ghost" id="fC">Bekor</button></div><div id="fMsg"></div></div>';
+    +'<div class="row"><button id="fS">Saqlash</button><button class="ghost" id="fC">Bekor</button>'+(m?'<button class="ghost" id="fDel" style="color:var(--bad)">🗑 O‘chirish</button>':'')+'</div><div id="fMsg"></div>'
+    +(m?'<p class="hint" style="margin:8px 0 0">«O‘chirish» — faqat xato kiritilgan, hali ish kuni va to‘lovi yo‘q xodim uchun. Ishlagan xodimni «Ishlayapti» belgisini olib tashlab, ishdan ketgan qiling.</p>':'')+'</div>';
   var pt=monthly?'monthly':'hourly';moneyField('fR');
   box.querySelectorAll('[data-pt]').forEach(function(b){b.addEventListener('click',function(){pt=b.dataset.pt;box.querySelectorAll('[data-pt]').forEach(function(x){x.className=x===b?'':'ghost'});document.getElementById('fRL').textContent=pt==='monthly'?'Oylik maosh':'Soatlik stavka'})});
   document.getElementById('fC').addEventListener('click',function(){box.innerHTML=''});
+  var del=document.getElementById('fDel');if(del)del.addEventListener('click',function(){
+    if(!confirm('«'+m.name+'» ro‘yxatdan o‘chirilsinmi? Faqat yozuvi yo‘q xodim o‘chadi.'))return;del.disabled=true;
+    api({action:'deleteStaff',branchId:sel.value,id:m.id,operationId:op}).then(function(x){del.disabled=false;if(!x.ok){document.getElementById('fMsg').innerHTML='<div class="msg bad">'+esc(x.error)+'</div>';return}STAFF=x.staff;drawStaff();load()})});
   document.getElementById('fS').addEventListener('click',function(){
     var r=digits(document.getElementById('fR').value),n=function(i){return Number(String(document.getElementById(i).value).replace(',','.'))};
     var body={action:'saveStaff',branchId:sel.value,id:m?m.id:'',operationId:op,name:document.getElementById('fN').value,payType:pt,hourlyRate:pt==='hourly'?r:0,monthlySalary:pt==='monthly'?r:0,workDays:n('fD'),dailyHours:n('fH'),overtimeAfterHours:n('fO'),overtimeMultiplier:n('fM'),active:m?document.getElementById('fA').checked:true};

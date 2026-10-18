@@ -65,6 +65,24 @@ export function saveStaffMember(state: Row, body: Row) {
   };
 }
 
+/**
+ * Xato kiritilgan xodimni o'chirish — faqat hech qanday yozuvi yo'q bo'lsa (ish kuni, dam/kasal kuni, bonus/ushlanma,
+ * to'lov). Yozuvi bor xodim o'chirilmaydi: maosh tarixi buzilmasin — uni «ishdan ketgan» qilish kerak.
+ * Bog'langan akkaunt o'chmaydi, faqat bog'lanish uziladi.
+ */
+export function deleteStaffMember(state: Row, body: Row) {
+  const id = clean(body.id, 100);
+  const staff = rows(state.staff);
+  const member = staff.find((entry) => entry.id === id);
+  if (!member) throw new StaffError("Xodim topilmadi. Sahifani yangilang.", 404);
+  const count = (list: unknown) => rows(list).filter((entry) => entry.staffId === id).length;
+  const used = count(state.workShifts) + count(state.attendanceDays) + count(state.payrollAdjustments) + count(state.payrollPayments);
+  if (used > 0) {
+    throw new StaffError(`${String(member.name)}da ${used} ta yozuv bor (ish kuni, to‘lov…) — maosh tarixi uchun o‘chirilmaydi. «Ishlayapti» belgisini olib tashlang (ishdan ketgan).`, 409);
+  }
+  return { state: { ...state, staff: staff.filter((entry) => entry.id !== id) }, result: { deleted: String(member.name) } };
+}
+
 /** Rahbar qo'lda smena kiritadi (xodim telefondan belgilamagan kun uchun). */
 export function addShift(state: Row, body: Row, today: string) {
   const op = opId(body);
