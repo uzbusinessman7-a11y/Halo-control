@@ -238,6 +238,35 @@ export async function createWorkerAccount(branchId: string, name: string, userna
   return workerId;
 }
 
+/**
+ * Xato ochilgan akkauntni o'chirish (rahbar). Login bo'shaydi. Xodimning ish kunlari, savdo va boshqa yozuvlari
+ * akkauntga emas, xodim profiliga yozilgan — ular o'chmaydi. Vazifa berilgan akkaunt o'chirilmaydi (vazifalar tarixi
+ * akkauntga bog'langan) — uni «To'xtatish» kerak.
+ */
+export async function deleteWorkerAccount(workerId: string) {
+  await ensureWorkerAccess();
+  const worker = await d1().prepare("SELECT id, branch_id, name, username FROM halo_worker_users WHERE id = ?")
+    .bind(workerId).first<{ id: string; branch_id: string; name: string; username: string }>();
+  if (!worker) throw new Error("Xodim akkaunti topilmadi.");
+  let tasks = 0;
+  try {
+    const row = await d1().prepare("SELECT COUNT(*) AS n FROM halo_worker_tasks WHERE worker_id = ?").bind(workerId).first<{ n: number }>();
+    tasks = Number(row?.n || 0);
+  } catch { tasks = 0; /* vazifalar jadvali hali yo'q */ }
+  if (tasks > 0) {
+    throw new Error(`${worker.name} akkauntiga ${tasks} ta vazifa berilgan — tarix uchun o‘chirilmaydi. «To‘xtatish»ni bosing.`);
+  }
+  for (const sql of [
+    "DELETE FROM halo_worker_sessions WHERE user_id = ?",
+    "DELETE FROM halo_worker_channels WHERE worker_id = ?",
+    "DELETE FROM halo_worker_telegram_links WHERE worker_id = ?",
+  ]) {
+    try { await d1().prepare(sql).bind(workerId).run(); } catch { /* jadval bo'lmasa — o'tkazib yuboriladi */ }
+  }
+  await d1().prepare("DELETE FROM halo_worker_users WHERE id = ?").bind(workerId).run();
+  return { branchId: worker.branch_id, name: worker.name, username: worker.username };
+}
+
 export async function setWorkerActive(workerId: string, active: boolean) {
   await ensureWorkerAccess();
   const worker = await d1().prepare(
@@ -289,9 +318,20 @@ export async function resetWorkerPin(workerId: string, pin: string) {
 
 export async function loginWorker(branchId: string, username: string, pin: string) {
   await ensureWorkerAccess();
-  const safeId = safeBranchId(branchId);
+  let safeId = safeBranchId(branchId);
   const safeUsername = cleanUsername(username);
   const safePin = cleanPin(pin);
+  // Xodim filialni noto'g'ri tanlasa: bu login faqat bitta (boshqa) filialda bo'lsa — o'sha filialga kiradi.
+  // PIN baribir tekshiriladi; login ikki filialda ham bo'lsa — tanlangan filial qoladi.
+  const here = await d1().prepare("SELECT 1 AS ok FROM halo_worker_users WHERE branch_id = ? AND username = ?").bind(safeId, safeUsername).first<{ ok: number }>();
+  if (!here) {
+    const elsewhere = await d1().prepare(
+      `SELECT u.branch_id FROM halo_worker_users u JOIN halo_branches b ON b.id = u.branch_id AND b.active = 1
+        WHERE u.username = ? AND u.active = 1`,
+    ).bind(safeUsername).all<{ branch_id: string }>();
+    const found = elsewhere.results || [];
+    if (found.length === 1) safeId = found[0].branch_id;
+  }
   const row = await d1().prepare(
     `SELECT u.id, u.branch_id, u.name, u.username, u.pin_hash, u.active, u.can_warehouse_receipt, u.can_supplier_delivery,
       u.failed_attempts, u.locked_until
