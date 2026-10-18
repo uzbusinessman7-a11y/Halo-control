@@ -9,6 +9,7 @@ import { conflictingWorkShiftIds, normalizeStaff, normalizeWorkShifts, staffHour
 import { isAccountingMonthClosed } from "../lib/month-end";
 import { seoulLocalDateTimeToIso } from "../lib/business-time";
 import { shiftPayWindow, workHoursOf } from "./work-hours";
+import { applyRateChange, memberOn, rateHistoryView } from "./staff-rates";
 
 type Row = Record<string, unknown>;
 export class StaffError extends Error {
@@ -28,10 +29,18 @@ export function staffList(state: Row) {
     workDays: member.workDays, dailyHours: member.dailyHours, overtimeAfterHours: member.overtimeAfterHours, overtimeMultiplier: member.overtimeMultiplier,
     active: member.active, effectiveHourlyRate: Math.round(staffHourlyRate(member)), hasAccount: Boolean(member.workerId),
     workHours: workHoursOf(member),
+    rateHistory: rateHistoryView(rows(state.staff).find((row) => String(row.id) === member.id) || {}),
   })).sort((left, right) => Number(right.active) - Number(left.active) || left.name.localeCompare(right.name));
 }
 
-export function saveStaffMember(state: Row, body: Row) {
+const seoulToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+
+/**
+ * Xodimni saqlash. Stavka, oylik yoki ish rejasi o'zgarsa — `effectiveFrom` (standart: bugun) sanasidan boshlab
+ * hisoblanadi: o'sha kundan keyingi ish kunlari yangi stavkada qayta hisoblanadi, oldingilari eski stavkada qoladi
+ * (app/core/staff-rates.ts).
+ */
+export function saveStaffMember(state: Row, body: Row, today = seoulToday()) {
   const staff = rows(state.staff);
   let id = clean(body.id, 100);
   if (!id) {
@@ -58,10 +67,16 @@ export function saveStaffMember(state: Row, body: Row) {
   };
   const [member] = normalizeStaff([draft]);
   if (!member) throw new StaffError("Xodim ma'lumotini tekshiring.");
-  const saved = { ...draft, ...member, updatedAt: new Date().toISOString() };
+  const now = new Date().toISOString();
+  const saved: Row = { ...draft, ...member, updatedAt: now };
+  const change = current ? applyRateChange(state, current, member, body.effectiveFrom, today, now) : null;
+  if (change) saved.rateHistory = change.rateHistory;
   return {
-    state: { ...state, staff: current ? staff.map((entry) => (entry.id === id ? saved : entry)) : [...staff, saved] },
-    result: { member: saved, created: !current },
+    state: {
+      ...state, staff: current ? staff.map((entry) => (entry.id === id ? saved : entry)) : [...staff, saved],
+      ...(change ? { workShifts: change.workShifts, attendanceDays: change.attendanceDays } : {}),
+    },
+    result: { member: saved, created: !current, ...(change ? { rateChange: { from: change.from, shifts: change.shiftsChanged, days: change.daysChanged } } : {}) },
   };
 }
 
@@ -89,9 +104,10 @@ export function addShift(state: Row, body: Row, today: string) {
   const id = `v2-shift:${op}`;
   const shifts = rows(state.workShifts);
   if (shifts.some((shift) => shift.id === id)) return { state, result: { alreadySaved: true } };
-  const member = normalizeStaff(state.staff).find((entry) => entry.id === clean(body.staffId, 100));
-  if (!member || !member.active) throw new StaffError("Xodimni tanlang.");
   const date = clean(body.date, 10);
+  // O'sha kundagi shart (stavka o'zgargan bo'lsa — sanaga qarab).
+  const member = memberOn(rows(state.staff).find((entry) => entry.id === clean(body.staffId, 100)), date);
+  if (!member || !member.active) throw new StaffError("Xodimni tanlang.");
   const from = clean(body.from, 5);
   const to = clean(body.to, 5);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today) throw new StaffError("Sanani tekshiring.");
@@ -314,9 +330,9 @@ export function voidShift(state: Row, body: Row) {
 
 /** Kun holati: dam olish / kasal / kelmadi. "planned" — reja bo'yicha haq to'lanadi (masalan, pullik dam olish). */
 export function setDayStatus(state: Row, body: Row, today: string) {
-  const member = normalizeStaff(state.staff).find((entry) => entry.id === clean(body.staffId, 100));
-  if (!member) throw new StaffError("Xodimni tanlang.");
   const date = clean(body.date, 10);
+  const member = memberOn(rows(state.staff).find((entry) => entry.id === clean(body.staffId, 100)), date);
+  if (!member) throw new StaffError("Xodimni tanlang.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today) throw new StaffError("Sanani tekshiring.");
   openMonth(state, date);
   const status = clean(body.status, 10);

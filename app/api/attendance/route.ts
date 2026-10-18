@@ -15,6 +15,7 @@ import { isAccountingMonthClosed } from "../../lib/month-end";
 import type { D1Like } from "../../lib/full-migration";
 import { checkAttendanceLocation, logAttendanceAttempt, PlaceError, readAttendancePlace, type AttendancePlace } from "../../core/attendance-place";
 import { clockInPayWindow, shiftPayWindow, workHoursOf } from "../../core/work-hours";
+import { memberOn } from "../../core/staff-rates";
 
 declare global {
   var __HALO_CONTROL_DB__: D1Database | undefined;
@@ -157,9 +158,11 @@ export async function POST(request: Request) {
           clockIn: now.toISOString(),
           clockOut: "",
           breakMinutes: 0,
-          hourlyRateAtShift: staffHourlyRate(member),
-          overtimeAfterHoursAtShift: member.overtimeAfterHours || member.dailyHours,
-          overtimeMultiplierAtShift: member.overtimeMultiplier || 1,
+          // Stavka — bugungi kundagi shart (rahbar «qachondan» bilan o'zgartirgan bo'lsa ham to'g'ri).
+          ...(() => {
+            const terms = memberOn((Array.isArray(state.staff) ? state.staff as Array<Record<string, unknown>> : []).find((row) => String(row.id) === member.id), businessDate) || member;
+            return { hourlyRateAtShift: staffHourlyRate(terms), overtimeAfterHoursAtShift: terms.overtimeAfterHours || terms.dailyHours, overtimeMultiplierAtShift: terms.overtimeMultiplier || 1 };
+          })(),
           ...(() => {
             // Erta kelsa — hisob belgilangan ish vaqtidan (rahbar sozlaydi: Xodimlar sozlamasi → Qat'iy ish vaqti).
             const window = clockInPayWindow(member, now);
