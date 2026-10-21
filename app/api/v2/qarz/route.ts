@@ -7,6 +7,8 @@ import { runDebtBridge } from "../../../core/debt-bridge";
 import { statement, statementText } from "../../../core/debts";
 import type { D1Like } from "../../../lib/full-migration";
 import { VegetableExpenseError } from "../../../lib/vegetable-expenses";
+import { IntakeError } from "../../../lib/unified-intake";
+import { MezanaPostingError } from "../../../lib/mezana-posting";
 import { assertV2DayOpen, ClosedDayError } from "../../../core/closed-days";
 import {
   applySupplierIntake, intakeInventoryChoices, listSupplierProducts, rememberIntakePrices, removeSupplierProduct, saveSupplierProduct, SupplierIntakeError,
@@ -110,7 +112,10 @@ export async function POST(request: Request) {
       const result = mutation.result;
       let remembered = true;
       try { await rememberIntakePrices(database(), branchId, result); } catch { remembered = false; }
-      return json({ ok: true, result, remembered, ...(await profile(mutation.state as Row, supplierId)) });
+      // Kirim allaqachon saqlandi: keyingi ro'yxatni yig'ishda xato bo'lsa ham «saqlanmadi» deb ko'rsatilmasin (ikki marta kiritilmasin).
+      let after = {};
+      try { after = await profile(mutation.state as Row, supplierId); } catch (error) { console.error("[v2/qarz] profile", error); }
+      return json({ ok: true, result, remembered, ...after });
     }
     // Yetkazib beruvchisiz xarid uchun doimiy hisob («Bozor / naqd xarid») — birinchi marta kerak bo'lganda ochiladi.
     const openMarket = async () => {
@@ -178,7 +183,11 @@ export async function POST(request: Request) {
     if (error instanceof SupplierBalanceEditError) return json({ error: error.message }, 409);
     if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     if (error instanceof LedgerError || (error instanceof Error && /filial/i.test(error.message))) return json({ error: error.message }, 400);
-    return json({ error: "Xatolik yuz berdi." }, 500);
+    if (error instanceof IntakeError || error instanceof MezanaPostingError) return json({ error: error.message }, 400);
+    // Kutilmagan xato: hech narsa saqlanmagan. Sababi ekranda ko'rinsin (rasmga olib yuborish mumkin) va Cloudflare jurnaliga yozilsin.
+    console.error("[v2/qarz]", error);
+    const reason = error instanceof Error ? `${error.name}: ${error.message}`.replace(/\s+/g, " ").slice(0, 160) : "";
+    return json({ error: `Saqlanmadi — kutilmagan xato, hech narsa yozilmadi.${reason ? ` Sababi: ${reason}` : ""}` }, 500);
   }
 }
 

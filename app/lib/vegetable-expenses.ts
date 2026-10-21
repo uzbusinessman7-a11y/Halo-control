@@ -1,5 +1,5 @@
 import { seoulCalendarDate } from './business-time.ts';
-import { rebalanceSuppliers } from './supplier-transactions.ts';
+import { rebalanceInvolvedSuppliers } from './supplier-transactions.ts';
 
 type Row = Record<string, any>;
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value : [];
@@ -104,12 +104,12 @@ export function applyVegetablePurchaseAccounting<T extends Row>(current: T, next
       transactionId = `vegetable-purchase:${m.id}`;
       const prior = transactions.find(t => t.id === transactionId);
       const tx = { id: transactionId, type: 'purchase' as const, supplierId, amount, date: m.date, note: `${VEGETABLE_CATEGORY} · ${item?.name}`, vegetableMovementId: m.id };
-      suppliers = rebalanceSuppliers(suppliers as any, (prior || null) as any, tx)!;
+      { const out = rebalanceInvolvedSuppliers(suppliers as any, (prior || null) as any, tx); if (out.error !== undefined) throw new VegetableExpenseError(out.error); suppliers = out.suppliers as Row[]; }
       transactions = [tx, ...transactions.filter(t => t.id !== transactionId)];
     } else if (transactionId === `vegetable-purchase:${m.id}`) {
       const prior = transactions.find(t => t.id === transactionId);
       const tx = { ...prior, id: transactionId, supplierId, type: 'purchase' as const, amount, date: m.date, vegetableMovementId: m.id };
-      suppliers = rebalanceSuppliers(suppliers as any, (prior || null) as any, tx)!;
+      { const out = rebalanceInvolvedSuppliers(suppliers as any, (prior || null) as any, tx); if (out.error !== undefined) throw new VegetableExpenseError(out.error); suppliers = out.suppliers as Row[]; }
       transactions = [tx, ...transactions.filter(t => t.id !== transactionId)];
     }
     const record = { id: `vegetable:${m.id}`, movementId: m.id, inventoryId: m.inventoryId, name: String(item?.name || previousPurchase?.name || ''),
@@ -133,7 +133,7 @@ export function applyVegetablePurchaseAccounting<T extends Row>(current: T, next
     if (saved) entries.set(p.expenseId, { ...saved, cancelledAt: now });
     if (p.transactionId === `vegetable-purchase:${movementId}`) {
       const tx = transactions.find(t => t.id === p.transactionId);
-      if (tx) { deletedItems.push({ id: `archive:${tx.id}`, kind: 'transaction', entityId: tx.id, label: tx.note || VEGETABLE_CATEGORY, section: VEGETABLE_CATEGORY, deletedAt: now, deletedBy: actor, reason: 'Bog‘langan xarid bekor qilindi', record: tx }); suppliers = rebalanceSuppliers(suppliers as any, tx as any, null)!; transactions = transactions.filter(t => t.id !== tx.id); }
+      if (tx) { deletedItems.push({ id: `archive:${tx.id}`, kind: 'transaction', entityId: tx.id, label: tx.note || VEGETABLE_CATEGORY, section: VEGETABLE_CATEGORY, deletedAt: now, deletedBy: actor, reason: 'Bog‘langan xarid bekor qilindi', record: tx }); { const out = rebalanceInvolvedSuppliers(suppliers as any, tx as any, null); if (out.error !== undefined) throw new VegetableExpenseError(out.error); suppliers = out.suppliers as Row[]; } transactions = transactions.filter(t => t.id !== tx.id); }
     }
   }
   return { ...next, inventory: rows(next.inventory).map(i => stockCorrection.has(i.id) ? { ...i, stock: num(i.stock) + stockCorrection.get(i.id)! } : i),

@@ -200,6 +200,36 @@ export function rebalanceSuppliers<T extends { id: string; balance: number }>(
   }));
 }
 
+/**
+ * Faqat shu yozuvga tegishli yetkazib beruvchi(lar)ning qarzini o'zgartiradi — boshqalariga tegmaydi.
+ * `rebalanceSuppliers` bitta yetkazib beruvchining qoldig'i buzilgan (son emas) bo'lsa butun ro'yxat uchun `null`
+ * qaytaradi; bu yerda esa boshqa yetkazib beruvchining buzuq qoldig'i xaridga xalaqit bermaydi, ro'yxat hech qachon
+ * yo'qolmaydi, shu yetkazib beruvchiniki buzuq bo'lsa — nomi bilan tushunarli sabab qaytadi (hech narsa saqlanmaydi).
+ */
+export function rebalanceInvolvedSuppliers<T extends { id: string; balance: number; name?: string }>(
+  suppliers: T[],
+  previous: SupplierTransactionValue | null,
+  next: SupplierTransactionValue | null,
+): { suppliers: T[]; error?: undefined } | { suppliers?: undefined; error: string } {
+  const list = Array.isArray(suppliers) ? suppliers : [];
+  const changes = new Map<string, number>();
+  for (const [value, sign] of [[previous, -1], [next, 1]] as const) {
+    if (!value) continue;
+    const effect = supplierTransactionEffect(value);
+    if (!effect) return { error: "Xarid yoki to‘lov summasini tekshiring." };
+    changes.set(String(value.supplierId), (changes.get(String(value.supplierId)) || 0) + sign * effect);
+  }
+  for (const [supplierId, change] of changes) {
+    const supplier = list.find((entry) => entry.id === supplierId);
+    if (!supplier) return { error: "Yetkazib beruvchi topilmadi. Sahifani yangilang." };
+    if (!Number.isFinite(Number(supplier.balance) + change)) {
+      const name = String(supplier.name || supplier.id);
+      return { error: `«${name}» qarz qoldig‘i buzilgan (son emas), shu sabab qarzni hisoblab bo‘lmadi — hech narsa saqlanmadi. Qarzlar → ${name} → «⚖️ Qoldiqni tuzatish» orqali to‘g‘ri qoldiqni kiriting, keyin qayta saqlang.` };
+    }
+  }
+  return { suppliers: list.map((supplier) => changes.has(supplier.id) ? { ...supplier, balance: Number(supplier.balance) + changes.get(supplier.id)! } : supplier) };
+}
+
 export function supplierPurchaseSettlements(
   transactions: SupplierLedgerTransaction[],
   throughDate?: string,

@@ -19,7 +19,8 @@ export function editSupplierBalance(state: Row, input: Row, now = new Date().toI
     if (previous.balance !== target || previous.reason !== reason) throw new SupplierBalanceEditError('Bu tuzatish oldin boshqa ma’lumot bilan saqlangan.');
     return { state, result: { alreadySaved: true } };
   }
-  if (supplier.balance !== input.expectedBalance || Number(supplier.openingBalance || 0) !== input.expectedOpeningBalance) {
+  // Buzilgan (son bo'lmagan) qoldiq ham shu oynadan to'g'rilanadi: solishtirish NaN'ga chidamli.
+  if (!Object.is(supplier.balance, input.expectedBalance) || !Object.is(Number(supplier.openingBalance || 0), input.expectedOpeningBalance)) {
     throw new SupplierBalanceEditError('Qarz boshqa joyda o‘zgargan. Sahifani yangilab, qoldiqni tekshiring.');
   }
   const transactions: Row[] = (state.transactions || []).filter((t: Row) => t.supplierId === supplier.id);
@@ -29,9 +30,14 @@ export function editSupplierBalance(state: Row, input: Row, now = new Date().toI
     net += t.type === 'purchase' ? t.amount : -t.amount;
   }
   const openingBalance = target - net;
-  if (![net, openingBalance, supplier.balance, Number(supplier.openingBalance || 0)].every(Number.isSafeInteger)) throw new SupplierBalanceEditError('Hisob summasi noto‘g‘ri.');
-  const entry = { id: input.id, at: now, actor: 'Rahbar', reason, previousBalance: supplier.balance, balance: target,
-    previousOpeningBalance: Number(supplier.openingBalance || 0), openingBalance, difference: target - supplier.balance };
+  // Eski qoldiq buzilgan bo'lsa (son emas) — tuzatishga ruxsat; tarixda 0 dan deb yoziladi va asl qiymat saqlanadi.
+  const beforeBalance = Number.isSafeInteger(supplier.balance) ? supplier.balance : null;
+  const beforeOpening = Number.isSafeInteger(Number(supplier.openingBalance || 0)) ? Number(supplier.openingBalance || 0) : null;
+  if (![net, openingBalance].every(Number.isSafeInteger)) throw new SupplierBalanceEditError('Hisob summasi noto‘g‘ri.');
+  const broken = beforeBalance === null || beforeOpening === null;
+  const entry = { id: input.id, at: now, actor: 'Rahbar', reason, previousBalance: beforeBalance ?? 0, balance: target,
+    previousOpeningBalance: beforeOpening ?? 0, openingBalance, difference: target - (beforeBalance ?? 0),
+    ...(broken ? { repairedBrokenBalance: { balance: String(supplier.balance ?? ''), openingBalance: String(supplier.openingBalance ?? '') } } : {}) };
   const updated = { ...supplier, balance: target, openingBalance, balanceEdits: [entry, ...history] };
   return { state: { ...state, suppliers: suppliers.map(s => s.id === supplier.id ? updated : s) }, result: { alreadySaved: false, supplier: updated } };
 }

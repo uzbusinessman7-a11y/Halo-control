@@ -3,7 +3,7 @@ import { expenseOnlyOnDate } from './vegetable-expenses.ts';
 import { seoulCalendarDate } from './business-time.ts';
 import { receiptCostsForInventory, bypassRemovedReceiptCost } from './stock-movements.ts';
 import { mezanaNameKey } from './mezana-posting.ts';
-import { rebalanceSuppliers } from './supplier-transactions.ts';
+import { rebalanceInvolvedSuppliers } from './supplier-transactions.ts';
 import { isAccountingMonthClosed } from './month-end.ts';
 type Row = Record<string, any>;
 const list = (value: unknown): Row[] => Array.isArray(value) ? value : [];
@@ -107,8 +107,11 @@ export function applyUnifiedIntake(state: Row, body: Row, originalMovements?: Ro
   if (similar && (duplicateReason.length < 5 || duplicateReason.length > 300)) throw new IntakeError(`Bu yetkazib beruvchi uchun ${similar.date} sanasida ₩${Number(similar.amount).toLocaleString('en-US')} xarid oldin saqlangan. O‘sha xarid bo‘lsa, qayta saqlamang. Faqat boshqa xarid bo‘lsa, alohida ekanini tasdiqlang.`, 'SIMILAR_PURCHASE');
   const record = {duplicateOf:similar?.id || '',duplicateReason:similar ? duplicateReason : '',intakeRequestKey:requestKey,id,supplierId:supplier.id,type:'purchase' as const,amount:total,date,note:`Xarid / kirim · ${lines.map((line:Row)=>line.name).join(', ')}`,intakeLines:lines,intakePaidAmount:paid,intakeInvoiceNumber:invoiceNumber};
   const payment = {id:`intake-payment:${operationId}`,supplierId:supplier.id,type:'payment' as const,amount:paid,date,accountId:body.accountId,note:'Xarid / kirim bilan to‘landi',intakeId:id};
-  let nextSuppliers = rebalanceSuppliers((candidates.length ? suppliers : [...suppliers,supplier]) as any,null,record)!;
-  if (paid) nextSuppliers=rebalanceSuppliers(nextSuppliers,null,payment)!;
+  // Faqat shu yetkazib beruvchining qarzi o'zgaradi; qoldig'i buzilgan bo'lsa — aniq sabab (ro'yxat hech qachon yo'qolmasin).
+  const afterPurchase = rebalanceInvolvedSuppliers((candidates.length ? suppliers : [...suppliers,supplier]) as any,null,record);
+  if (afterPurchase.error !== undefined) throw new IntakeError(afterPurchase.error);
+  let nextSuppliers = afterPurchase.suppliers;
+  if (paid) { const afterPayment = rebalanceInvolvedSuppliers(nextSuppliers,null,payment); if (afterPayment.error !== undefined) throw new IntakeError(afterPayment.error); nextSuppliers = afterPayment.suppliers; }
   const movements = lines.flatMap((line:Row,index:number)=>line.inventoryId ? [{id:`intake-stock:${operationId}:${index}`,inventoryId:line.inventoryId,type:'receipt',quantity:line.stockQuantity,date,note:`${supplierName} · ${line.name}`,referenceId:id,intakeId:id,supplierId:supplier.id,...(line.stockQuantity>0?{unitCost:line.amount/line.stockQuantity}:{}),...(line.destination==='vegetableExpense'?{purchaseQuantity:line.quantity,purchaseUnit:line.unit,purchaseAmount:line.amount,...(line.purchasedAt?{purchasedAt:line.purchasedAt}:{}),...(line.remainingBeforePurchase!==undefined?{remainingBeforePurchase:line.remainingBeforePurchase}:{})}:{}),previousUnitCost:Number(inventory.find(item=>item.id===line.inventoryId)?.unitCost||0)}] : []);
   const inventoryWithStock = inventory.map((item)=>({...item,stock:Number(item.stock)+movements.filter((row:Row)=>row.inventoryId===item.id).reduce((sum:number,row:Row)=>sum+row.quantity,0)}));
   const nextInventory = receiptCostsForInventory(inventoryWithStock as any, [...movements,...list(state.stockMovements)] as any, {}, new Set(lines.filter((line:Row)=>line.inventoryId).map((line:Row)=>line.inventoryId))) as Row[];
@@ -125,7 +128,7 @@ function reverseUnifiedIntake(state: Row, body: Row, editing = false) {
  const inventory:Row[]=list(state.inventory).map(item=>{const quantity=movements.filter(row=>row.inventoryId===item.id).reduce((sum,row)=>sum+row.quantity,0);if(!editing && quantity && Number(item.stock)<quantity) throw new IntakeError(`«${item.name}» ishlatilgan; ombor qoldig‘i kirimni qaytarishga yetmaydi.`);return {...item,stock:Number(item.stock)-quantity};});
  if(movements.some(row=>!inventory.some(item=>item.id===row.inventoryId))) throw new IntakeError('Ombor mahsulotini avval tiklang.');
  const removed=transactions.filter(row=>row.id===id||row.intakeId===id);let suppliers=list(state.suppliers);
- for(const tx of removed) suppliers=rebalanceSuppliers(suppliers as any,tx as any,null) as Row[];
+ for(const tx of removed){const out=rebalanceInvolvedSuppliers(suppliers as any,tx as any,null);if(out.error!==undefined)throw new IntakeError(out.error);suppliers=out.suppliers as Row[];}
  let remainingMovements=list(state.stockMovements).filter(row=>row.intakeId!==id);
  const fallback:Record<string,number>={};
  for(const movement of movements){fallback[movement.inventoryId]=movement.previousUnitCost;remainingMovements=bypassRemovedReceiptCost(remainingMovements as any,movement as any) as Row[];}
