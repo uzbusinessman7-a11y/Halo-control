@@ -2,6 +2,7 @@ import { ensureHaloState } from "../../../lib/halo-store";
 import { getMedia, readDm, readRecipePrices, tvMemoGet, tvMemoSet, tvView } from "../../../core/digital-menu";
 import { tvLook, tvPage, tvRender, tvRevision, TV_VERSION } from "../../../core/tv-page";
 import type { D1Like } from "../../../lib/full-migration";
+import { a4Page } from "../../../core/menu-a4";
 
 /**
  * HALO monitor menyusi — televizor uchun OCHIQ manzil (parolsiz, FAQAT O'QIYDI).
@@ -9,6 +10,7 @@ import type { D1Like } from "../../../lib/full-migration";
  *  - GET /api/v2/tv?data=1&screen=kebab&rev=…    → ekran uchun tayyor menyu; rev hozirgi nusxa bilan bir xil bo'lsa — faqat belgi va server vaqti
  *  - GET /api/v2/tv?menu=1&screen=kebab          → menyu ma'lumoti oddiy JSON ko'rinishida (taom, variant, narx, rasm manzili)
  *  - GET /api/v2/tv?media=<id>                   → taom rasmi
+ *  - GET /api/v2/tv?a4=1[&screen=kebab]          → A4 menyu (chop etish / PDF): har ekran — bitta sahifa, narx va rasm shu yerdan
  * Boshqa filial: &b=<filial> yoki &branch=<filial>. Sayqallangan variant (ixtiyoriy): &look=premium — odatda asl ko'rinish.
  * Hech narsa yozmaydi; POST/PUT/DELETE yo'q. Tannarx, retsept, savdo va boshqa ichki ma'lumot bu yerdan chiqmaydi.
  * Javoblar keshlanmaydi (no-store) — narx o'zgarsa eski narx ushlanib qolmaydi. Faqat rasm doimiy keshlanadi (manzili o'zgarmas).
@@ -41,6 +43,15 @@ export async function GET(request: Request) {
     const look = tvLook(url.searchParams.get("look"));
     const wantsData = url.searchParams.get("data") === "1";
     const wantsMenu = url.searchParams.get("menu") === "1";
+    if (url.searchParams.get("a4") === "1") {
+      await ensureHaloState();
+      const recipes = await readRecipePrices(database(), branchId);
+      if (!recipes) return new Response("Filial topilmadi.", { status: 404, headers: NO_STORE });
+      const { config } = await readDm(database(), branchId);
+      const views = config.screens.map((entry) => tvView(config, recipes, entry.id));
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+      return new Response(a4Page(views, { only: screen, branch: branchId, today }), { headers: { "Content-Type": "text/html; charset=utf-8", ...NO_STORE } });
+    }
     if (!wantsData && !wantsMenu) {
       return new Response(tvPage({ screen, branch: branchId, look }), { headers: { "Content-Type": "text/html; charset=utf-8", ...NO_STORE } });
     }
