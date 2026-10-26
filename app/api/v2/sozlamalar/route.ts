@@ -119,7 +119,7 @@ export async function POST(request: Request) {
         }, 5, branchId, "Rahbar", "Xodim akkaunti o‘chirildi", "Sozlamalar (yangi)")).state as Row
         : current;
     } else if (body.action === "menuAccess") {
-      // Xodim ilovasida «🍽 Menyu»: taom nomi va rasmini o'zgartirish ruxsati (narxga emas).
+      // Xodim ilovasida «🍽 Menyu»: Monitor menyuni to'liq boshqarish ruxsati (narx o'zgarsa — kassada ham).
       const workerId = String(body.workerId || "");
       if (!(await listWorkerAccounts(branchId)).some((account) => account.id === workerId)) throw new AccountError("Akkaunt topilmadi. Sahifani yangilang.");
       await setMenuAccess(menuDb(), branchId, workerId, body.allowed === true);
@@ -166,7 +166,7 @@ function loadAccounts(){
         +'<small><select data-link="'+esc(a.id)+'" style="min-height:36px;padding:4px 8px;margin:6px 0"><option value="">— xodimga bog‘lash —</option>'+STAFF.map(function(m){return '<option value="'+esc(m.id)+'"'+(linked&&linked.id===m.id?' selected':'')+'>'+esc(m.name)+'</option>'}).join('')+'</select><br>'
         +'<label class="row" style="gap:6px;margin:4px 0"><input type="checkbox" data-perm="supplier-delivery" data-w="'+esc(a.id)+'"'+(a.canSupplierDelivery?' checked':'')+' style="width:18px;height:18px;min-height:auto"> Mahsulot kirimi kiritishi mumkin</label>'
         +'<label class="row" style="gap:6px;margin:4px 0 8px"><input type="checkbox" data-perm="warehouse-receipt" data-w="'+esc(a.id)+'"'+(a.canWarehouseReceipt?' checked':'')+' style="width:18px;height:18px;min-height:auto"> Xarajat kiritishi mumkin</label>'
-        +'<label class="row" style="gap:6px;margin:4px 0 8px"><input type="checkbox" data-mperm="'+esc(a.id)+'"'+(MENUOK.indexOf(a.id)>=0?' checked':'')+' style="width:18px;height:18px;min-height:auto"> Menyuni o‘zgartirishi mumkin</label>'
+        +'<label class="row" style="gap:6px;margin:4px 0 8px"><input type="checkbox" data-mperm="'+esc(a.id)+'"'+(MENUOK.indexOf(a.id)>=0?' checked':'')+' style="width:18px;height:18px;min-height:auto"> Menyu va narxni o‘zgartirishi mumkin</label>'
         +'<button class="ghost" data-pin="'+esc(a.id)+'" style="min-height:34px;padding:4px 10px">PIN yangilash</button> <button class="ghost" data-act="'+esc(a.id)+'" data-on="'+(a.active?'0':'1')+'" style="min-height:34px;padding:4px 10px">'+(a.active?'To‘xtatish':'Faollashtirish')+'</button> <button class="ghost" data-del="'+esc(a.id)+'" data-name="'+esc(a.name)+'" style="min-height:34px;padding:4px 10px;color:var(--bad)">🗑 O‘chirish</button>'
         +(a.lastLoginAt?' · oxirgi kirish '+esc(String(a.lastLoginAt).slice(0,16).replace('T',' ')):'')+'</small></div>'}).join(''):'<p class="hint">Hali akkaunt yo‘q.</p>';
     box.querySelectorAll('[data-link]').forEach(function(s){s.addEventListener('change',function(){req(location.pathname,'POST',{action:'link',branchId:sel.value,workerId:s.dataset.link,staffId:s.value}).then(function(x){if(!x.body.ok)alert(x.body.error);loadAccounts()})})});
