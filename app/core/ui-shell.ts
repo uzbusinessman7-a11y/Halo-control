@@ -17,7 +17,7 @@ export type NavKey =
   | "bosh" | "savdo"
   | "kiritish" | "kassa" | "nazorat"
   | "qarz" | "mezana"
-  | "ombor" | "menyu"
+  | "ombor" | "menyu" | "marja"
   | "maosh" | "vazifalar"
   | "tahlil" | "eksport" | "sanoq" | "tarix"
   | "kalkulyator" | "monitor" | "club"
@@ -46,6 +46,7 @@ export const NAV_GROUPS: NavGroup[] = [
   { key: "ombor", label: "Ombor", title: "Ombor va menyu", icon: '<path d="M3 8 12 3l9 5v11H3z"/><path d="M7 19v-7h10v7"/><path d="M7 15h10"/>', pages: [
     { key: "ombor", href: "/api/v2/ombor", label: "Ombor" },
     { key: "menyu", href: "/api/v2/menyu", label: "Menyu" },
+    { key: "marja", href: "/api/v2/marja", label: "Marja" },
   ] },
   { key: "xodimlar", label: "Xodimlar", title: "Xodimlar", icon: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.3-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c2 .7 3.2 2.4 3.6 5.2"/>', pages: [
     { key: "maosh", href: "/api/v2/maosh", label: "Maosh" },
