@@ -1,5 +1,6 @@
 import { isAdminRequest } from "../../../lib/integration-store";
-import { listHaloBranches, readHaloState } from "../../../lib/halo-store";
+import { HaloStateConflictError, listHaloBranches, mutateHaloState, readHaloState } from "../../../lib/halo-store";
+import { authenticateWorkerRequest } from "../../../lib/worker-auth";
 import { categoryIdOf, categoryList } from "../../../core/categories";
 import {
   adminView, deleteItem, deleteScreen, DigitalMenuError, importImage, linkMany, linkVariant, moveItem, pruneMedia, putMedia, readDm, recipePrices, saveItem, saveScreen,
@@ -7,10 +8,13 @@ import {
 } from "../../../core/digital-menu";
 import type { D1Like } from "../../../lib/full-migration";
 import { shell } from "../../../core/ui-shell";
-import { listMenuLog, loggedMediaIds, revertMenuLog, StaffMenuError } from "../../../core/menu-staff";
+import {
+  canEditMenu, listMenuLog, logConfigChange, loggedMediaIds, logPriceChange, revertMenuLog, setRecipeSalePrice, StaffMenuError, writeIf,
+} from "../../../core/menu-staff";
 
 /**
- * HALO V2 — «Monitor menyu»: televizordagi reklama menyuni boshqarish (faqat rahbar).
+ * HALO V2 — «Monitor menyu»: televizordagi reklama menyuni boshqarish (rahbar; rahbar ruxsat bergan xodim ham —
+ * xodim ilovasidagi «🍽 Menyu» shu sahifani ochadi, xodim o'zgarishlari jurnalga yoziladi, rahbar qaytara oladi).
  * Taom, variant (TYPE / SIZE / narx), rasm, "sotildi"/yashirish, SET MENU, kun aksiyasi va ekran vaqtlari.
  * Narx menyudagi taomga bog'lansa — o'sha yerdan olinadi. Bu sahifa savdo, ombor, kassa va retseptlarga yozmaydi.
  * Ekranning ko'rinishi bu yerda o'zgartirilmaydi — u eski monitor menyusidagi bilan bir xil (app/core/tv-page.ts).
@@ -26,45 +30,91 @@ const database = () => {
   return globalThis.__HALO_CONTROL_DB__ as unknown as D1Like;
 };
 
+/** Kim kirdi: rahbar yoki menyuga ruxsati bor xodim (PIN bilan). */
+async function whoIs(request: Request): Promise<{ kind: "owner" } | { kind: "worker"; id: string; name: string; branchId: string } | { kind: "denied"; worker: boolean }> {
+  if (await isAdminRequest(request)) return { kind: "owner" };
+  const session = await authenticateWorkerRequest(request);
+  if (!session) return { kind: "denied", worker: false };
+  if (!await canEditMenu(database(), session.branchId, session.userId)) return { kind: "denied", worker: true };
+  return { kind: "worker", id: session.userId, name: session.name, branchId: session.branchId };
+}
+
 export async function GET(request: Request) {
   if (globalThis.__HALO_SELF_HOSTED__ !== true) return new Response("V2 faqat yangi saytda.", { status: 403 });
-  if (!await isAdminRequest(request)) {
-    return new Response(null, { status: 303, headers: { Location: `/signin-with-chatgpt?return_to=${encodeURIComponent(PAGE_PATH)}` } });
+  const who = await whoIs(request);
+  if (who.kind === "denied") {
+    const to = who.worker ? "/api/v2/xodim" : `/signin-with-chatgpt?return_to=${encodeURIComponent(PAGE_PATH)}`;
+    return new Response(null, { status: 303, headers: { Location: to } });
   }
-  const branches = (await listHaloBranches()).map((branch) => ({ id: branch.id, name: branch.name }));
-  return new Response(page(branches), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  const all = (await listHaloBranches()).map((branch) => ({ id: branch.id, name: branch.name }));
+  const branches = who.kind === "worker" ? all.filter((branch) => branch.id === who.branchId) : all;
+  return new Response(page(branches, who.kind === "worker"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
   if (globalThis.__HALO_SELF_HOSTED__ !== true) return json({ error: "V2 faqat yangi saytda." }, 403);
-  if (!await isAdminRequest(request)) return json({ error: "Faqat rahbar uchun." }, 401);
+  const who = await whoIs(request);
+  if (who.kind === "denied") return json({ error: who.worker ? "Menyuni o‘zgartirishga rahbar ruxsat bermagan." : "Faqat rahbar uchun." }, who.worker ? 403 : 401);
+  const worker = who.kind === "worker" ? who : null;
   try {
     const body = await request.json() as Record<string, unknown>;
-    const branchId = String(body.branchId || "main");
+    // Xodim faqat o'z filialining menyusini ko'radi va o'zgartiradi.
+    const branchId = worker ? worker.branchId : String(body.branchId || "main");
+    const actorName = worker ? `${worker.name} (xodim)` : "Rahbar";
     const db = database();
-    // Menyudagi taomlar faqat O'QILADI (nomi va sotuv narxi) — biznes ma'lumotiga hech narsa yozilmaydi.
-    const { state } = await readHaloState(branchId);
-    const recipes: RecipePrice[] = recipePrices((state as Record<string, unknown>).recipes)
+    // Menyudagi taomlar O'QILADI (nomi va sotuv narxi). Yoziladigan yagona narsa — xodim/rahbar narxni shu yerdan o'zgartirsa, taomning sotuv narxi.
+    const recipesOf = (state: unknown): RecipePrice[] => recipePrices((state as Record<string, unknown>).recipes)
       .map((recipe) => ({ ...recipe, categoryId: categoryIdOf(state as Record<string, unknown>, "recipe", { categoryId: recipe.categoryId }) }))
       .sort((a, b) => a.name.localeCompare(b.name));
+    const { state } = await readHaloState(branchId);
+    let recipes = recipesOf(state);
     const categories = categoryList(state as Record<string, unknown>, "recipe").map((category) => ({ id: category.id, name: category.name }));
-    const reply = (config: DmConfig, extra: Record<string, unknown> = {}) => json({ ok: true, menu: adminView(config, recipes), recipes, categories, ...extra });
+    const reply = async (config: DmConfig, extra: Record<string, unknown> = {}) => json({
+      ok: true, menu: adminView(config, recipes), recipes, categories, ...extra,
+      // Xodimlar o'zgarishlari jurnali — faqat rahbarga.
+      staffLog: worker ? [] : await listMenuLog(db, branchId, config, recipes).catch(() => []),
+    });
     const current = await readDm(db, branchId);
+    const setSalePrice = async (recipeId: string, price: number, expected: number | undefined, label: string) => {
+      const mutation = await mutateHaloState((cur) => setRecipeSalePrice(cur as Record<string, unknown>, recipeId, price, expected), 5, branchId, actorName,
+        `Sotuv narxi o‘zgartirildi (Monitor menyu) · ${label.slice(0, 60)} · ${price.toLocaleString("en-US")} ₩`, "Monitor menyu");
+      recipes = recipesOf(mutation.state);
+      return mutation.result;
+    };
 
-    if (body.action === "load") return reply(current.config, { saved: current.saved, staffLog: await listMenuLog(db, branchId, current.config) });
-    // Xodim o'zgartirgan nom yoki rasmni qaytarish (jurnaldan).
-    if (body.action === "staffRevert") {
-      const reverted = await revertMenuLog(db, branchId, body.id);
-      tvMemoClear();
-      return reply(reverted, { saved: true, staffLog: await listMenuLog(db, branchId, reverted) });
-    }
+    if (body.action === "load") return reply(current.config, { saved: current.saved });
     if (body.action === "upload") {
       const imageId = await putMedia(db, branchId, body.mime, body.data);
       return json({ ok: true, imageId, url: `/api/v2/tv?media=${imageId}` });
     }
+    // Xodim o'zgartirgan narsani qaytarish (jurnaldan) — faqat rahbar.
+    if (body.action === "staffRevert") {
+      if (worker) return json({ error: "Qaytarishni rahbar qiladi." }, 403);
+      await revertMenuLog(db, branchId, body.id, async (recipeId, from, to) => { await setSalePrice(recipeId, to, from, "qaytarildi"); });
+      tvMemoClear();
+      return reply((await readDm(db, branchId)).config, { saved: true });
+    }
     let next: DmConfig;
     const extra: Record<string, unknown> = {};
-    if (body.action === "saveItem") {
+    if (body.action === "setPrice") {
+      // Narxni tez o'zgartirish. Menyudagi taomga bog'langan bo'lsa — o'sha taomning sotuv narxi (kassa ham), aks holda ekrandagi narx.
+      const item = current.config.items.find((entry) => entry.id === String(body.itemId || ""));
+      const variant = item?.variants.find((entry) => entry.id === String(body.variantId || ""));
+      if (!item || !variant) throw new StaffMenuError("Taom yoki narx topilmadi. Sahifani yangilang.", 404);
+      const price = Number(String(body.price ?? "").replace(/[^0-9]/g, ""));
+      if (!Number.isSafeInteger(price) || price <= 0 || price > 10_000_000) throw new StaffMenuError("Narxni tekshiring (butun son, vonda).");
+      const linked = variant.recipeId ? recipes.find((recipe) => recipe.id === variant.recipeId) : undefined;
+      if (linked) {
+        const label = `${item.name} · ${[variant.label, variant.size].filter(Boolean).join(" ")}`;
+        const out = await setSalePrice(linked.id, price, undefined, label);
+        if (worker && out.before !== out.after) await logPriceChange(db, branchId, worker, { recipeId: linked.id, label: `${out.name} (${label})`, before: out.before, after: out.after });
+        tvMemoClear();
+        return reply(current.config, { saved: current.saved, priceChanged: { kassa: true, before: out.before, after: out.after } });
+      }
+      next = { ...current.config, items: current.config.items.map((entry) => entry.id !== item.id ? entry
+        : { ...entry, variants: entry.variants.map((v) => v.id === variant.id ? { ...v, price } : v) }) };
+      extra.priceChanged = { kassa: false, before: variant.price, after: price };
+    } else if (body.action === "saveItem") {
       const out = saveItem(current.config, body, recipes);
       next = out.config; extra.id = out.id; extra.created = out.created;
     } else if (body.action === "deleteItem") next = deleteItem(current.config, body.id);
@@ -78,30 +128,40 @@ export async function POST(request: Request) {
     // Eski saytdagi bitta rasmni o'qib, HALO Control bazasiga o'zgarishsiz saqlaydi (eski saytga yozilmaydi).
     else if (body.action === "importImage") next = await importImage(db, branchId, current.config, body);
     else return json({ error: "Noma’lum amal." }, 400);
-    await writeDm(db, branchId, next);
+    if (worker) {
+      // Xodim: rahbar shu payt saqlagan bo'lsa — ustma-ust yozilmaydi; har o'zgarish jurnalga (rahbar ko'radi va qaytaradi).
+      if (!await writeIf(db, branchId, next, current)) throw new StaffMenuError("Menyu shu payt boshqa joyda o‘zgartirildi. Sahifani yangilab, qayta urinib ko‘ring.", 409);
+      await logConfigChange(db, branchId, worker, current.config, next);
+    } else {
+      await writeDm(db, branchId, next);
+    }
     tvMemoClear();
     await pruneMedia(db, branchId, next, new Date(), await loggedMediaIds(db, branchId)).catch(() => 0);
-    return reply(next, { ...extra, saved: true, staffLog: await listMenuLog(db, branchId, next).catch(() => []) });
+    return reply(next, { ...extra, saved: true });
   } catch (error) {
     if (error instanceof DigitalMenuError || error instanceof StaffMenuError) return json({ error: error.message }, error.status);
+    if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     if (error instanceof Error && /filial/i.test(error.message)) return json({ error: error.message }, 400);
+    console.error("[v2/monitor]", error);
     return json({ error: "Xatolik yuz berdi." }, 500);
   }
 }
 
-function page(branches: Array<{ id: string; name: string }>): string {
+function page(branches: Array<{ id: string; name: string }>, worker = false): string {
   const boot = JSON.stringify(branches).replace(/</g, "\\u003c");
+  // Xodim (ruxsat bilan): rahbar menyusi va boshqa bo'limlarsiz, «‹ Orqaga» — xodim ilovasiga.
   return shell({
-    title: "Monitor menyu", active: "monitor", heading: "Monitor menyu",
-    subtitle: "Televizordagi reklama menyu: taomlar, narxlar, rasmlar",
-    headerRight: '<select id="branch"></select>',
+    title: worker ? "Menyu" : "Monitor menyu", active: worker ? null : "monitor", heading: worker ? "🍽 Menyu" : "Monitor menyu",
+    ...(worker ? { app: "xodim" as const, back: "/api/v2/xodim" } : {}),
+    subtitle: worker ? "Televizordagi menyu: taom, narx, rasm. Har o‘zgarishingiz rahbarga ko‘rinadi." : "Televizordagi reklama menyu: taomlar, narxlar, rasmlar",
+    headerRight: worker ? '<select id="branch" hidden></select>' : '<select id="branch"></select>',
     body: `<section class="card"><div class="row" id="scr"></div><div id="scrInfo" style="margin-top:12px"></div></section>
 <div id="form"></div>
 <section class="card" id="list"><p class="hint">Yuklanmoqda…</p></section>
 <section class="card" id="staffLog" hidden></section>
 <section class="card"><details id="setBox"><summary style="font-size:15px;font-weight:700;color:var(--text)">⚙️ Ekran sozlamalari: vaqtlar, kun aksiyasi, SET MENU, yozuvlar</summary><div id="settings" style="margin-top:14px"></div></details></section>`,
     script: `
-var BRANCHES=${boot},STAFFLOG=[],MENU=null,RECIPES=[],CATS=[],SCR='',F=null,ST=null,IMPMSG='',LINKOPEN=false,LINKMSG='';
+var BRANCHES=${boot},WORKER=${worker ? "true" : "false"},STAFFLOG=[],MENU=null,RECIPES=[],CATS=[],SCR='',F=null,ST=null,IMPMSG='',LINKOPEN=false,LINKMSG='';
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function won(n){return Number(n||0).toLocaleString('en-US')+' ₩'}
 function money(v){return Number(String(v==null?'':v).replace(/[^0-9]/g,''))||0}
@@ -174,7 +234,7 @@ function draw(){
     +(items.length?items.map(function(it,ix){
       return '<div class="item"><b style="display:flex;align-items:center;gap:10px">'+thumb(it.image,it.name,44)+'<span>'+esc(it.name)+(it.badge?'<span class="tag ok">'+esc(it.badge)+'</span>':'')+(it.visible?'':'<span class="tag warn">yashirin</span>')+(it.soldOut?'<span class="tag bad">sotildi</span>':'')+'</span></b>'
         +'<span class="v" style="white-space:nowrap"><button class="ghost" data-up="'+esc(it.id)+'" style="min-height:34px;padding:2px 10px"'+(ix===0?' disabled':'')+' aria-label="Yuqoriga">↑</button> <button class="ghost" data-down="'+esc(it.id)+'" style="min-height:34px;padding:2px 10px"'+(ix===items.length-1?' disabled':'')+' aria-label="Pastga">↓</button></span>'
-        +'<small>'+it.variants.map(function(v){return esc(vname(v))+' <b style="font-size:13px;color:var(--text)">'+won(v.shownPrice)+'</b>'+(v.active?'':' <span style="color:var(--warn)">yashirin</span>')+(v.linked?' <span style="color:var(--ok)">✓</span>':' <span style="color:var(--warn)">qo‘lda</span>')}).join(' · ')+'</small>'
+        +'<small>'+it.variants.map(function(v){return esc(vname(v))+' '+(WORKER?'<button class="ghost" data-pr="'+esc(it.id)+'" data-pv="'+esc(v.id)+'" style="min-height:30px;padding:1px 8px;font-size:13px;font-weight:800">'+won(v.shownPrice)+' ✏️</button>':'<b style="font-size:13px;color:var(--text)">'+won(v.shownPrice)+'</b>')+(v.active?'':' <span style="color:var(--warn)">yashirin</span>')+(v.linked?' <span style="color:var(--ok)">✓</span>':' <span style="color:var(--warn)">qo‘lda</span>')}).join(' · ')+'</small>'
         +'<div class="row" style="grid-column:1/-1;margin-top:8px;gap:8px"><button class="ghost" data-sold="'+esc(it.id)+'" style="min-height:36px;padding:4px 12px">'+(it.soldOut?'Sotuvga qaytarish':'Sotildi deb belgilash')+'</button><button class="ghost" data-vis="'+esc(it.id)+'" style="min-height:36px;padding:4px 12px">'+(it.visible?'Yashirish':'Ko‘rsatish')+'</button><button class="ghost" data-edit="'+esc(it.id)+'" style="min-height:36px;padding:4px 12px">✏️ Tahrirlash</button></div></div>'}).join('')
       :'<p class="hint">Bu ekranda hali taom yo‘q. «+ Yangi taom» ni bosing.</p>');
   byId('iNew').addEventListener('click',function(){openForm(null)});
@@ -184,14 +244,17 @@ function draw(){
   document.querySelectorAll('[data-sold]').forEach(function(b){b.addEventListener('click',function(){b.disabled=true;act({action:'toggle',id:b.dataset.sold,field:'soldOut',value:!find(b.dataset.sold).soldOut})})});
   document.querySelectorAll('[data-vis]').forEach(function(b){b.addEventListener('click',function(){b.disabled=true;act({action:'toggle',id:b.dataset.vis,field:'visible',value:!find(b.dataset.vis).visible})})});
   document.querySelectorAll('[data-edit]').forEach(function(b){b.addEventListener('click',function(){openForm(find(b.dataset.edit))})});
+  document.querySelectorAll('[data-pr]').forEach(function(b){b.addEventListener('click',function(){var it=find(b.dataset.pr),v=it&&it.variants.find(function(x){return x.id===b.dataset.pv});if(!v)return;
+    var val=prompt(it.name+' · '+vname(v)+'\\nYangi narx (₩):'+(v.linked?'\\nKassadagi narx ham shu bo‘ladi.':''),String(v.shownPrice||''));if(val===null)return;var n=money(val);if(!n){alert('Narxni yozing.');return}
+    b.disabled=true;act({action:'setPrice',itemId:it.id,variantId:v.id,price:n})})});
   drawSettings();drawStaffLog();
 }
 /* ---------- xodimlar o'zgartirgan nom va rasmlar (qaytarish mumkin) ---------- */
 function when(iso){var d=new Date(iso);if(isNaN(d))return '';var p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Seoul',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(d),g=function(t){return (p.find(function(x){return x.type===t})||{}).value||''};return g('day')+'.'+g('month')+' '+g('hour')+':'+g('minute')}
 function drawStaffLog(){var box=byId('staffLog');if(!box)return;if(!STAFFLOG.length){box.hidden=true;box.innerHTML='';return}box.hidden=false;
   var pic=function(src){return src?'<img src="'+esc(src)+'" alt="" style="width:64px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--line);vertical-align:middle">':'<span class="hint">rasm yo‘q</span>'};
-  box.innerHTML='<h2>👥 Xodimlar o‘zgartirgan</h2><p class="hint" style="margin:0 0 8px">Xodim faqat taom nomi va rasmini o‘zgartira oladi (ruxsat: Sozlamalar → Akkauntlar). Narxga tegolmaydi. Noto‘g‘ri bo‘lsa — «Qaytarish».</p>'
-    +STAFFLOG.map(function(x){var what=x.field==='name'?'Nomi: <b>'+esc(x.before)+'</b> → <b>'+esc(x.after)+'</b>':'Rasm: '+pic(x.beforeImage)+' → '+pic(x.afterImage);
+  box.innerHTML='<h2>👥 Xodimlar o‘zgartirgan</h2><p class="hint" style="margin:0 0 8px">Ruxsati bor xodim menyuni to‘liq o‘zgartira oladi (ruxsat: Sozlamalar → Akkauntlar). Menyudagi taomga bog‘langan narx o‘zgarsa — kassada ham o‘zgaradi. Noto‘g‘ri bo‘lsa — «Qaytarish».</p>'
+    +STAFFLOG.map(function(x){var what=x.field==='name'?'Nomi: <b>'+esc(x.before)+'</b> → <b>'+esc(x.after)+'</b>':x.field==='image'?'Rasm: '+pic(x.beforeImage)+' → '+pic(x.afterImage):esc(x.summary);
       var st=x.reverted?'<span class="tag">qaytarilgan</span>':x.current?'<button class="ghost" data-srv="'+esc(x.id)+'" style="min-height:34px;padding:2px 12px">↩ Qaytarish</button>':'<span class="hint">keyin yana o‘zgargan</span>';
       return '<div class="item"><span><small style="color:var(--muted)">'+esc(when(x.createdAt))+' · '+esc(x.actorName)+' · '+esc(x.itemName)+'</small><br>'+what+'</span><span class="v">'+st+'</span></div>'}).join('');
   box.querySelectorAll('[data-srv]').forEach(function(b){b.addEventListener('click',function(){if(!confirm('Shu o‘zgarish qaytarilsinmi?'))return;b.disabled=true;act({action:'staffRevert',id:b.dataset.srv})})});
