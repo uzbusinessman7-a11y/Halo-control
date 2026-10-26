@@ -56,3 +56,14 @@ test('manzil va tugma: /api/v2/tv?a4=1 faqat o‘qiydi; Monitor menyuda «A4 men
   assert.match(monitor, /🖨 A4 menyu \(PDF\)/);
   assert.match(monitor, /\/api\/v2\/tv\?a4=1/);
 });
+
+test('PDF: «📄 PDF yuklab olish» tugmasi, fayl nomi sana bilan, tashqi kutubxonasiz A4 PDF yig‘iladi', () => {
+  const html = a4Page(views, { today: '2026-10-26' });
+  assert.match(html, /<button id="pdf" type="button" data-file="HALO_menyu_2026-10-26\.pdf">📄 PDF yuklab olish<\/button>/);
+  assert.match(html, /<button id="print" class="ghost" type="button">🖨 Chop etish<\/button>/);
+  assert.match(html, /\/MediaBox \[0 0 595\.28 841\.89\]/, 'A4 o‘lchami');
+  assert.match(html, /\/Filter \/DCTDecode/);
+  assert.doesNotMatch(html, /<script src=/, 'tashqi skript yo‘q');
+  assert.match(a4Page(views, { only: 'chicken', today: '2026-10-26' }), /data-file="HALO_menyu_chicken_2026-10-26\.pdf"/);
+  assert.match(a4Page([]), /<button id="pdf"[^>]* disabled>/);
+});
