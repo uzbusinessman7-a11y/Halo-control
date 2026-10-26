@@ -138,25 +138,31 @@ export function a4Page(views: TvView[], options: { only?: string; branch?: strin
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&amp;display=swap" rel="stylesheet">
 <style>${A4_CSS}</style></head><body>
-<div class="bar"><div class="bar-in"><b>${esc(name)} · A4 menyu</b><div class="chips">${chips}</div><button id="print" type="button">🖨 Chop etish / PDF</button></div>
-<p class="note">Narx va rasmlar «Monitor menyu»dan${date ? ` · ${esc(date)}` : ""}. Telefonda: «Chop etish» → oynani ikki barmoq bilan kattalashtiring → Ulashish → PDF saqlash.</p></div>
+<div class="bar"><div class="bar-in"><b>${esc(name)} · A4 menyu</b><div class="chips">${chips}</div><div class="acts"><button id="pdf" type="button" data-file="${esc(`${name}_menyu${options.only ? `_${options.only}` : ""}${options.today ? `_${options.today}` : ""}.pdf`)}"${sheets.length ? "" : " disabled"}>📄 PDF yuklab olish</button><button id="print" class="ghost" type="button">🖨 Chop etish</button></div></div>
+<p class="note">Narx va rasmlar «Monitor menyu»dan${date ? ` · ${esc(date)}` : ""}. «PDF yuklab olish» — A4 fayl telefoningizga tushadi: undan chop etasiz yoki yuborasiz.</p><div id="pdfOut" class="note"></div></div>
 <main>${body}</main>
-<script>${A4_SCRIPT}</script></body></html>`;
+<script>${A4_SCRIPT}${A4_PDF_SCRIPT}</script></body></html>`;
 }
 
 const A4_CSS = String.raw`
 :root{--bg:#0b0b0d;--card:#151518;--card2:#1b1b1f;--line:rgba(255,255,255,.075);--text:#f5f2ea;--muted:#9b978d;--gold:#f6b82f;--gold2:#ffd36b;--k:1}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:#232327}
-body{font-family:Montserrat,"Segoe UI",Arial,sans-serif;color:var(--text);-webkit-print-color-adjust:exact;print-color-adjust:exact;font-variant-numeric:tabular-nums}
+body{font-family:Montserrat,"Segoe UI",Arial,sans-serif;color:var(--text);-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .bar{position:sticky;top:0;z-index:5;background:#111114ee;backdrop-filter:blur(8px);border-bottom:1px solid #ffffff14;padding:10px 12px 8px}
 .bar-in{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;max-width:820px;margin:0 auto}
 .bar b{font-size:14px;letter-spacing:.02em}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 .chip{color:var(--text);text-decoration:none;font-size:12px;font-weight:600;border:1px solid #ffffff24;border-radius:999px;padding:5px 11px}
 .chip.on{background:var(--gold);border-color:var(--gold);color:#141414}
-#print{font:inherit;font-weight:800;font-size:13px;background:var(--gold);color:#141414;border:0;border-radius:10px;padding:9px 14px;cursor:pointer}
-#print[disabled]{opacity:.6}
+.acts{display:flex;gap:6px}
+#pdf,#print{font:inherit;font-weight:800;font-size:13px;background:var(--gold);color:#141414;border:0;border-radius:10px;padding:9px 14px;cursor:pointer}
+#print.ghost{background:transparent;color:var(--text);border:1px solid #ffffff30}
+#pdf[disabled],#print[disabled]{opacity:.6}
+#pdfOut:empty{display:none}
+#pdfOut{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--text);font-size:12px}
+#pdfOut .chip{cursor:pointer;font:inherit;font-weight:700}
+#pdfOut .bad{color:#ff8a7a}
 .note{max-width:820px;margin:6px auto 0;color:var(--muted);font-size:11px;line-height:1.4}
 main{padding:14px 12px 30px}
 .none{color:var(--muted);text-align:center;padding:40px 0}
@@ -240,7 +246,120 @@ const A4_SCRIPT = String.raw`
     var wait=[].slice.call(document.images).filter(function(i){return !i.complete}).map(function(i){return new Promise(function(done){i.addEventListener('load',done,{once:true});i.addEventListener('error',done,{once:true})})});
     if(document.fonts&&document.fonts.ready)wait.push(document.fonts.ready);
     b.disabled=true;b.textContent='Rasmlar yuklanmoqda…';
-    Promise.all(wait).then(function(){b.disabled=false;b.textContent='🖨 Chop etish / PDF';window.print()});
+    Promise.all(wait).then(function(){b.disabled=false;b.textContent='🖨 Chop etish';window.print()});
+  });
+})();
+`;
+
+/**
+ * «📄 PDF yuklab olish»: har A4 sahifa brauzerning o'zida 300 dpi rasmga chiziladi (sahifadagi joylashuv aynan
+ * o'sha: har harf, rasm va karta brauzer qo'ygan joyda) va JPEG sahifalardan haqiqiy A4 PDF fayl yig'iladi.
+ * Hech qanday tashqi kutubxona yo'q; serverga hech narsa yuborilmaydi.
+ */
+const A4_PDF_SCRIPT = String.raw`
+(function(){
+  var btn=document.getElementById('pdf'),out=document.getElementById('pdfOut');if(!btn||!out)return;
+  var W=2480,H=3508;
+  function px(v){return parseFloat(v)||0}
+  function clear(c){return !c||c==='transparent'||/rgba\([^)]*,\s*0\)$/.test(c)}
+  function rr(ctx,x,y,w,h,r){r=Math.max(0,Math.min(r,w/2,h/2));ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+  function glow(ctx,cx,cy,rx,ry,color){ctx.save();ctx.translate(cx,cy);ctx.scale(1,ry/rx);var g=ctx.createRadialGradient(0,0,0,0,0,rx);g.addColorStop(0,color);g.addColorStop(0.7,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.fillRect(-rx,-rx,2*rx,2*rx);ctx.restore()}
+  function cover(ctx,im,x,y,w,h){var nw=im.naturalWidth,nh=im.naturalHeight;if(!nw||!nh)return;var s=Math.max(w/nw,h/nh),sw=w/s,sh=h/s;ctx.drawImage(im,(nw-sw)/2,(nh-sh)/2,sw,sh,x,y,w,h)}
+  function side(ctx,cs,S,x,y,w,h,u){var lw=px(cs['border'+S+'Width'])*u,col=cs['border'+S+'Color'];if(!(lw>0)||cs['border'+S+'Style']==='none'||clear(col))return;ctx.fillStyle=col;
+    if(S==='Bottom')ctx.fillRect(x,y+h-lw,w,lw);else if(S==='Top')ctx.fillRect(x,y,w,lw);else if(S==='Right')ctx.fillRect(x+w-lw,y,lw,h);else ctx.fillRect(x,y,lw,h)}
+  // Rasm o'z sahifamizdan blob sifatida olinadi — kanvas «iflos» bo'lmaydi (PDF saqlanadi).
+  function load(src){return fetch(src,{credentials:'same-origin'}).then(function(r){if(!r.ok)throw new Error('img');return r.blob()}).then(function(b){return new Promise(function(ok){var i=new Image();i.onload=function(){ok(i)};i.onerror=function(){ok(null)};i.src=URL.createObjectURL(b)})}).catch(function(){return null})}
+  function paint(sheet,ctx,imgs){
+    var R=sheet.getBoundingClientRect(),f=W/R.width,u=W/sheet.offsetWidth;
+    var X=function(v){return (v-R.left)*f},Y=function(v){return (v-R.top)*f},mm=W/210;
+    ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#0b0b0d';ctx.fillRect(0,0,W,H);
+    glow(ctx,W,0,120*mm,80*mm,'rgba(246,184,47,0.078)');glow(ctx,0,H,100*mm,90*mm,'rgba(255,255,255,0.03)');
+    var els=sheet.querySelectorAll('*');
+    for(var i=0;i<els.length;i++){
+      var el=els[i],cs=getComputedStyle(el);if(cs.display==='none'||cs.visibility==='hidden')continue;
+      var b=el.getBoundingClientRect();if(!b.width||!b.height)continue;
+      var x=X(b.left),y=Y(b.top),w=b.width*f,h=b.height*f,rad=px(cs.borderTopLeftRadius)*u;
+      ctx.save();
+      var c=el.parentNode&&el.parentNode.closest?el.parentNode.closest('.hero,.card,.ft'):null;
+      if(c&&sheet.contains(c)){var cb=c.getBoundingClientRect();rr(ctx,X(cb.left),Y(cb.top),cb.width*f,cb.height*f,px(getComputedStyle(c).borderTopLeftRadius)*u);ctx.clip()}
+      if(el.tagName==='IMG'){var im=imgs[el.getAttribute('src')];if(im){cover(ctx,im,x,y,w,h);var g=ctx.createLinearGradient(0,y,0,y+h);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(0.55,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,0.3)');ctx.fillStyle=g;ctx.fillRect(x,y,w,h)}}
+      else{
+        if(el.classList.contains('mark')){var gm=ctx.createLinearGradient(x,y,x+w,y+h);gm.addColorStop(0,'#ffd36b');gm.addColorStop(1,'#f6b82f');ctx.beginPath();ctx.arc(x+w/2,y+h/2,w/2+0.6*mm,0,7);ctx.fillStyle='rgba(246,184,47,0.2)';ctx.fill();ctx.beginPath();ctx.arc(x+w/2,y+h/2,w/2,0,7);ctx.fillStyle=gm;ctx.fill()}
+        else if(el.classList.contains('ph')){var gp=ctx.createLinearGradient(x,y,x+w,y+h);gp.addColorStop(0,'#24242a');gp.addColorStop(1,'#121215');ctx.fillStyle=gp;ctx.fillRect(x,y,w,h)}
+        else if(el.tagName==='TH'){var gt=ctx.createLinearGradient(x,0,x+w,0);gt.addColorStop(0,'rgba(255,255,255,0.027)');gt.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=gt;ctx.fillRect(x,y,w,h)}
+        else if(!clear(cs.backgroundColor)){rr(ctx,x,y,w,h,rad);ctx.fillStyle=cs.backgroundColor;ctx.fill()}
+        var bw=px(cs.borderTopWidth);
+        if(bw>0&&cs.borderTopStyle!=='none'&&cs.borderTopWidth===cs.borderRightWidth&&cs.borderTopWidth===cs.borderBottomWidth&&cs.borderTopWidth===cs.borderLeftWidth){var lw=bw*u;rr(ctx,x+lw/2,y+lw/2,w-lw,h-lw,Math.max(0,rad-lw/2));ctx.lineWidth=lw;ctx.strokeStyle=cs.borderTopColor;ctx.stroke()}
+        else{side(ctx,cs,'Bottom',x,y,w,h,u);side(ctx,cs,'Right',x,y,w,h,u);side(ctx,cs,'Top',x,y,w,h,u);side(ctx,cs,'Left',x,y,w,h,u)}
+      }
+      ctx.restore();
+    }
+    // Yozuvlar: har harf brauzer joylashtirgan aynan o'sha nuqtada (shrift, harf oralig'i va qator bir xil).
+    var tw=document.createTreeWalker(sheet,NodeFilter.SHOW_TEXT,null),n,range=document.createRange();
+    while((n=tw.nextNode())){
+      var s=n.nodeValue;if(!s||!s.trim())continue;
+      var el2=n.parentNode,cs2=getComputedStyle(el2);
+      if(el2.classList.contains('ph-x')&&el2.parentNode.querySelector('img'))continue;
+      var size=px(cs2.fontSize)*u;ctx.font=cs2.fontStyle+' '+cs2.fontWeight+' '+size+'px '+cs2.fontFamily;ctx.fillStyle=cs2.color;ctx.textBaseline='alphabetic';
+      var mt=ctx.measureText('Hg'),desc=typeof mt.fontBoundingBoxDescent==='number'?mt.fontBoundingBoxDescent:size*0.24;
+      var up=cs2.textTransform==='uppercase';
+      ctx.save();
+      var box=null,p=el2;while(p&&p!==sheet){if(getComputedStyle(p).overflow!=='visible'){box=p.getBoundingClientRect();break}p=p.parentNode}
+      if(box){ctx.beginPath();ctx.rect(X(box.left),Y(box.top),box.width*f,box.height*f);ctx.clip()}
+      for(var k=0;k<s.length;k++){
+        var code=s.charCodeAt(k),len=code>=0xD800&&code<=0xDBFF?2:1,ch=s.substr(k,len);
+        if(/\s/.test(ch)){continue}
+        range.setStart(n,k);range.setEnd(n,k+len);k+=len-1;
+        var rs=range.getClientRects(),r=rs[0];if(!r||!r.width)continue;
+        ctx.fillText(up?ch.toUpperCase():ch,X(r.left),Y(r.bottom)-desc);
+      }
+      ctx.restore();
+    }
+  }
+  // Oddiy PDF: har sahifa — bitta JPEG (A4, 595.28 × 841.89 pt).
+  function makePdf(pages){
+    var enc=new TextEncoder(),parts=[],len=0,offs=[];
+    function put(x){var b=typeof x==='string'?enc.encode(x):x;parts.push(b);len+=b.length}
+    put('%PDF-1.4\n');put(new Uint8Array([37,226,227,207,211,10]));
+    var n=pages.length,kids=[];for(var i=0;i<n;i++)kids.push((3+i*3)+' 0 R');
+    offs[1]=len;put('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+    offs[2]=len;put('2 0 obj\n<< /Type /Pages /Kids ['+kids.join(' ')+'] /Count '+n+' >>\nendobj\n');
+    for(var j=0;j<n;j++){var pg=3+j*3,ct=pg+1,im=pg+2,content='q 595.28 0 0 841.89 0 0 cm /Im0 Do Q';
+      offs[pg]=len;put(pg+' 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /XObject << /Im0 '+im+' 0 R >> >> /Contents '+ct+' 0 R >>\nendobj\n');
+      offs[ct]=len;put(ct+' 0 obj\n<< /Length '+content.length+' >>\nstream\n'+content+'\nendstream\nendobj\n');
+      offs[im]=len;put(im+' 0 obj\n<< /Type /XObject /Subtype /Image /Width '+W+' /Height '+H+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+pages[j].length+' >>\nstream\n');put(pages[j]);put('\nendstream\nendobj\n')}
+    var count=3+n*3,xref=len,t='xref\n0 '+count+'\n0000000000 65535 f \n';
+    for(var o=1;o<count;o++)t+=('0000000000'+offs[o]).slice(-10)+' 00000 n \n';
+    put(t+'trailer\n<< /Size '+count+' /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n');
+    return new Blob(parts,{type:'application/pdf'});
+  }
+  var label=btn.textContent,lastUrl='';
+  btn.addEventListener('click',function(){
+    if(btn.disabled)return;btn.disabled=true;out.innerHTML='';
+    var sheets=[].slice.call(document.querySelectorAll('.sheet')),srcs={},imgs={};
+    sheets.forEach(function(sh){[].slice.call(sh.querySelectorAll('img')).forEach(function(i){srcs[i.getAttribute('src')]=1})});
+    var say=function(t){btn.textContent=t};say('Tayyorlanmoqda…');
+    Promise.all(Object.keys(srcs).map(function(src){return load(src).then(function(im){imgs[src]=im})}))
+      .then(function(){return document.fonts&&document.fonts.ready?document.fonts.ready:null})
+      .then(function(){
+        var canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;var ctx=canvas.getContext('2d'),pages=[];
+        function step(k){if(k>=sheets.length)return Promise.resolve(pages);say('Sahifa '+(k+1)+'/'+sheets.length+'…');
+          return new Promise(function(res){setTimeout(res,30)}).then(function(){paint(sheets[k],ctx,imgs);
+            return new Promise(function(res,rej){canvas.toBlob(function(bl){bl?res(bl):rej(new Error('jpeg'))},'image/jpeg',0.9)})})
+            .then(function(bl){return bl.arrayBuffer()}).then(function(buf){pages.push(new Uint8Array(buf));return step(k+1)})}
+        return step(0);
+      })
+      .then(function(pages){
+        var blob=makePdf(pages),name=btn.getAttribute('data-file')||'HALO_menyu.pdf';window.HALO_PDF=blob;
+        if(lastUrl)URL.revokeObjectURL(lastUrl);lastUrl=URL.createObjectURL(blob);
+        var file=null;try{file=new File([blob],name,{type:'application/pdf'})}catch(e){}
+        var share=file&&navigator.canShare&&navigator.canShare({files:[file]});
+        out.innerHTML='<span>✓ PDF tayyor · '+pages.length+' sahifa · '+(blob.size/1048576).toFixed(1)+' MB</span><a class="chip on" id="pdfDl" href="'+lastUrl+'" download="'+name+'">⬇️ Yuklab olish</a>'+(share?'<button class="chip" id="pdfShare" type="button">📤 Ulashish / Chop etish</button>':'');
+        var sb=document.getElementById('pdfShare');if(sb)sb.addEventListener('click',function(){navigator.share({files:[file],title:name}).catch(function(){})});
+        try{document.getElementById('pdfDl').click()}catch(e){}
+      })
+      .catch(function(){out.innerHTML='<span class="bad">PDF tayyorlanmadi. Sahifani yangilab, qayta urinib ko‘ring.</span>'})
+      .then(function(){btn.disabled=false;say(label)});
   });
 })();
 `;
