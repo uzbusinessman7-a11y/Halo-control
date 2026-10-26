@@ -109,22 +109,22 @@ export async function GET() {
 var T={
  uz:{check:'Nazorat ro‘yxati',install:'Telefonga ilova qilib o‘rnatish',hello:'Salom',login:'Kirish',branch:'Filial',user:'Login',pin:'PIN',start:'ISHNI BOSHLADIM',finish:'ISHNI TUGATDIM',working:'Ishdasiz',month:'Mening hisobim — bu oy',days:'kun',hours:'soat',earned:'Hisoblangan',logout:'Chiqish',notLinked:'Rahbar akkauntingizni xodim profiliga bog‘lamagan. Davomat uchun rahbarga ayting.',sureOut:'Ishni tugatasizmi?',off:'Bugun sizga dam belgilangan',err:'Xatolik. Qayta urinib ko‘ring.',net:'Internet aloqasini tekshiring.',back:'← Orqaga',
   actions:'Nima kiritmoqchisiz?',tasks:'Rahbardan vazifalar',noTasks:'Yangi vazifa yo‘q',taskStart:'Boshladim',taskDone:'✓ Bajarildi',due:'Muddat',
-  aHisob:'HALO HISOB',aHisobD:'Naqd, hisob-raqam, delivery, oshxona',aPos:'POS hisobot',aPosD:'Kunlik POS Excel faylini yuklash',aIn:'Mahsulot kirimi',aInD:'Miqdor va narx · qarz yozilmaydi',aExp:'Xarajat',aExpD:'Bugungi xarajatni yozish',aMez:'MEZANA',aMezD:'Olib turildi, qaytarildi, qarzga olindi',aWaste:'Minus tavar',aWasteD:'Buzilgan yoki yo‘qolgan mahsulot',aCount:'Kassani sanash',aCountD:'Kun oxiri, summa ko‘rinmaydi',aLow:'Kam qolgan',aLowD:'Tugayotgan mahsulotni rahbarga yuborish',locked:'Rahbar ruxsat bermagan',allDays:'Hamma kunlar',
+  aHisob:'HALO HISOB',aHisobD:'Naqd, hisob-raqam, delivery, oshxona',aPos:'POS hisobot',aPosD:'Kunlik POS Excel faylini yuklash',aIn:'Mahsulot kirimi',aInD:'Miqdor va narx · qarz yozilmaydi',aExp:'Xarajat',aExpD:'Bugungi xarajatni yozish',aMez:'MEZANA',aMezD:'Olib turildi, qaytarildi, qarzga olindi',aWaste:'Minus tavar',aWasteD:'Buzilgan yoki yo‘qolgan mahsulot',aCount:'Kassani sanash',aCountD:'Kun oxiri, summa ko‘rinmaydi',aLow:'Kam qolgan',aLowD:'Tugayotgan mahsulotni rahbarga yuborish',aMenu:'Menyu',aMenuD:'Taom nomi va rasmini o‘zgartirish',locked:'Rahbar ruxsat bermagan',allDays:'Hamma kunlar',
   locHint:'Bu tugma faqat oshxonada ishlaydi',locWait:'Joylashuv aniqlanmoqda…',locDenied:'Joylashuvga ruxsat bering: telefon sozlamalarida brauzer (ilova) uchun «Joylashuv»ni yoqing va qayta bosing.',locFail:'Joylashuv aniqlanmadi. GPS yoqilganini tekshiring va qayta bosing.',locNone:'Bu telefon joylashuvni bera olmaydi. Rahbarga ayting.',locWeak:'Joylashuv aniq emas (±{a} m). GPS’ni yoqing, bir oz kuting va qayta bosing.',locFar:'Siz oshxonadan {d} uzoqdasiz. Bu tugma faqat oshxonadan {r} metr ichida ishlaydi.',
   hrsFrom:'Ish vaqti {s} dan. Erta bossangiz ham hisob {s} dan boshlanadi.',hrsBoth:'Ish vaqti {s}–{e}. Hisob faqat shu vaqt ichida yuradi.',payWait:'Hisob {s} dan boshlanadi',payFrom:'Hisob {s} dan yurmoqda',payOver:'Ish vaqti {e} da tugagan — keyingi vaqt hisoblanmaydi'},
  ru:{install:'Установить как приложение',hello:'Привет',login:'Войти',branch:'Филиал',user:'Логин',pin:'PIN',start:'НАЧАЛ РАБОТУ',finish:'ЗАКОНЧИЛ РАБОТУ',working:'Вы на работе',month:'Мой учёт — этот месяц',days:'дн.',hours:'ч',earned:'Начислено',logout:'Выйти',notLinked:'Руководитель не привязал ваш аккаунт к профилю сотрудника.',sureOut:'Закончить работу?',off:'Сегодня у вас выходной',err:'Ошибка. Попробуйте ещё раз.',net:'Проверьте интернет.',back:'← Назад',
   actions:'Что вводим?',tasks:'Задачи от руководителя',noTasks:'Новых задач нет',taskStart:'Начал',taskDone:'✓ Готово',due:'Срок',
-  aHisob:'HALO HISOB',aHisobD:'Наличные, счёт, доставка, кухня',aPos:'POS отчёт',aPosD:'Загрузить дневной Excel с POS',aIn:'Приход товара',aInD:'Количество и цена',aExp:'Расход',aExpD:'Внести расход',aMez:'MEZANA',aMezD:'Взяли, вернули, купили в долг',aWaste:'Списание',aWasteD:'Испорченный или потерянный товар',aCount:'Пересчёт кассы',aCountD:'В конце дня',aLow:'Заканчивается',aLowD:'Сообщить руководителю, что заканчивается',locked:'Нет разрешения',allDays:'Все дни',
+  aHisob:'HALO HISOB',aHisobD:'Наличные, счёт, доставка, кухня',aPos:'POS отчёт',aPosD:'Загрузить дневной Excel с POS',aIn:'Приход товара',aInD:'Количество и цена',aExp:'Расход',aExpD:'Внести расход',aMez:'MEZANA',aMezD:'Взяли, вернули, купили в долг',aWaste:'Списание',aWasteD:'Испорченный или потерянный товар',aCount:'Пересчёт кассы',aCountD:'В конце дня',aLow:'Заканчивается',aLowD:'Сообщить руководителю, что заканчивается',aMenu:'Меню',aMenuD:'Название и фото блюда',locked:'Нет разрешения',allDays:'Все дни',
   locHint:'Кнопка работает только на кухне',locWait:'Определяем местоположение…',locDenied:'Разрешите доступ к геолокации: в настройках телефона включите «Местоположение» для браузера (приложения) и нажмите снова.',locFail:'Местоположение не определено. Проверьте, включён ли GPS, и нажмите снова.',locNone:'Этот телефон не может определить местоположение. Сообщите руководителю.',locWeak:'Местоположение неточное (±{a} м). Включите GPS, подождите немного и нажмите снова.',locFar:'Вы в {d} от кухни. Кнопка работает только в пределах {r} м от кухни.',
   hrsFrom:'Рабочее время с {s}. Даже если нажмёте раньше, учёт начнётся с {s}.',hrsBoth:'Рабочее время {s}–{e}. Учитывается только это время.',payWait:'Учёт начнётся в {s}',payFrom:'Учёт идёт с {s}',payOver:'Рабочее время закончилось в {e} — дальше не учитывается'},
  en:{install:'Install as an app',hello:'Hi',login:'Log in',branch:'Branch',user:'Login',pin:'PIN',start:'STARTED WORK',finish:'FINISHED WORK',working:'You are at work',month:'My account — this month',days:'days',hours:'h',earned:'Earned',logout:'Log out',notLinked:'The manager has not linked your account to a staff profile.',sureOut:'Finish work?',off:'Today is your day off',err:'Error. Please try again.',net:'Check your internet.',back:'← Back',
   actions:'What do you want to enter?',tasks:'Tasks from the manager',noTasks:'No new tasks',taskStart:'Started',taskDone:'✓ Done',due:'Due',
-  aHisob:'HALO HISOB',aHisobD:'Cash, transfer, delivery, kitchen',aPos:'POS report',aPosD:'Upload the daily POS Excel',aIn:'Goods receipt',aInD:'Quantity and price',aExp:'Expense',aExpD:'Enter an expense',aMez:'MEZANA',aMezD:'Borrowed, returned, bought on credit',aWaste:'Stock deduction',aWasteD:'Damaged or missing product',aCount:'Count the cash',aCountD:'End of day',aLow:'Running low',aLowD:'Tell the manager what is running out',locked:'Not permitted',allDays:'All days',
+  aHisob:'HALO HISOB',aHisobD:'Cash, transfer, delivery, kitchen',aPos:'POS report',aPosD:'Upload the daily POS Excel',aIn:'Goods receipt',aInD:'Quantity and price',aExp:'Expense',aExpD:'Enter an expense',aMez:'MEZANA',aMezD:'Borrowed, returned, bought on credit',aWaste:'Stock deduction',aWasteD:'Damaged or missing product',aCount:'Count the cash',aCountD:'End of day',aLow:'Running low',aLowD:'Tell the manager what is running out',aMenu:'Menu',aMenuD:'Change dish name and photo',locked:'Not permitted',allDays:'All days',
   locHint:'This button works only at the kitchen',locWait:'Getting your location…',locDenied:'Allow location access: turn on Location for the browser (app) in your phone settings and press again.',locFail:'Could not get your location. Check that GPS is on and press again.',locNone:'This phone cannot provide a location. Tell the manager.',locWeak:'Location is not accurate (±{a} m). Turn on GPS, wait a moment and press again.',locFar:'You are {d} from the kitchen. This button works only within {r} m of the kitchen.',
   hrsFrom:'Work starts at {s}. Even if you press earlier, time counts from {s}.',hrsBoth:'Work hours {s}–{e}. Only this time is counted.',payWait:'Time counts from {s}',payFrom:'Counting from {s}',payOver:'Work hours ended at {e} — later time is not counted'},
  ko:{install:'앱으로 설치',hello:'안녕하세요',login:'로그인',branch:'지점',user:'아이디',pin:'PIN',start:'업무 시작',finish:'업무 종료',working:'근무 중',month:'내 근무 — 이번 달',days:'일',hours:'시간',earned:'누적 급여',logout:'로그아웃',notLinked:'관리자가 계정을 직원 프로필에 연결하지 않았습니다.',sureOut:'업무를 종료할까요?',off:'오늘은 휴무입니다',err:'오류가 발생했습니다.',net:'인터넷을 확인하세요.',back:'← 뒤로',
   actions:'무엇을 입력할까요?',tasks:'관리자 업무',noTasks:'새 업무 없음',taskStart:'시작',taskDone:'✓ 완료',due:'마감',
-  aHisob:'HALO HISOB',aHisobD:'현금, 계좌, 배달, 주방',aPos:'POS 보고서',aPosD:'일일 POS 엑셀 업로드',aIn:'상품 입고',aInD:'수량과 금액',aExp:'지출',aExpD:'지출 입력',aMez:'MEZANA',aMezD:'빌림, 반납, 외상 구매',aWaste:'재고 차감',aWasteD:'파손 또는 분실',aCount:'현금 세기',aCountD:'마감 시',aLow:'부족한 재료',aLowD:'관리자에게 부족한 재료 알리기',locked:'권한 없음',allDays:'전체',
+  aHisob:'HALO HISOB',aHisobD:'현금, 계좌, 배달, 주방',aPos:'POS 보고서',aPosD:'일일 POS 엑셀 업로드',aIn:'상품 입고',aInD:'수량과 금액',aExp:'지출',aExpD:'지출 입력',aMez:'MEZANA',aMezD:'빌림, 반납, 외상 구매',aWaste:'재고 차감',aWasteD:'파손 또는 분실',aCount:'현금 세기',aCountD:'마감 시',aLow:'부족한 재료',aLowD:'관리자에게 부족한 재료 알리기',aMenu:'메뉴',aMenuD:'메뉴 이름과 사진 변경',locked:'권한 없음',allDays:'전체',
   locHint:'이 버튼은 주방에서만 작동합니다',locWait:'위치 확인 중…',locDenied:'위치 권한을 허용해 주세요: 휴대폰 설정에서 브라우저(앱)의 위치를 켜고 다시 누르세요.',locFail:'위치를 확인하지 못했습니다. GPS가 켜져 있는지 확인하고 다시 누르세요.',locNone:'이 휴대폰은 위치를 제공할 수 없습니다. 관리자에게 알려 주세요.',locWeak:'위치가 정확하지 않습니다 (±{a} m). GPS를 켜고 잠시 후 다시 누르세요.',locFar:'주방에서 {d} 떨어져 있습니다. 이 버튼은 주방에서 {r} m 이내에서만 작동합니다.',
   hrsFrom:'근무 시작 {s}. 일찍 눌러도 {s}부터 계산됩니다.',hrsBoth:'근무 시간 {s}–{e}. 이 시간만 계산됩니다.',payWait:'{s}부터 계산됩니다',payFrom:'{s}부터 계산 중',payOver:'근무 시간이 {e}에 끝났습니다 — 이후 시간은 계산되지 않습니다'}};
 var L='uz';try{L=localStorage.getItem('halo-lang')||'uz'}catch(e){}if(!T[L])L='uz';
@@ -178,7 +178,8 @@ function loadChecklist(){var box=document.getElementById('chk');if(!box)return;
   })}
 function home(){
   clearInterval(TIMER);app.innerHTML=langBar()+'<section class="card">'+haloLoading(3)+'</section>';bindLang();
-  Promise.all([req('/api/attendance','GET'),req('/api/worker-tasks','GET')]).then(function(res){
+  Promise.all([req('/api/attendance','GET'),req('/api/worker-tasks','GET'),req('/api/v2/menyu-xodim','POST',{action:'access'})]).then(function(res){
+    var menuOk=Boolean(res[2]&&res[2].body&&res[2].body.allowed);
     var r=res[0],a=r.body;
     if(r.status===401){loginForm(SESSION.branches||[]);return}
     var tasks=((res[1].body||{}).tasks||[]).filter(function(x){return x.status==='new'||x.status==='started'});
@@ -196,6 +197,7 @@ function home(){
       +tile('pos','📊',t('aPos'),t('aPosD'))
       +tile('in','📦',t('aIn'),t('aInD'),null,!SESSION.canSupplierDelivery)
       +tile('low','🛒',t('aLow'),t('aLowD'))
+      +tile('menu','🍽',t('aMenu'),t('aMenuD'),null,!menuOk)
       +tile('exp','💸',t('aExp'),t('aExpD'),null,!SESSION.canWarehouseReceipt)
       +tile('mez','🤝',t('aMez'),t('aMezD'),null,!SESSION.canWarehouseReceipt)
       +tile('waste','🗑',t('aWaste'),t('aWasteD'),'/api/v2/pos#chiqit')
@@ -209,7 +211,7 @@ function home(){
     document.getElementById('out').addEventListener('click',function(){req('/api/worker-auth','POST',{action:'logout'}).then(start)});
     var more=document.getElementById('more');if(more)more.addEventListener('click',function(){document.getElementById('dl').innerHTML=days.map(dayRow).join('');more.remove()});
     app.querySelectorAll('[data-ts]').forEach(function(b){b.addEventListener('click',function(){b.disabled=true;req('/api/worker-tasks','PATCH',{taskId:b.dataset.ts,status:b.dataset.to}).then(function(x){if(x.status>=400){toast(x.body.error||t('err'),true);b.disabled=false;return}toast('✓');home()})})});
-    app.querySelectorAll('[data-act]').forEach(function(b){b.addEventListener('click',function(){if(b.dataset.act==='pos')posScreen();else if(b.dataset.act==='in')intakeScreen();else if(b.dataset.act==='exp')expenseScreen();else if(b.dataset.act==='mez')mezanaScreen();else if(b.dataset.act==='low')lowScreen()})});
+    app.querySelectorAll('[data-act]').forEach(function(b){b.addEventListener('click',function(){if(b.dataset.act==='pos')posScreen();else if(b.dataset.act==='in')intakeScreen();else if(b.dataset.act==='exp')expenseScreen();else if(b.dataset.act==='mez')mezanaScreen();else if(b.dataset.act==='low')lowScreen();else if(b.dataset.act==='menu')menuScreen()})});
     if(chk)loadChecklist();
     if(a.linked){var open2=a.openShift;
       if(open2){var pay=a.pay||null,tick=function(){var now=Date.now(),from=Date.parse(open2.clockIn),to=now,note='';
@@ -324,6 +326,47 @@ function expenseScreen(){
   });
 }
 /* ---------- Kam qolgan: tugayotgan mahsulotni rahbarga yuborish (HALO Telegram boti orqali) ---------- */
+/* ---------- Menyu: taom nomi va rasmi (rahbar ruxsat bergan xodim). Narx — faqat rahbar. ---------- */
+function menuScreen(){
+  var M={items:[],open:'',pic:null,scr:''};
+  screen('🍽 '+t('aMenu'),'<div id="mb" style="display:grid;gap:14px"><section class="card">'+haloLoading(3)+'</section></div>');
+  req('/api/v2/menyu-xodim','POST',{action:'list'}).then(function(r){if(r.status===401){start();return}var b=document.getElementById('mb');if(!b)return;
+    if(r.status>=400||!r.body.ok){b.innerHTML='<div class="msg bad">'+esc(r.body.error||t('err'))+'</div>';return}M.items=r.body.items||[];draw()});
+  function done(r){if(r.status===401){start();return false}if(r.status>=400||!r.body.ok){toast(r.body.error||t('err'),true);return false}M.items=r.body.items||M.items;return true}
+  function pick(){var inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+    inp.addEventListener('change',function(){var f=inp.files&&inp.files[0];if(!f)return;var img=new Image(),src=URL.createObjectURL(f);
+      img.onerror=function(){URL.revokeObjectURL(src);toast('Bu rasm ochilmadi. Boshqa rasm tanlang.',true)};
+      img.onload=function(){var k=Math.min(1,1280/Math.max(img.naturalWidth,img.naturalHeight)),w=Math.max(1,Math.round(img.naturalWidth*k)),h=Math.max(1,Math.round(img.naturalHeight*k));
+        var c=document.createElement('canvas');c.width=w;c.height=h;var x=c.getContext('2d');x.fillStyle='#000';x.fillRect(0,0,w,h);x.drawImage(img,0,0,w,h);URL.revokeObjectURL(src);
+        var q=0.9,out=c.toDataURL('image/jpeg',q);while(out.length*0.75>820000&&q>0.4){q-=0.1;out=c.toDataURL('image/jpeg',q)}
+        M.pic={url:out,data:out.slice(out.indexOf(',')+1)};draw()};
+      img.src=src});
+    inp.click()}
+  function draw(){var box=document.getElementById('mb');if(!box)return;
+    var screens=[];M.items.forEach(function(i){if(screens.indexOf(i.screenTitle)<0)screens.push(i.screenTitle)});
+    if(screens.indexOf(M.scr)<0)M.scr=screens[0]||'';
+    var list=M.items.filter(function(i){return i.screenTitle===M.scr});
+    box.innerHTML='<p class="hint" style="margin:0">Taom nomi va rasmini o‘zgartirishingiz mumkin. Narxni faqat rahbar o‘zgartiradi. Televizorda 15 soniyada yangilanadi.</p>'
+      +(screens.length>1?'<div class="chips">'+screens.map(function(x){return '<button class="'+(x===M.scr?'':'ghost')+'" data-ms="'+esc(x)+'">'+esc(x)+'</button>'}).join('')+'</div>':'')
+      +(list.length?list.map(function(i){var open=M.open===i.id;
+        return '<section class="card" style="padding:12px"><div class="row" style="gap:12px;flex-wrap:nowrap;align-items:center">'
+          +(i.image?'<img src="'+esc(i.image)+'" alt="" style="width:96px;height:60px;object-fit:cover;border-radius:10px;flex:0 0 auto;background:var(--card-2)">':'<span style="width:96px;height:60px;border-radius:10px;background:var(--card-2);flex:0 0 auto;display:grid;place-items:center">🍽</span>')
+          +'<div style="min-width:0;flex:1"><b style="display:block;overflow-wrap:anywhere">'+esc(i.name)+'</b>'+(i.hidden?'<small style="color:var(--muted)">menyuda yashirin</small>':'')+'</div>'
+          +'<button class="ghost" data-mo="'+esc(i.id)+'" aria-label="O‘zgartirish" style="flex:0 0 auto;min-width:48px;padding:6px 12px">'+(open?'✕':'✏️')+'</button></div>'
+          +(open?'<div style="margin-top:12px;display:grid;gap:10px"><div class="row" style="gap:8px;flex-wrap:nowrap"><input id="mn" maxlength="60" value="'+esc(i.name)+'" aria-label="Taom nomi" style="flex:1;min-width:0"><button id="mns">Saqlash</button></div>'
+            +(M.pic?'<img src="'+M.pic.url+'" alt="" style="width:100%;max-height:240px;object-fit:contain;border-radius:12px;background:#000"><div class="row" style="gap:8px;flex-wrap:nowrap"><button id="mps" style="flex:1">✓ Shu rasmni qo‘yish</button><button class="ghost" id="mpc">Bekor</button></div>'
+              :'<button class="ghost block" id="mpp">📷 Rasmni almashtirish</button>')+'</div>':'')
+          +'</section>'}).join(''):'<p class="hint">Menyuda taom yo‘q.</p>');
+    box.querySelectorAll('[data-ms]').forEach(function(b){b.addEventListener('click',function(){M.scr=b.dataset.ms;M.open='';M.pic=null;draw()})});
+    box.querySelectorAll('[data-mo]').forEach(function(b){b.addEventListener('click',function(){M.open=M.open===b.dataset.mo?'':b.dataset.mo;M.pic=null;draw()})});
+    var ns=document.getElementById('mns');if(ns)ns.addEventListener('click',function(){var v=document.getElementById('mn').value.trim();if(v.length<2){toast('Taom nomini yozing.',true);return}ns.disabled=true;
+      req('/api/v2/menyu-xodim','POST',{action:'rename',id:M.open,name:v}).then(function(r){ns.disabled=false;if(!done(r))return;toast(r.body.changed?'✓ Nomi saqlandi':'O‘zgarish yo‘q');draw()})});
+    var pp=document.getElementById('mpp');if(pp)pp.addEventListener('click',pick);
+    var pc=document.getElementById('mpc');if(pc)pc.addEventListener('click',function(){M.pic=null;draw()});
+    var ps=document.getElementById('mps');if(ps)ps.addEventListener('click',function(){ps.disabled=true;ps.textContent='Yuklanmoqda…';
+      req('/api/v2/menyu-xodim','POST',{action:'photo',id:M.open,mime:'image/jpeg',data:M.pic.data}).then(function(r){if(!done(r)){ps.disabled=false;ps.textContent='✓ Shu rasmni qo‘yish';return}M.pic=null;toast('✓ Rasm almashtirildi');draw()})});
+  }
+}
 function lowScreen(){
   var K={sel:[],q:'',cat:'',op:uuid(),today:[]};
   screen('🛒 '+t('aLow'),'<div id="kb" style="display:grid;gap:16px"><section class="card">'+haloLoading(3)+'</section></div>');

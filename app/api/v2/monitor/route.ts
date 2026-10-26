@@ -7,6 +7,7 @@ import {
 } from "../../../core/digital-menu";
 import type { D1Like } from "../../../lib/full-migration";
 import { shell } from "../../../core/ui-shell";
+import { listMenuLog, loggedMediaIds, revertMenuLog, StaffMenuError } from "../../../core/menu-staff";
 
 /**
  * HALO V2 — «Monitor menyu»: televizordagi reklama menyuni boshqarish (faqat rahbar).
@@ -50,7 +51,13 @@ export async function POST(request: Request) {
     const reply = (config: DmConfig, extra: Record<string, unknown> = {}) => json({ ok: true, menu: adminView(config, recipes), recipes, categories, ...extra });
     const current = await readDm(db, branchId);
 
-    if (body.action === "load") return reply(current.config, { saved: current.saved });
+    if (body.action === "load") return reply(current.config, { saved: current.saved, staffLog: await listMenuLog(db, branchId, current.config) });
+    // Xodim o'zgartirgan nom yoki rasmni qaytarish (jurnaldan).
+    if (body.action === "staffRevert") {
+      const reverted = await revertMenuLog(db, branchId, body.id);
+      tvMemoClear();
+      return reply(reverted, { saved: true, staffLog: await listMenuLog(db, branchId, reverted) });
+    }
     if (body.action === "upload") {
       const imageId = await putMedia(db, branchId, body.mime, body.data);
       return json({ ok: true, imageId, url: `/api/v2/tv?media=${imageId}` });
@@ -73,10 +80,10 @@ export async function POST(request: Request) {
     else return json({ error: "Noma’lum amal." }, 400);
     await writeDm(db, branchId, next);
     tvMemoClear();
-    await pruneMedia(db, branchId, next).catch(() => 0);
-    return reply(next, { ...extra, saved: true });
+    await pruneMedia(db, branchId, next, new Date(), await loggedMediaIds(db, branchId)).catch(() => 0);
+    return reply(next, { ...extra, saved: true, staffLog: await listMenuLog(db, branchId, next).catch(() => []) });
   } catch (error) {
-    if (error instanceof DigitalMenuError) return json({ error: error.message }, error.status);
+    if (error instanceof DigitalMenuError || error instanceof StaffMenuError) return json({ error: error.message }, error.status);
     if (error instanceof Error && /filial/i.test(error.message)) return json({ error: error.message }, 400);
     return json({ error: "Xatolik yuz berdi." }, 500);
   }
@@ -91,16 +98,17 @@ function page(branches: Array<{ id: string; name: string }>): string {
     body: `<section class="card"><div class="row" id="scr"></div><div id="scrInfo" style="margin-top:12px"></div></section>
 <div id="form"></div>
 <section class="card" id="list"><p class="hint">Yuklanmoqda…</p></section>
+<section class="card" id="staffLog" hidden></section>
 <section class="card"><details id="setBox"><summary style="font-size:15px;font-weight:700;color:var(--text)">⚙️ Ekran sozlamalari: vaqtlar, kun aksiyasi, SET MENU, yozuvlar</summary><div id="settings" style="margin-top:14px"></div></details></section>`,
     script: `
-var BRANCHES=${boot},MENU=null,RECIPES=[],CATS=[],SCR='',F=null,ST=null,IMPMSG='',LINKOPEN=false,LINKMSG='';
+var BRANCHES=${boot},STAFFLOG=[],MENU=null,RECIPES=[],CATS=[],SCR='',F=null,ST=null,IMPMSG='',LINKOPEN=false,LINKMSG='';
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function won(n){return Number(n||0).toLocaleString('en-US')+' ₩'}
 function money(v){return Number(String(v==null?'':v).replace(/[^0-9]/g,''))||0}
 function byId(id){return document.getElementById(id)}
 var sel=byId('branch');sel.innerHTML=BRANCHES.map(function(b){return '<option value="'+esc(b.id)+'">'+esc(b.name)+'</option>'}).join('');haloBranch(sel);
 function post(b){b.branchId=sel.value;return fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json().then(function(j){return {status:r.status,body:j}})}).catch(function(){return {status:0,body:{error:'Internet aloqasini tekshiring.'}}})}
-function take(b){MENU=b.menu;RECIPES=b.recipes||RECIPES;CATS=b.categories||CATS;if(!MENU.screens.some(function(s){return s.id===SCR}))SCR=MENU.screens[0].id;draw()}
+function take(b){if(b.staffLog)STAFFLOG=b.staffLog;MENU=b.menu;RECIPES=b.recipes||RECIPES;CATS=b.categories||CATS;if(!MENU.screens.some(function(s){return s.id===SCR}))SCR=MENU.screens[0].id;draw()}
 function load(){post({action:'load'}).then(function(x){if(!x.body.ok){byId('list').innerHTML='<div class="msg bad">'+esc(x.body.error)+'</div>';return}F=null;ST=null;IMPMSG='';LINKMSG='';LINKOPEN=false;byId('form').innerHTML='';take(x.body)})}
 function tvUrl(id){return location.origin+'/menu?screen='+encodeURIComponent(id)+(sel.value!=='main'?'&branch='+encodeURIComponent(sel.value):'')}
 function recipe(id){return RECIPES.find(function(r){return r.id===id})}
@@ -176,7 +184,17 @@ function draw(){
   document.querySelectorAll('[data-sold]').forEach(function(b){b.addEventListener('click',function(){b.disabled=true;act({action:'toggle',id:b.dataset.sold,field:'soldOut',value:!find(b.dataset.sold).soldOut})})});
   document.querySelectorAll('[data-vis]').forEach(function(b){b.addEventListener('click',function(){b.disabled=true;act({action:'toggle',id:b.dataset.vis,field:'visible',value:!find(b.dataset.vis).visible})})});
   document.querySelectorAll('[data-edit]').forEach(function(b){b.addEventListener('click',function(){openForm(find(b.dataset.edit))})});
-  drawSettings();
+  drawSettings();drawStaffLog();
+}
+/* ---------- xodimlar o'zgartirgan nom va rasmlar (qaytarish mumkin) ---------- */
+function when(iso){var d=new Date(iso);if(isNaN(d))return '';var p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Seoul',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(d),g=function(t){return (p.find(function(x){return x.type===t})||{}).value||''};return g('day')+'.'+g('month')+' '+g('hour')+':'+g('minute')}
+function drawStaffLog(){var box=byId('staffLog');if(!box)return;if(!STAFFLOG.length){box.hidden=true;box.innerHTML='';return}box.hidden=false;
+  var pic=function(src){return src?'<img src="'+esc(src)+'" alt="" style="width:64px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--line);vertical-align:middle">':'<span class="hint">rasm yo‘q</span>'};
+  box.innerHTML='<h2>👥 Xodimlar o‘zgartirgan</h2><p class="hint" style="margin:0 0 8px">Xodim faqat taom nomi va rasmini o‘zgartira oladi (ruxsat: Sozlamalar → Akkauntlar). Narxga tegolmaydi. Noto‘g‘ri bo‘lsa — «Qaytarish».</p>'
+    +STAFFLOG.map(function(x){var what=x.field==='name'?'Nomi: <b>'+esc(x.before)+'</b> → <b>'+esc(x.after)+'</b>':'Rasm: '+pic(x.beforeImage)+' → '+pic(x.afterImage);
+      var st=x.reverted?'<span class="tag">qaytarilgan</span>':x.current?'<button class="ghost" data-srv="'+esc(x.id)+'" style="min-height:34px;padding:2px 12px">↩ Qaytarish</button>':'<span class="hint">keyin yana o‘zgargan</span>';
+      return '<div class="item"><span><small style="color:var(--muted)">'+esc(when(x.createdAt))+' · '+esc(x.actorName)+' · '+esc(x.itemName)+'</small><br>'+what+'</span><span class="v">'+st+'</span></div>'}).join('');
+  box.querySelectorAll('[data-srv]').forEach(function(b){b.addEventListener('click',function(){if(!confirm('Shu o‘zgarish qaytarilsinmi?'))return;b.disabled=true;act({action:'staffRevert',id:b.dataset.srv})})});
 }
 
 /* ---------- rasm: brauzerda kichraytiriladi (JPG — eski televizor brauzerlari ham ochadi), keyin yuklanadi ---------- */

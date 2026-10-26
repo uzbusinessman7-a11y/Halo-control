@@ -1,12 +1,15 @@
 import { isAdminRequest } from "../../../lib/integration-store";
 import { HaloStateConflictError, listHaloBranches, mutateHaloState, readHaloState } from "../../../lib/halo-store";
 import { normalizeStaff } from "../../../lib/payroll";
-import { createWorkerAccount, deleteWorkerAccount } from "../../../lib/worker-auth";
+import { createWorkerAccount, deleteWorkerAccount, listWorkerAccounts } from "../../../lib/worker-auth";
+import { menuAccessIds, setMenuAccess, StaffMenuError } from "../../../core/menu-staff";
+import type { D1Like } from "../../../lib/full-migration";
 import { deleteStaffMember, saveStaffMember, StaffError } from "../../../core/staff";
 import { shell } from "../../../core/ui-shell";
 
 declare global {
   var __HALO_SELF_HOSTED__: boolean | undefined;
+  var __HALO_CONTROL_DB__: D1Database | undefined;
 }
 
 /**
@@ -15,6 +18,10 @@ declare global {
  * "akkauntni xodimga bog'lash" server tomonda (bitta akkaunt — bitta xodim).
  */
 const PAGE_PATH = "/api/v2/sozlamalar";
+const menuDb = (): D1Like => {
+  if (!globalThis.__HALO_CONTROL_DB__) throw new Error("Baza ulanmagan.");
+  return globalThis.__HALO_CONTROL_DB__ as unknown as D1Like;
+};
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 type Row = Record<string, unknown>;
 class LinkError extends Error {}
@@ -111,15 +118,22 @@ export async function POST(request: Request) {
           try { return { state: deleteStaffMember(unlinked, { id: own.id }).state as Row, result: null }; } catch { return { state: unlinked, result: null }; }
         }, 5, branchId, "Rahbar", "Xodim akkaunti o‘chirildi", "Sozlamalar (yangi)")).state as Row
         : current;
+    } else if (body.action === "menuAccess") {
+      // Xodim ilovasida «🍽 Menyu»: taom nomi va rasmini o'zgartirish ruxsati (narxga emas).
+      const workerId = String(body.workerId || "");
+      if (!(await listWorkerAccounts(branchId)).some((account) => account.id === workerId)) throw new AccountError("Akkaunt topilmadi. Sahifani yangilang.");
+      await setMenuAccess(menuDb(), branchId, workerId, body.allowed === true);
+      state = (await readHaloState(branchId)).state as Row;
     } else if (body.action === "link") {
       state = (await mutateHaloState((cur) => linkWorker(cur as Row, body), 5, branchId, "Rahbar", "Xodim akkaunti xodimga bog‘landi", "Sozlamalar (yangi)")).state as Row;
     } else {
       state = (await readHaloState(branchId)).state as Row;
     }
     const staff = normalizeStaff(state.staff).filter((member) => member.active).map((member) => ({ id: member.id, name: member.name, workerId: member.workerId }));
-    return json({ ok: true, staff, ...(created ? { created } : {}) });
+    const menuAccess = await menuAccessIds(menuDb(), branchId).catch(() => [] as string[]);
+    return json({ ok: true, staff, menuAccess, ...(created ? { created } : {}) });
   } catch (error) {
-    if (error instanceof LinkError || error instanceof AccountError || error instanceof StaffError) return json({ error: error.message }, 400);
+    if (error instanceof LinkError || error instanceof AccountError || error instanceof StaffError || error instanceof StaffMenuError) return json({ error: error.message }, 400);
     if (error instanceof HaloStateConflictError) return json({ error: "Ma’lumot boshqa joyda yangilandi. Qayta urinib ko‘ring." }, 409);
     return json({ error: error instanceof Error && /filial/i.test(error.message) ? error.message : "Xatolik yuz berdi." }, 500);
   }
@@ -146,16 +160,18 @@ function loadAccounts(){
   var box=document.getElementById('acc');box.innerHTML=haloLoading(3);
   Promise.all([req('/api/worker-auth?admin=1&branch='+encodeURIComponent(sel.value),'GET'),req(location.pathname,'POST',{branchId:sel.value})]).then(function(r){
     if(!r[0].body.accounts){box.innerHTML='<div class="msg bad">'+esc(r[0].body.error||'Ochilmadi.')+'</div>';return}
-    STAFF=r[1].body.staff||[];var accs=r[0].body.accounts;
+    STAFF=r[1].body.staff||[];var MENUOK=r[1].body.menuAccess||[];var accs=r[0].body.accounts;
     box.innerHTML=accs.length?accs.map(function(a){var linked=STAFF.find(function(m){return m.workerId===a.id});
       return '<div class="item"><b>'+esc(a.name)+' <span style="color:var(--muted);font-weight:600">@'+esc(a.username)+'</span>'+(a.active?'':'<span class="tag warn">to‘xtatilgan</span>')+(linked?'':'<span class="tag bad">xodimga bog‘lanmagan</span>')+'</b><span class="v"></span>'
         +'<small><select data-link="'+esc(a.id)+'" style="min-height:36px;padding:4px 8px;margin:6px 0"><option value="">— xodimga bog‘lash —</option>'+STAFF.map(function(m){return '<option value="'+esc(m.id)+'"'+(linked&&linked.id===m.id?' selected':'')+'>'+esc(m.name)+'</option>'}).join('')+'</select><br>'
         +'<label class="row" style="gap:6px;margin:4px 0"><input type="checkbox" data-perm="supplier-delivery" data-w="'+esc(a.id)+'"'+(a.canSupplierDelivery?' checked':'')+' style="width:18px;height:18px;min-height:auto"> Mahsulot kirimi kiritishi mumkin</label>'
         +'<label class="row" style="gap:6px;margin:4px 0 8px"><input type="checkbox" data-perm="warehouse-receipt" data-w="'+esc(a.id)+'"'+(a.canWarehouseReceipt?' checked':'')+' style="width:18px;height:18px;min-height:auto"> Xarajat kiritishi mumkin</label>'
+        +'<label class="row" style="gap:6px;margin:4px 0 8px"><input type="checkbox" data-mperm="'+esc(a.id)+'"'+(MENUOK.indexOf(a.id)>=0?' checked':'')+' style="width:18px;height:18px;min-height:auto"> Menyuni o‘zgartirishi mumkin</label>'
         +'<button class="ghost" data-pin="'+esc(a.id)+'" style="min-height:34px;padding:4px 10px">PIN yangilash</button> <button class="ghost" data-act="'+esc(a.id)+'" data-on="'+(a.active?'0':'1')+'" style="min-height:34px;padding:4px 10px">'+(a.active?'To‘xtatish':'Faollashtirish')+'</button> <button class="ghost" data-del="'+esc(a.id)+'" data-name="'+esc(a.name)+'" style="min-height:34px;padding:4px 10px;color:var(--bad)">🗑 O‘chirish</button>'
         +(a.lastLoginAt?' · oxirgi kirish '+esc(String(a.lastLoginAt).slice(0,16).replace('T',' ')):'')+'</small></div>'}).join(''):'<p class="hint">Hali akkaunt yo‘q.</p>';
     box.querySelectorAll('[data-link]').forEach(function(s){s.addEventListener('change',function(){req(location.pathname,'POST',{action:'link',branchId:sel.value,workerId:s.dataset.link,staffId:s.value}).then(function(x){if(!x.body.ok)alert(x.body.error);loadAccounts()})})});
     box.querySelectorAll('[data-perm]').forEach(function(c){c.addEventListener('change',function(){c.disabled=true;req('/api/worker-auth','POST',{action:c.dataset.perm,workerId:c.dataset.w,allowed:c.checked}).then(function(x){c.disabled=false;if(!x.body.ok){alert(x.body.error||'Saqlanmadi.');c.checked=!c.checked}})})});
+    box.querySelectorAll('[data-mperm]').forEach(function(c){c.addEventListener('change',function(){c.disabled=true;req(location.pathname,'POST',{action:'menuAccess',branchId:sel.value,workerId:c.dataset.mperm,allowed:c.checked}).then(function(x){c.disabled=false;if(!x.body.ok){alert(x.body.error||'Saqlanmadi.');c.checked=!c.checked}})})});
     box.querySelectorAll('[data-pin]').forEach(function(b){b.addEventListener('click',function(){var pin=prompt('Yangi PIN (4–8 raqam):');if(!pin)return;req('/api/worker-auth','POST',{action:'reset-pin',workerId:b.dataset.pin,pin:pin}).then(function(x){alert(x.body.ok?'✓ PIN yangilandi':x.body.error)})})});
     box.querySelectorAll('[data-act]').forEach(function(b){b.addEventListener('click',function(){if(!confirm(b.dataset.on==='1'?'Akkaunt faollashtirilsinmi?':'Akkaunt to‘xtatilsinmi? Xodim kira olmay qoladi.'))return;req('/api/worker-auth','POST',{action:'status',workerId:b.dataset.act,active:b.dataset.on==='1'}).then(function(x){if(!x.body.ok)alert(x.body.error);loadAccounts()})})});
     /* Xato ochilgan akkauntni o'chirish: login bo'shaydi, xodimning yozuvlari o'chmaydi. */

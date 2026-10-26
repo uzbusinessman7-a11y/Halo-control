@@ -228,9 +228,10 @@ const usedMedia = (config: DmConfig) => new Set([config.setOffer.imageId, config
  * Menyuda ishlatilmayotgan rasmlarni o'chiradi (almashtirilgan yoki olib tashlangan rasm bazada qolib ketmasin).
  * Bir soatdan yangi rasmga tegilmaydi — rahbar yuklab, hali "Saqlash"ni bosmagan bo'lishi mumkin.
  */
-export async function pruneMedia(db: D1Like, branchId: string, config: DmConfig, now = new Date()): Promise<number> {
+export async function pruneMedia(db: D1Like, branchId: string, config: DmConfig, now = new Date(), keep: string[] = []): Promise<number> {
   await ensureDmSchema(db);
-  const used = usedMedia(config);
+  // `keep` — xodim o'zgarishlari jurnalidagi rasmlar (rahbar qaytara olsin): ular ham o'chirilmaydi.
+  const used = new Set([...usedMedia(config), ...keep]);
   const before = new Date(now.getTime() - 3_600_000).toISOString();
   const all = (await db.prepare("SELECT id FROM v2_digital_menu_media WHERE branch_id = ? AND created_at < ?").bind(branchId, before).all<{ id: string }>()).results;
   const orphans = all.filter((row) => !used.has(row.id));
